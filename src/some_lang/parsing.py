@@ -17,6 +17,9 @@ class Parser(abc.ABC):
     def map(self, func: Callable) -> Parser:
         return MapParseResult(self, func)
 
+    def filter(self, func: Callable) -> Parser:
+        return FilterParseResult(self, func)
+
 
 @singledispatch
 def ensure_parser(obj: Any) -> Parser:
@@ -47,7 +50,7 @@ class LazyParser(Parser):
 
 
 class MapParseResult(Parser):
-    def __init__(self, parser: Parser, func: Callable):
+    def __init__(self, parser: Any, func: Callable):
         self.func = func
         self.parser = ensure_parser(parser)
 
@@ -55,6 +58,22 @@ class MapParseResult(Parser):
         match self.parser.parse(tokens):
             case r, rest:
                 return self.func(r), rest
+            case err:
+                return err
+
+
+class FilterParseResult(Parser):
+    def __init__(self, parser: Parser, func: Callable):
+        self.func = func
+        self.parser = ensure_parser(parser)
+
+    def parse(self, tokens: list[Token]) -> Optional[tuple[Any, list[Token]]]:
+        match self.parser.parse(tokens):
+            case r, rest:
+                if self.func(r):
+                    return r, rest
+                else:
+                    return None
             case err:
                 return err
 
@@ -85,6 +104,22 @@ class Alternative(Parser):
         return self.a.parse(tokens) or self.b.parse(tokens)
 
 
+class ZeroOrMore(Parser):
+    def __init__(self, parser):
+        self.parser = ensure_parser(parser)
+
+    def parse(self, tokens: list[Token]) -> Optional[tuple[list[Any], list[Token]]]:
+        results: list[Any] = []
+        rest = tokens
+        while True:
+            match self.parser.parse(rest):
+                case None:
+                    return results, rest
+                case x, r:
+                    results.append(x)
+                    rest = r
+
+
 class Exact(Parser):
     def __init__(self, tok: Token):
         self.tok = tok
@@ -93,6 +128,22 @@ class Exact(Parser):
         match tokens:
             case [fst, *rst] if fst == self.tok:
                 return fst, rst
+        return None
+
+
+class Succeed(Parser):
+    def __init__(self):
+        pass
+
+    def parse(self, tokens: list[Token]) -> Optional[tuple[Any, list[Token]]]:
+        return None, tokens
+
+
+class Fail(Parser):
+    def __init__(self):
+        pass
+
+    def parse(self, tokens: list[Token]) -> Optional[tuple[Any, list[Token]]]:
         return None
 
 
@@ -116,6 +167,18 @@ def parse_alternatives(a, *args):
     for b in args:
         parser = Alternative(parser, b)
     return parser
+
+
+def parse_optional(parser):
+    return Alternative(parser, Succeed())
+
+
+def parse_repeated(parser):
+    return ZeroOrMore(parser)
+
+
+def parse_one_or_more(parser):
+    return ZeroOrMore(parser).filter(lambda r: len(r) >= 1)
 
 
 def final_result(tup):

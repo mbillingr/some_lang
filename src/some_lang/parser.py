@@ -12,10 +12,23 @@ from some_lang.parsing import (
     ensure_parser,
     parse_alternatives,
     parse_sequence,
+    parse_repeated,
+    Fail,
+    parse_one_or_more,
 )
 
 
-def parse_program(src: str) -> ast.Expr:
+def parse_module(src: str) -> ast.Expression:
+    return compose(
+        lexer.tokenize,
+        lexer.skip_all_whitespace,
+        list,
+        module_parser().parse,
+        parsing.final_result,
+    )(src)
+
+
+def parse_program(src: str) -> ast.Expression:
     return compose(
         lexer.tokenize,
         lexer.skip_all_whitespace,
@@ -30,6 +43,45 @@ def _(obj: str) -> Parser:
     return Exact(Symbol(obj))
 
 
+def module_parser():
+    def build_module(res):
+        defs, stmts = [], []
+        print(res)
+        for obj in res:
+            match obj:
+                case ast.Definition():
+                    defs.append(obj)
+                case ast.Statement():
+                    stmts.append(obj)
+        return ast.Module(defs, stmts)
+
+    return parse_repeated(parse_alternatives(defn_parser(), stmt_parser())).map(
+        build_module
+    )
+
+
+def defn_parser():
+    return pattern_def_parser()
+
+
+def pattern_def_parser():
+    return parse_sequence(
+        MapParseResult(Symbol, lambda tok: tok.value),
+        parse_alternatives(
+            MapParseResult(Int, lambda tok: ast.IntegerPattern(tok.value)),
+            MapParseResult(Symbol, lambda tok: ast.BindingPattern(tok.value)),
+        ),
+        "=",
+        expr_parser(),
+    ).map(lambda r: ast.Definition(r[0], r[1], r[3]))
+
+
+def stmt_parser():
+    return parse_sequence("print", expr_parser()).map(
+        lambda x: ast.PrintStatement(x[1])
+    )
+
+
 def expr_parser():
     return parse_alternatives(
         func_parser(),
@@ -42,7 +94,7 @@ def expr_parser():
 def func_parser():
     return parse_sequence(
         "(", "lambda", "(", Symbol, ")", LazyParser(expr_parser), ")"
-    ).map(lambda x: ast.Lambda(x[3], x[5]))
+    ).map(lambda x: ast.Lambda(x[3].value, x[5]))
 
 
 def apply_parser():
