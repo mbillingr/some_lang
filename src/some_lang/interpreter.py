@@ -32,7 +32,7 @@ def run_module(mod: ast.Module):
                 print(evaluate(expr, env))
 
 
-def evaluate(expr: ast.Expression, env: Env) -> Value:
+def evaluate(expr: ast.Expression, env: Env[Value]) -> Value:
     match expr:
         case ast.Integer(val):
             return val

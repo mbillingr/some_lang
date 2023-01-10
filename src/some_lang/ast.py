@@ -25,7 +25,6 @@ class DefinitionPattern:
     exp: Expression
 
 
-@dataclasses.dataclass
 class TypeExpression(abc.ABC):
     pass
 
@@ -35,6 +34,7 @@ class IntegerType(TypeExpression):
     pass
 
 
+@dataclasses.dataclass
 class FunctionType(TypeExpression):
     arg: TypeExpression
     res: TypeExpression

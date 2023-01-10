@@ -23,7 +23,6 @@ def parse_module(src: str) -> ast.Expression:
         lexer.tokenize,
         lexer.skip_all_whitespace,
         list,
-        inspect,
         module_parser().parse,
         parsing.final_result,
     )(src)
@@ -101,7 +100,7 @@ def pattern_def_parser():
 
 
 def type_parser():
-    return parse_sequence(Symbol)
+    return MapParseResult(Symbol("Int"), lambda tok: ast.IntegerType())
 
 
 def stmt_parser():
