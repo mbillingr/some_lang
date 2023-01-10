@@ -1,3 +1,5 @@
+import pytest
+
 from some_lang import lexer
 from some_lang.lexer import Symbol, Indent, Dedent, Whitespace
 
@@ -52,4 +54,33 @@ def test_automatic_dedent():
         Symbol("b"),
         Dedent(),
         Dedent(),
+    ]
+
+
+def test_invalid_dedent():
+    src = """foo
+                 bar
+               baz"""
+    tok = lexer.tokenize(src)
+    with pytest.raises(lexer.IndentationError):
+        list(tok)
+
+
+def test_multilevel_dedent():
+    src = """
+foo
+  bar
+    baz
+foo"""
+    tok = lexer.tokenize(src)
+    assert list(tok) == [
+        Whitespace(),
+        Symbol("foo"),
+        Indent(),
+        Symbol("bar"),
+        Indent(),
+        Symbol("baz"),
+        Dedent(),
+        Dedent(),
+        Symbol("foo"),
     ]

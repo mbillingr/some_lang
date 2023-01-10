@@ -7,6 +7,10 @@ from some_lang.parsing import Token
 DELIMITERS = re.compile(r"(\s+|[:()[])")
 
 
+class IndentationError(Exception):
+    pass
+
+
 def skip_all_whitespace(tokens: Iterator[Token]) -> Iterator[Token]:
     return make_token_skipper(Whitespace)(tokens)
 
@@ -45,7 +49,8 @@ class Dedent(Token):
 
 def tokenize(src) -> Iterator[Token]:
     tm = TokenMatcher()
-    yield from map(tm.match_token, filter(lambda x: x, DELIMITERS.split(src)))
+    for tokens in map(tm.match_token, filter(lambda x: x, DELIMITERS.split(src))):
+        yield from tokens
     while tm.dedent():
         yield Dedent()
 
@@ -54,32 +59,37 @@ class TokenMatcher:
     def __init__(self):
         self.indent_levels = [0]
 
-    def match_token(self, tok: str) -> Token:
+    def match_token(self, tok: str) -> list[Token]:
         try:
-            return Int(int(tok))
+            return [Int(int(tok))]
         except ValueError:
             pass
 
         if tok.isspace():
             match tok.rsplit("\n", 1):
                 case [_]:
-                    return Whitespace()
+                    return [Whitespace()]
                 case [_, s]:
                     ls = len(s)
                     if ls == self.indent_levels[-1]:
-                        return Whitespace()
-                    elif ls > self.indent_levels[-1]:
+                        return [Whitespace()]
+
+                    if ls > self.indent_levels[-1]:
                         self.indent(ls)
-                        return Indent()
-                    elif ls < self.indent_levels[-1]:
+                        return [Indent()]
+                    out = []
+                    while ls < self.indent_levels[-1]:
                         self.dedent()
-                        return Dedent()
+                        out.append(Dedent())
+                    if ls != self.indent_levels[-1]:
+                        raise IndentationError()
+                    return out
                 case x:
                     print(x)
 
         match tok:
             case _:
-                return Symbol(tok)
+                return [Symbol(tok)]
 
     def indent(self, level):
         self.indent_levels.append(level)
