@@ -4,7 +4,7 @@ version = "0.1.0"
 description = ""
 authors = ["Martin Billinger-Finke <m.billinger-finke@daphos.ai>"]
 readme = "README.md"
-packages = [{include = "some_lang"}]
+packages = [{ include = "some_lang", from = "src" }]
 
 [tool.poetry.dependencies]
 python = "^3.11"
