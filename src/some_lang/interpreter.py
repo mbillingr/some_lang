@@ -9,26 +9,22 @@ Value = Union[int, Func]
 
 
 def run_module(mod: ast.Module):
-    defs = {}
-    for defn in mod.defs:
-        d = defs.setdefault(defn.name, [])
-        d.append((defn.pat, defn.exp))
-
     env = EmptyEnv()
 
-    for name, bodies in defs.items():
+    for defn in mod.defs:
 
         def func(x):
             local_env = env
-            for pat, exp in bodies:
-                match pat:
+            for pattern in defn.patterns:
+                assert pattern.name == defn.name
+                match pattern.pat:
                     case ast.IntegerPattern(val) if val == x:
-                        return evaluate(exp, local_env)
+                        return evaluate(pattern.exp, local_env)
                     case ast.BindingPattern(var):
                         local_env = local_env.extend(var, x)
-                        return evaluate(exp, local_env)
+                        return evaluate(pattern.exp, local_env)
 
-        env = env.extend(name, func)
+        env = env.extend(defn.name, func)
 
     for stmt in mod.code:
         match stmt:

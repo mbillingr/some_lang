@@ -13,6 +13,14 @@ class Module:
 @dataclasses.dataclass
 class Definition:
     name: str
+    arg: TypeExpression
+    res: TypeExpression
+    patterns: list[DefinitionPattern]
+
+
+@dataclasses.dataclass
+class DefinitionPattern:
+    name: str
     pat: Pattern
     exp: Expression
 
