@@ -9,6 +9,15 @@ def not(Int) -> Int:
     not(0) = 1
     not(x) = 0
     
+def foo(Int) -> Int:
+    foo(x) = x
+    
+def bar(Int) -> Int:
+    bar(x) = x
+    
+def baz(Int) -> Int:
+    baz(x) = (bar x)
+    
 print (not (not 3))
 """
     )

@@ -33,8 +33,9 @@ def check_module(mod: ast.Module):
 
 
 def check_expr(t: Type, expr: ast.Expression, env: Env[Type]):
-    if t != infer_expr(expr, env):
-        raise TypeError(f"Expected {t}: {expr}")
+    t_expr = infer_expr(expr, env)
+    if t != t_expr:
+        raise TypeError(f"Expected {t}, but {expr} is {t_expr}")
 
 
 def infer_expr(expr: ast.Expression, env: Env[Type]) -> Type:

@@ -13,8 +13,7 @@ def run_module(mod: ast.Module):
 
     for defn in mod.defs:
 
-        def func(x):
-            local_env = env
+        def func(x, defn=defn, local_env=env):
             for pattern in defn.patterns:
                 assert pattern.name == defn.name
                 match pattern.pat:

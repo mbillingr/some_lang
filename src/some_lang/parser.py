@@ -60,12 +60,12 @@ def module_parser():
                     stmts.append(obj)
         return ast.Module(defs, stmts)
 
-    return parse_repeated(parse_alternatives(defn_parser(), stmt_parser())).map(
+    return parse_repeated(parse_alternatives(func_parser(), stmt_parser())).map(
         build_module
     )
 
 
-def defn_parser():
+def func_parser():
     return parse_sequence(
         "def",
         MapParseResult(Symbol, lambda tok: tok.value),
@@ -111,14 +111,14 @@ def stmt_parser():
 
 def expr_parser():
     return parse_alternatives(
-        func_parser(),
+        lambda_parser(),
         apply_parser(),
         MapParseResult(Int, lambda tok: ast.Integer(tok.value)),
         MapParseResult(Symbol, lambda tok: ast.Reference(tok.value)),
     )
 
 
-def func_parser():
+def lambda_parser():
     return parse_sequence(
         "(", "lambda", "(", Symbol, ")", LazyParser(expr_parser), ")"
     ).map(lambda x: ast.Lambda(x[3].value, x[5]))
