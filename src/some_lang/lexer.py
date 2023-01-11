@@ -7,10 +7,6 @@ from some_lang.parsing import Token
 DELIMITERS = re.compile(r"(\s+|[:()[])")
 
 
-class IndentationError(Exception):
-    pass
-
-
 def skip_all_whitespace(tokens: Iterator[Token]) -> Iterator[Token]:
     return make_token_skipper(Whitespace)(tokens)
 

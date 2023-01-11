@@ -62,7 +62,7 @@ def test_invalid_dedent():
                  bar
                baz"""
     tok = lexer.tokenize(src)
-    with pytest.raises(lexer.IndentationError):
+    with pytest.raises(IndentationError):
         list(tok)
 
 

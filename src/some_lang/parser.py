@@ -18,7 +18,7 @@ from some_lang.parsing import (
 )
 
 
-def parse_module(src: str) -> ast.Expression:
+def parse_module(src: str) -> ast.Module:
     return compose(
         lexer.tokenize,
         lexer.skip_all_whitespace,
