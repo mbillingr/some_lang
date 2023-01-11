@@ -15,6 +15,9 @@ class UnificationFailure(Exception):
 def unify(
     a: Any, b: Any, subst: Substitution, context: Optional[Any] = None
 ) -> Substitution:
+    a = subst.apply(a)
+    b = subst.apply(b)
+
     if a == b:
         return subst
 
