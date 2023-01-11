@@ -1,6 +1,7 @@
 from typing import Any, Optional
 
-from some_lang.unification.substitution import Substitution, Var, structural_visit
+from some_lang.unification.substitution import Substitution, Var
+from some_lang.unification.structure import structural_visitor
 
 
 class NoOccurrenceViolation(Exception):
@@ -32,8 +33,8 @@ def unify(
     if type(a) != type(b):
         raise UnificationFailure(a, b, context)
 
-    ai = structural_visit(a, lambda x: x, lambda x: x)
-    bi = structural_visit(b, lambda x: x, lambda x: x)
+    ai = structural_visitor(a, lambda x: x, lambda x: x)
+    bi = structural_visitor(b, lambda x: x, lambda x: x)
     for a_, b_ in zip(ai, bi):
         subst = unify(a_, b_, subst, context)
 
@@ -48,7 +49,7 @@ def occurs(v: Var, struc: Any) -> bool:
         case Var():
             return struc is v
         case _:
-            return structural_visit(struc, lambda x: occurs(v, x), reducer=any)
+            return structural_visitor(struc, lambda x: occurs(v, x), reducer=any)
 
 
 def has_remaining_items(it) -> bool:
