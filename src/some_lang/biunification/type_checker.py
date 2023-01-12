@@ -56,6 +56,20 @@ class TypeCheckerCore:
                 if isinstance(lhs_head, VTypeHead) and isinstance(rhs_head, UTypeHead):
                     pending_edges += check_heads(lhs_head, rhs_head)
 
+    def resolve(self, t: Value):
+        all_constraints = []
+        pending_types = [t]
+        while pending_types:
+            v = pending_types.pop()
+            for u in self.r.upsets[v]:
+                c = self.types[u]
+                if c == "Var":
+                    pending_types.extend(self.r.upsets[u])
+                    # todo: also add the downset?
+                else:
+                    all_constraints.append(self.types[u])
+        return all_constraints
+
 
 def check_heads(lhs: VTypeHead, rhs: UTypeHead) -> list[tuple[Value, Use]]:
     return rhs.check(lhs)

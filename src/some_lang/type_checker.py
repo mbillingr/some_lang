@@ -72,6 +72,7 @@ def check_stmt(stmt: ast.Statement, env: Env[Value], engine: TypeCheckerCore):
     match stmt:
         case ast.PrintStatement(exp):
             # print accepts any type; just make sure exp does not contain type errors
-            check_expr(exp, env, engine)
+            t = check_expr(exp, env, engine)
+            print("Type:", engine.resolve(t))
         case _:
             raise NotImplementedError(stmt)
