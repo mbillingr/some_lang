@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Any, Optional, Self
 
 from some_lang.unification.structure import structural_visitor
@@ -11,7 +12,7 @@ class Substitution:
     def __init__(self, subs: Optional[dict[Var, Any]] = None):
         self.subs = subs or {}
 
-    def extend(self, var: Var, struc: Any) -> Self:
+    def extend(self, var: Var, struc: Any) -> Substitution:
         new_subs = {v: apply_one_subst(s, var, struc) for v, s in self.subs.items()}
         new_subs[var] = struc
         return Substitution(new_subs)

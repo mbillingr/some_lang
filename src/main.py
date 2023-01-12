@@ -1,4 +1,5 @@
 from some_lang import parser
+from some_lang.biunification.type_checker import TypeCheckerCore
 from some_lang.interpreter import run_module
 from some_lang.type_checker import check_module
 
@@ -22,7 +23,7 @@ print (not (not 3))
 """
     )
     print(ast)
-    check_module(ast)
+    check_module(ast, TypeCheckerCore())
     run_module(ast)
 
     # current idea:

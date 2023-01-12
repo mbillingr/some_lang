@@ -73,7 +73,7 @@ class TokenMatcher:
                     if ls > self.indent_levels[-1]:
                         self.indent(ls)
                         return [Indent()]
-                    out = []
+                    out: list[Token] = []
                     while ls < self.indent_levels[-1]:
                         self.dedent()
                         out.append(Dedent())

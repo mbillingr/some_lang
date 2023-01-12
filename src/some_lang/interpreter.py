@@ -9,7 +9,7 @@ Value = Union[int, Func]
 
 
 def run_module(mod: ast.Module):
-    env = EmptyEnv()
+    env: Env[Value] = EmptyEnv()
 
     for defn in mod.defs:
 
@@ -39,8 +39,9 @@ def evaluate(expr: ast.Expression, env: Env[Value]) -> Value:
             match env.apply(var):
                 case None:
                     raise NameError(var)
-                case val:
-                    return val
+                case v:
+                    assert v is not None  # for mypy
+                    return v
         case ast.Lambda(var, bdy):
             return make_function(var, bdy, env)
         case ast.Application(rator, rand):

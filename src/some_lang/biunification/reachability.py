@@ -5,7 +5,7 @@ Node = int
 
 
 class Reachability:
-    def __init__(self):
+    def __init__(self) -> None:
         self.upsets: list[set[Node]] = []
         self.downsets: list[set[Node]] = []
 
@@ -15,7 +15,7 @@ class Reachability:
         self.downsets.append(set())
         return i
 
-    def add_edge(self, lhs: Node, rhs: Node) -> list[(Node, Node)]:
+    def add_edge(self, lhs: Node, rhs: Node) -> list[tuple[Node, Node]]:
         if rhs in self.downsets[lhs]:
             return []
 

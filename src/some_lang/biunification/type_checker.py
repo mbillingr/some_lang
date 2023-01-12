@@ -11,7 +11,7 @@ class VTypeHead(abc.ABC):
 
 class UTypeHead(abc.ABC):
     @abc.abstractmethod
-    def check(self, val: VTypeHead) -> list[(Value, Use)]:
+    def check(self, val: VTypeHead) -> list[tuple[Value, Use]]:
         pass
 
 
@@ -21,7 +21,7 @@ Use = typing.NewType("Use", Node)
 
 
 class TypeCheckerCore:
-    def __init__(self):
+    def __init__(self) -> None:
         self.r = Reachability()
         self.types: list[TypeNode] = []
 
@@ -47,15 +47,15 @@ class TypeCheckerCore:
         pending_edges = [(lhs, rhs)]
         while pending_edges:
             lhs, rhs = pending_edges.pop()
-            type_pairs_to_check = self.r.add_edge(lhs, rhs)
+            type_pairs_to_check = [(Value(l), Use(r)) for l, r in self.r.add_edge(lhs, rhs)]
 
             while type_pairs_to_check:
                 lhs, rhs = type_pairs_to_check.pop()
                 lhs_head = self.types[lhs]
                 rhs_head = self.types[rhs]
-                if lhs_head != "Var" and rhs_head != "Var":
+                if isinstance(lhs_head, VTypeHead) and isinstance(rhs_head, UTypeHead):
                     pending_edges += check_heads(lhs_head, rhs_head)
 
 
-def check_heads(lhs: VTypeHead, rhs: UTypeHead) -> list[(Value, Use)]:
+def check_heads(lhs: VTypeHead, rhs: UTypeHead) -> list[tuple[Value, Use]]:
     return rhs.check(lhs)
