@@ -2,6 +2,7 @@ import dataclasses
 import re
 from typing import Iterator, Callable
 
+from some_lang import parsing
 from some_lang.parsing import Token
 
 DELIMITERS = re.compile(r"(\s+|[:()[])")
@@ -46,6 +47,11 @@ class Indent(Token):
 @dataclasses.dataclass
 class Dedent(Token):
     pass
+
+
+@parsing.ensure_parser.register
+def _(obj: str) -> parsing.Parser:
+    return parsing.Exact(Symbol(obj))
 
 
 def tokenize(src) -> Iterator[Token]:

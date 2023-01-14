@@ -8,7 +8,7 @@ Func = Callable[["Value"], "Value"]
 Value = Union[int, Func]
 
 
-def run_module(mod: ast.Module):
+def run_module(mod: ast.Module) -> Env[Value]:
     env: Env[Value] = EmptyEnv()
 
     for defn in mod.defs:
@@ -29,6 +29,7 @@ def run_module(mod: ast.Module):
         match stmt:
             case ast.PrintStatement(expr):
                 print(evaluate(expr, env))
+    return env
 
 
 def evaluate(expr: ast.Expression, env: Env[Value]) -> Value:

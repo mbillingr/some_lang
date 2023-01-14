@@ -33,7 +33,7 @@ def eval_utype(texp: ast.TypeExpression, engine: TypeCheckerCore) -> Use:
             raise NotImplementedError(texp)
 
 
-def check_module(mod: ast.Module, engine: TypeCheckerCore):
+def check_module(mod: ast.Module, engine: TypeCheckerCore) -> Env[Value]:
     env: Env[Value] = EmptyEnv()
 
     for defn in mod.defs:
@@ -58,6 +58,7 @@ def check_module(mod: ast.Module, engine: TypeCheckerCore):
 
     for stmt in mod.code:
         check_stmt(stmt, env, engine)
+    return env
 
 
 def check_expr(expr: ast.Expression, env: Env[Value], engine: TypeCheckerCore) -> Value:

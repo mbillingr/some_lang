@@ -56,11 +56,6 @@ def parse_program(src: str) -> ast.Expression:
     )(src)
 
 
-@ensure_parser.register
-def _(obj: str) -> Parser:
-    return Exact(Symbol(obj))
-
-
 def module_parser():
     def build_module(res):
         defs, stmts = [], []
@@ -73,9 +68,10 @@ def module_parser():
                     stmts.append(obj)
         return ast.Module(defs, stmts)
 
-    return parse_repeated(parse_alternatives(func_parser(), stmt_parser())).map(
-        build_module
-    )
+    return parse_repeated(
+        parse_alternatives(func_parser(), stmt_parser()),
+        name="Module",
+    ).map(build_module)
 
 
 def func_parser():
@@ -91,11 +87,12 @@ def func_parser():
         Indent,
         def_body_parser(),
         Dedent,
+        name="Function",
     ).map(lambda x: ast.Definition(x[1], x[3], x[6], x[9]))
 
 
 def def_body_parser():
-    return parse_one_or_more(pattern_def_parser())
+    return parse_one_or_more(pattern_def_parser(), name="Body")
 
 
 def pattern_def_parser():
@@ -109,29 +106,26 @@ def pattern_def_parser():
         ")",
         "=",
         expr_parser(),
+        name="Pattern",
     ).map(lambda r: ast.DefinitionPattern(r[0], r[2], r[5]))
 
 
 def type_parser():
-    return parse_delimited_nonempty_list(atomic_type_parser(), Symbol("->")).map(
-        lambda r: fold(ast.FunctionType, dbg(r)[1], r[0])
-    )
-
-
-def dbg(x):
-    print(x)
-    return x
+    return parse_delimited_nonempty_list(
+        atomic_type_parser(), Symbol("->"), name="Type"
+    ).map(lambda r: fold(ast.FunctionType, r[1], r[0]))
 
 
 def atomic_type_parser():
     return parse_alternatives(
         MapParseResult(Symbol("Bool"), lambda tok: ast.BooleanType()),
         MapParseResult(Symbol("Int"), lambda tok: ast.IntegerType()),
+        name="AtomicType",
     )
 
 
 def stmt_parser():
-    return parse_sequence("print", expr_parser()).map(
+    return parse_sequence("print", expr_parser(), name="Statement").map(
         lambda x: ast.PrintStatement(x[1])
     )
 
@@ -143,18 +137,19 @@ def expr_parser():
         MapParseResult(Bool, lambda tok: ast.Boolean(tok.value)),
         MapParseResult(Int, lambda tok: ast.Integer(tok.value)),
         MapParseResult(Symbol, lambda tok: ast.Reference(tok.value)),
+        name="Expression",
     )
 
 
 def lambda_parser():
     return parse_sequence(
-        "(", "lambda", "(", Symbol, ")", LazyParser(expr_parser), ")"
+        "(", "lambda", "(", Symbol, ")", LazyParser(expr_parser), ")", name="Lambda"
     ).map(lambda x: ast.Lambda(x[3].value, x[5]))
 
 
 def apply_parser():
     return parse_sequence(
-        "(", LazyParser(expr_parser), LazyParser(expr_parser), ")"
+        "(", LazyParser(expr_parser), LazyParser(expr_parser), ")", name="Apply"
     ).map(lambda x: ast.Application(x[1], x[2]))
 
 
