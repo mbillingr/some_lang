@@ -20,6 +20,11 @@ def baz(Int) -> Int:
     baz(x) = (bar x)
     
 print (not (not 3))
+
+def twice(Int) -> Int:
+    twice(f) = (lambda (x) (f (f x)))
+    
+print ((twice not) 7)
 """
     )
     print(ast)

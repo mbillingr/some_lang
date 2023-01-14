@@ -64,6 +64,15 @@ def check_expr(expr: ast.Expression, env: Env[Value], engine: TypeCheckerCore) -
             bound = engine.new_use(type_heads.UFunc(arg_type, ret_bound))
             engine.flow(func_type, bound)
             return ret_type
+        case ast.Lambda(var, bdy):
+            arg_type, arg_bound = engine.var()
+            res_type, res_usage = engine.var()
+            func_type = engine.new_val(type_heads.VFunc(arg_bound, res_type))
+            local_env = env.extend(var, arg_type)
+            body_type = check_expr(bdy, local_env, engine)
+            engine.flow(body_type, res_usage)
+            return func_type
+
         case _:
             raise NotImplementedError(expr)
 
