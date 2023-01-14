@@ -181,6 +181,13 @@ def parse_one_or_more(parser):
     return ZeroOrMore(parser).filter(lambda r: len(r) >= 1)
 
 
+def parse_delimited_nonempty_list(item, delimiter):
+    return parse_sequence(
+        item,
+        parse_one_or_more(parse_sequence(delimiter, item).map(lambda x: x[1])),
+    )
+
+
 def final_result(tup):
     res, rest = tup
     if rest:

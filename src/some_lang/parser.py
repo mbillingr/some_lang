@@ -15,27 +15,30 @@ from some_lang.parsing import (
     parse_repeated,
     Fail,
     parse_one_or_more,
+    parse_delimited_nonempty_list,
 )
 
 
 def parse_module(src: str) -> ast.Module:
-    return compose(
-        lexer.tokenize,
-        lexer.skip_all_whitespace,
-        list,
-        module_parser().parse,
-        parsing.final_result,
-    )(src)
+    return lex_and_parse(module_parser())(src)
 
 
 def parse_expr(src: str) -> ast.Expression:
+    return lex_and_parse(expr_parser())(src)
+
+
+def parse_type(src: str) -> ast.Expression:
+    return lex_and_parse(type_parser())(src)
+
+
+def lex_and_parse(parser):
     return compose(
         lexer.tokenize,
         lexer.skip_all_whitespace,
         list,
-        expr_parser().parse,
+        parser.parse,
         parsing.final_result,
-    )(src)
+    )
 
 
 def inspect(x):
@@ -110,7 +113,21 @@ def pattern_def_parser():
 
 
 def type_parser():
-    return MapParseResult(Symbol("Int"), lambda tok: ast.IntegerType())
+    return parse_delimited_nonempty_list(atomic_type_parser(), Symbol("->")).map(
+        lambda r: fold(ast.FunctionType, dbg(r)[1], r[0])
+    )
+
+
+def dbg(x):
+    print(x)
+    return x
+
+
+def atomic_type_parser():
+    return parse_alternatives(
+        MapParseResult(Symbol("Bool"), lambda tok: ast.BooleanType()),
+        MapParseResult(Symbol("Int"), lambda tok: ast.IntegerType()),
+    )
 
 
 def stmt_parser():
@@ -143,3 +160,9 @@ def apply_parser():
 
 def compose(*funcs):
     return lambda arg: functools.reduce(lambda x, f: f(x), funcs, arg)
+
+
+def fold(f, seq, init):
+    if not seq:
+        return init
+    return f(init, fold(f, seq[1:], seq[0]))

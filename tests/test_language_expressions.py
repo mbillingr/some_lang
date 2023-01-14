@@ -16,15 +16,16 @@ def test_literal_expressions():
 
 def test_function_application():
     ctx = Context()
-    ctx.define(
-        "inc", lambda x: x + 1, ast.FunctionType(ast.IntegerType(), ast.IntegerType())
-    )
+    ctx.define("inc", lambda x: x + 1, "Int -> Int")
 
     assert ctx.eval("(inc 0)") == 1
     assert ctx.eval("(inc (inc 1))") == 3
 
     with pytest.raises(TypeError):
         assert ctx.eval("(inc false)")
+
+    ctx.define("add", lambda x: lambda y: x + y, "Int -> Int -> Int")
+    assert ctx.eval("((add 2) 3)") == 5
 
 
 def test_anonymous_functions():
