@@ -28,6 +28,16 @@ def parse_module(src: str) -> ast.Module:
     )(src)
 
 
+def parse_expr(src: str) -> ast.Expression:
+    return compose(
+        lexer.tokenize,
+        lexer.skip_all_whitespace,
+        list,
+        expr_parser().parse,
+        parsing.final_result,
+    )(src)
+
+
 def inspect(x):
     print(x)
     return x

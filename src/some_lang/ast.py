@@ -30,6 +30,11 @@ class TypeExpression(abc.ABC):
 
 
 @dataclasses.dataclass
+class BooleanType(TypeExpression):
+    pass
+
+
+@dataclasses.dataclass
 class IntegerType(TypeExpression):
     pass
 

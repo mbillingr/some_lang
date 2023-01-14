@@ -7,16 +7,28 @@ from some_lang.env import EmptyEnv, Env
 
 def eval_vtype(texp: ast.TypeExpression, engine: TypeCheckerCore) -> Value:
     match texp:
+        case ast.BooleanType():
+            return engine.new_val(type_heads.VBool())
         case ast.IntegerType():
             return engine.new_val(type_heads.VInt())
+        case ast.FunctionType(arg, ret):
+            uarg = eval_utype(arg, engine)
+            vret = eval_vtype(ret, engine)
+            return engine.new_val(type_heads.VFunc(uarg, vret))
         case _:
             raise NotImplementedError(texp)
 
 
 def eval_utype(texp: ast.TypeExpression, engine: TypeCheckerCore) -> Use:
     match texp:
+        case ast.BooleanType():
+            return engine.new_use(type_heads.UBool())
         case ast.IntegerType():
             return engine.new_use(type_heads.UInt())
+        case ast.FunctionType(arg, ret):
+            varg = eval_vtype(arg, engine)
+            uret = eval_utype(ret, engine)
+            return engine.new_use(type_heads.UFunc(varg, uret))
         case _:
             raise NotImplementedError(texp)
 

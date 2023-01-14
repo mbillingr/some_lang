@@ -28,6 +28,12 @@ print ((twice not) 7)
 
 print true
 print false
+
+def ident(Int) -> Int:
+    ident(x) = x
+    
+print (ident true)
+print (ident 42)
 """
     )
     print(ast)
