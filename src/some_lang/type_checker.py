@@ -50,6 +50,8 @@ def check_module(mod: ast.Module, engine: TypeCheckerCore):
 
 def check_expr(expr: ast.Expression, env: Env[Value], engine: TypeCheckerCore) -> Value:
     match expr:
+        case ast.Boolean():
+            return engine.new_val(type_heads.VBool())
         case ast.Integer():
             return engine.new_val(type_heads.VInt())
         case ast.Reference(var):

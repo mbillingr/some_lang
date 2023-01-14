@@ -33,7 +33,7 @@ def run_module(mod: ast.Module):
 
 def evaluate(expr: ast.Expression, env: Env[Value]) -> Value:
     match expr:
-        case ast.Integer(val):
+        case ast.Boolean(val) | ast.Integer(val):
             return val
         case ast.Reference(var):
             match env.apply(var):

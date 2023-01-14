@@ -4,6 +4,19 @@ from some_lang.biunification.type_checker import VTypeHead, UTypeHead, Value, Us
 
 
 @dataclasses.dataclass
+class VBool(VTypeHead):
+    pass
+
+
+@dataclasses.dataclass
+class UBool(UTypeHead):
+    def check(self, val: VTypeHead) -> list[tuple[Value, Use]]:
+        if not isinstance(val, VBool):
+            raise TypeError(self, val)
+        return []
+
+
+@dataclasses.dataclass
 class VInt(VTypeHead):
     pass
 

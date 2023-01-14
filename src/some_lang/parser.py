@@ -3,7 +3,7 @@ from __future__ import annotations
 import functools
 
 from some_lang import ast, lexer, parsing
-from some_lang.lexer import Symbol, Int, Indent, Dedent
+from some_lang.lexer import Symbol, Int, Indent, Dedent, Bool
 from some_lang.parsing import (
     Parser,
     LazyParser,
@@ -113,6 +113,7 @@ def expr_parser():
     return parse_alternatives(
         lambda_parser(),
         apply_parser(),
+        MapParseResult(Bool, lambda tok: ast.Boolean(tok.value)),
         MapParseResult(Int, lambda tok: ast.Integer(tok.value)),
         MapParseResult(Symbol, lambda tok: ast.Reference(tok.value)),
     )

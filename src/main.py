@@ -25,6 +25,9 @@ def twice(Int) -> Int:
     twice(f) = (lambda (x) (f (f x)))
     
 print ((twice not) 7)
+
+print true
+print false
 """
     )
     print(ast)

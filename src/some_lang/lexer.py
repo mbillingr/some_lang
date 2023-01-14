@@ -19,6 +19,11 @@ def make_token_skipper(*to_skip: type) -> Callable:
 
 
 @dataclasses.dataclass
+class Bool(Token):
+    value: bool
+
+
+@dataclasses.dataclass
 class Int(Token):
     value: int
 
@@ -56,6 +61,12 @@ class TokenMatcher:
         self.indent_levels = [0]
 
     def match_token(self, tok: str) -> list[Token]:
+        match tok:
+            case "true":
+                return [Bool(True)]
+            case "false":
+                return [Bool(False)]
+
         try:
             return [Int(int(tok))]
         except ValueError:

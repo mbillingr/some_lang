@@ -68,6 +68,11 @@ class Expression(abc.ABC):
 
 
 @dataclasses.dataclass
+class Boolean(Expression):
+    val: int
+
+
+@dataclasses.dataclass
 class Integer(Expression):
     val: int
 
