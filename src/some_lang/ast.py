@@ -30,6 +30,11 @@ class TypeExpression(abc.ABC):
 
 
 @dataclasses.dataclass
+class UnknownType(TypeExpression):
+    pass
+
+
+@dataclasses.dataclass
 class BooleanType(TypeExpression):
     pass
 

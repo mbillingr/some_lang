@@ -118,6 +118,7 @@ def type_parser():
 
 def atomic_type_parser():
     return parse_alternatives(
+        MapParseResult(Symbol("?"), lambda tok: ast.UnknownType()),
         MapParseResult(Symbol("Bool"), lambda tok: ast.BooleanType()),
         MapParseResult(Symbol("Int"), lambda tok: ast.IntegerType()),
         name="AtomicType",

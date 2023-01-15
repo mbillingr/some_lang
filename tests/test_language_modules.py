@@ -5,7 +5,5 @@ from some_lang.lang_frontend import Context
 
 
 def test_function_defs():
-    ctx = Context().module(
-        "def ident(Int) -> Int:\n" "    ident(x) = x\n" "print (ident 42)"
-    )
+    ctx = Context().module("def ident(?) -> ?:\n    ident(x) = x\nprint (ident 42)")
     assert ctx.env.apply("ident")("ARG") == "ARG"
