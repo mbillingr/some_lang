@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import copy
 from typing import Any, Optional
 
 from some_lang import interpreter, parser, type_checker, ast
@@ -15,6 +17,11 @@ class Context:
         self.type_env = type_env
         self.env = env
 
+    def init_default_env(self):
+        self.define("not", lambda x: not x, "Bool -> Bool")
+        self.define("0?", lambda x: x == 0, "Int -> Bool")
+        self.define("inc", lambda x: x + 1, "Int -> Int")
+
     def define(self, name: str, val: interpreter.Value, ty: str | ast.TypeExpression):
         if not isinstance(ty, ast.TypeExpression):
             ty = parser.parse_type(ty)
@@ -28,11 +35,10 @@ class Context:
         type_checker.check_expr(src, self.type_env, self.engine)
         return interpreter.evaluate(src, self.env)
 
-    @staticmethod
-    def module(src: str | ast.Module) -> Context:
+    def module(self, src: str | ast.Module) -> Context:
         if not isinstance(src, ast.Module):
             src = parser.parse_module(src)
-        engine = type_checker.TypeCheckerCore()
-        type_env = type_checker.check_module(src, engine)
-        env = interpreter.run_module(src)
+        engine = copy.deepcopy(self.engine)
+        type_env = type_checker.check_module(src, engine, self.type_env)
+        env = interpreter.run_module(src, self.env)
         return Context(env, type_env, engine)

@@ -1,44 +1,21 @@
 from some_lang import parser
 from some_lang.biunification.type_checker import TypeCheckerCore
 from some_lang.interpreter import run_module
+from some_lang.lang_frontend import Context
 from some_lang.type_checker import check_module
 
 if __name__ == "__main__":
-    ast = parser.parse_module(
-        """
-def not(Int) -> Int:
-    not(0) = 1
-    not(x) = 0
-    
-def foo(Int) -> Int:
-    foo(x) = x
-    
-def bar(Int) -> Int:
-    bar(x) = x
-    
-def baz(Int) -> Int:
-    baz(x) = (bar x)
-    
-print (not (not 3))
-
-def twice(Int) -> Int:
-    twice(f) = (lambda (x) (f (f x)))
-    
-print ((twice not) 7)
-
-print true
-print false
-
-def ident(Int) -> Int:
+    src = """
+def ident(?) -> ?:
     ident(x) = x
     
-print (ident true)
-print (ident 42)
+print (0? (ident 7))
 """
-    )
-    print(ast)
-    check_module(ast, TypeCheckerCore())
-    run_module(ast)
+
+    ctx = Context()
+    ctx.init_default_env()
+    ctx = ctx.module(src)
+    print(ctx.engine)
 
     # current idea:
     #   - use type system to distinguish between pure and imperative functions

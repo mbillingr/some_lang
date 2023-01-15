@@ -47,7 +47,9 @@ class TypeCheckerCore:
         pending_edges = [(lhs, rhs)]
         while pending_edges:
             lhs, rhs = pending_edges.pop()
-            type_pairs_to_check = [(Value(l), Use(r)) for l, r in self.r.add_edge(lhs, rhs)]
+            type_pairs_to_check = [
+                (Value(l), Use(r)) for l, r in self.r.add_edge(lhs, rhs)
+            ]
 
             while type_pairs_to_check:
                 lhs, rhs = type_pairs_to_check.pop()
@@ -56,19 +58,19 @@ class TypeCheckerCore:
                 if isinstance(lhs_head, VTypeHead) and isinstance(rhs_head, UTypeHead):
                     pending_edges += check_heads(lhs_head, rhs_head)
 
-    def resolve(self, t: Value):
-        all_constraints = []
-        pending_types = [t]
-        while pending_types:
-            v = pending_types.pop()
-            for u in self.r.upsets[v]:
-                c = self.types[u]
-                if c == "Var":
-                    pending_types.extend(self.r.upsets[u])
-                    # todo: also add the downset?
-                else:
-                    all_constraints.append(self.types[u])
-        return all_constraints
+    def __str__(self):
+        out = []
+        for i, t in enumerate(self.types):
+            if t == "Var": t = f"t{i}"
+            out.append(f"{i:4}  {t}")
+            for j in self.r.downsets[i]:
+                sup = self.types[j]
+                if sup == "Var": sup = f"t{j}"
+                out.append(f"{i:4}  {t} <: {sup}")
+        return "\n".join(out)
+
+    def reify(self, t: int):
+        return f"{self.types[t]}{t}"
 
 
 def check_heads(lhs: VTypeHead, rhs: UTypeHead) -> list[tuple[Value, Use]]:

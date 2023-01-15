@@ -8,9 +8,7 @@ Func = Callable[["Value"], "Value"]
 Value = Union[int, Func]
 
 
-def run_module(mod: ast.Module) -> Env[Value]:
-    env: Env[Value] = EmptyEnv()
-
+def run_module(mod: ast.Module, env: Env[Value] = EmptyEnv()) -> Env[Value]:
     for defn in mod.defs:
 
         def func(x, defn=defn, local_env=env):

@@ -33,9 +33,9 @@ def eval_utype(texp: ast.TypeExpression, engine: TypeCheckerCore) -> Use:
             raise NotImplementedError(texp)
 
 
-def check_module(mod: ast.Module, engine: TypeCheckerCore) -> Env[Value]:
-    env: Env[Value] = EmptyEnv()
-
+def check_module(
+    mod: ast.Module, engine: TypeCheckerCore, env: Env[Value] = EmptyEnv()
+) -> Env[Value]:
     for defn in mod.defs:
         # arg = eval_utype(defn.arg, engine)
         # res = (eval_vtype(defn.res, engine),)
@@ -97,6 +97,6 @@ def check_stmt(stmt: ast.Statement, env: Env[Value], engine: TypeCheckerCore):
         case ast.PrintStatement(exp):
             # print accepts any type; just make sure exp does not contain type errors
             t = check_expr(exp, env, engine)
-            print("Type:", engine.resolve(t))
+            print("Type:", engine.reify(t))
         case _:
             raise NotImplementedError(stmt)
