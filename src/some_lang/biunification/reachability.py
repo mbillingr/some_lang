@@ -30,3 +30,17 @@ class Reachability:
             out += self.add_edge(lhs, rhs2)
 
         return out
+
+    def rm_edge(self, lhs: Node, rhs: Node):
+        for lhs2 in self.upsets[lhs]:
+            self.rm_edge(lhs2, rhs)
+
+        for rhs2 in self.downsets[rhs]:
+            self.rm_edge(lhs, rhs2)
+
+        try:
+            self.downsets[lhs].remove(rhs)
+        except KeyError: pass
+        try:
+            self.upsets[rhs].remove(lhs)
+        except KeyError: pass

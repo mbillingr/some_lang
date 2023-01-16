@@ -67,6 +67,50 @@ class TypeCheckerCore:
                 if isinstance(lhs_head, VTypeHead) and isinstance(rhs_head, UTypeHead):
                     pending_edges += check_heads(lhs_head, rhs_head)
 
+    def recheck(self):
+        for lhs, edges in enumerate(self.r.downsets):
+            for rhs in edges:
+                lhs_head = self.types[lhs]
+                rhs_head = self.types[rhs]
+                if lhs_head != "Var" and rhs_head != "Var":
+                    check_heads(lhs_head, rhs_head)
+
+    def specialize(self):
+        """Try to derive the most specific types possible"""
+        while True:
+            vars = (t for t, ty in enumerate(self.types) if ty == "Var")
+            # variables where exactly one type flows into - these are trivial to specialize
+            simple_use_vars = [
+                t
+                for t in vars
+                if len(self.r.upsets[t]) == 1 and self.types[next(iter(self.r.upsets[t]))] != "Var"
+            ]
+            print(simple_use_vars)
+            if not simple_use_vars:
+                return
+
+            for t in simple_use_vars:
+                v = next(iter(self.r.upsets[t]))  # todo: .pop() instead?
+                u = self.new_use(self.types[v].get_use())
+                self.substitute(t, v, u)
+
+    def substitute(self, t: int, vhead: Value, uhead: Use):
+        for rhs in self.r.downsets[t]:
+            self.flow(vhead, Use(rhs))
+        for lhs in self.r.upsets[t]:
+            self.flow(Value(lhs), uhead)
+
+        while self.r.downsets[t]:
+            rhs = next(iter(self.r.downsets[t]))
+            self.r.rm_edge(t, rhs)
+        while self.r.upsets[t]:
+            lhs = next(iter(self.r.upsets[t]))
+            self.r.rm_edge(lhs, t)
+
+        self.types = [
+            (ty if ty == "Var" else ty.substitute(t, vhead, uhead)) for ty in self.types
+        ]
+
     def __str__(self):
         out = []
         for i, t in enumerate(self.types):
