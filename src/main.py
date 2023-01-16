@@ -17,7 +17,12 @@ print (0? (ident 7))
     ctx = ctx.module(src)
     print(ctx.engine)
     print("----------")
-    print(ctx.engine.extract(16))
+
+    ctx = Context()
+    print(ctx.compile_expr("((lambda (x) x) (lambda (a) (lambda (b) a)))"))
+    raise NotImplementedError(
+        "correctly annotate type variables... arg: (_0 -> (_1 -> _0))"
+    )
 
     # current idea:
     #   - use type system to distinguish between pure and imperative functions

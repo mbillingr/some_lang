@@ -61,20 +61,25 @@ def check_module(
     return env
 
 
-def check_expr(expr: ast.Expression, env: Env[Value], engine: TypeCheckerCore) -> Value:
+def check_expr(
+    expr: ast.Expression,
+    env: Env[Value],
+    engine: TypeCheckerCore,
+    callback=lambda x, v: v,
+) -> Value:
     match expr:
         case ast.Boolean():
-            return engine.new_val(type_heads.VBool())
+            return callback(expr, engine.new_val(type_heads.VBool()))
         case ast.Integer():
-            return engine.new_val(type_heads.VInt())
+            return callback(expr, engine.new_val(type_heads.VInt()))
         case ast.Reference(var):
             t = env.apply(var)
             if t is None:
                 raise NameError("Unbound variable", var)
-            return t
+            return callback(expr, t)
         case ast.Application(rator, rand):
-            func_type = check_expr(rator, env, engine)
-            arg_type = check_expr(rand, env, engine)
+            func_type = check_expr(rator, env, engine, callback)
+            arg_type = check_expr(rand, env, engine, callback)
             ret_type, ret_bound = engine.var()
             bound = engine.new_use(type_heads.UFunc(arg_type, ret_bound))
             engine.flow(func_type, bound)
@@ -84,9 +89,9 @@ def check_expr(expr: ast.Expression, env: Env[Value], engine: TypeCheckerCore) -
             res_type, res_usage = engine.var()
             func_type = engine.new_val(type_heads.VFunc(arg_bound, res_type))
             local_env = env.extend(var, arg_type)
-            body_type = check_expr(bdy, local_env, engine)
+            body_type = check_expr(bdy, local_env, engine, callback)
             engine.flow(body_type, res_usage)
-            return func_type
+            return callback(expr, func_type)
 
         case _:
             raise NotImplementedError(expr)
