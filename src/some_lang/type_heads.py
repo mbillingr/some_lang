@@ -1,6 +1,6 @@
 import dataclasses
 
-from some_lang.biunification.type_checker import VTypeHead, UTypeHead, Value, Use
+from some_lang.biunification.type_checker import VTypeHead, UTypeHead, Value, Use, TypeCheckerCore
 
 
 @dataclasses.dataclass

@@ -1,18 +1,27 @@
 from __future__ import annotations
 import abc
+import dataclasses
 import typing
 
 from some_lang.biunification.reachability import Reachability, Node
 
 
 class VTypeHead(abc.ABC):
-    pass
+    def component_types(self) -> typing.Iterator[tuple[str, int]]:
+        # the default impl assumes dataclasses
+        for field in dataclasses.fields(self):
+            yield field.name, getattr(self, field.name)
 
 
 class UTypeHead(abc.ABC):
     @abc.abstractmethod
     def check(self, val: VTypeHead) -> list[tuple[Value, Use]]:
         pass
+
+    def component_types(self) -> typing.Iterator[tuple[str, int]]:
+        # the default impl assumes dataclasses
+        for field in dataclasses.fields(self):
+            yield field.name, getattr(self, field.name)
 
 
 TypeNode: typing.TypeAlias = typing.Literal["Var"] | VTypeHead | UTypeHead
@@ -61,16 +70,57 @@ class TypeCheckerCore:
     def __str__(self):
         out = []
         for i, t in enumerate(self.types):
-            if t == "Var": t = f"t{i}"
-            out.append(f"{i:4}  {t}")
+            if t == "Var":
+                t = f"t{i}"
+            out.append(f"{'t'+str(i):>4}  {t}")
             for j in self.r.downsets[i]:
-                sup = self.types[j]
-                if sup == "Var": sup = f"t{j}"
-                out.append(f"{i:4}  {t} <: {sup}")
+                out.append(f"{'t'+str(i):>4}  {t} <: t{j}")
         return "\n".join(out)
 
     def reify(self, t: int):
         return f"{self.types[t]}{t}"
+
+    def extract(self, t: int) -> TypeCheckerCore:
+        """Extract the subgraph relevant for one specific type."""
+        out = TypeCheckerCore()
+        self.copy_type(t, out, {})
+        return out
+
+    def copy_type(self, t: int, dst: TypeCheckerCore, copied: dict[int, int]) -> int:
+        try:
+            return copied[t]
+        except KeyError:
+            pass
+
+        type_head = self.types[t]
+
+        if type_head == "Var":
+            t_, _ = dst.var()
+        else:
+            components = {
+                k: self.copy_type(s, dst, copied)
+                for k, s in type_head.component_types()
+            }
+            dst_type_head = type_head.__class__(**components)
+            match type_head:
+                case VTypeHead() as vth:
+                    t_ = dst.new_val(dst_type_head)
+                case UTypeHead() as uth:
+                    t_ = dst.new_use(dst_type_head)
+                case other:
+                    raise RuntimeError("Should not reach", other)
+
+        copied[t] = t_
+
+        for v in self.r.upsets[t]:
+            v_ = self.copy_type(v, dst, copied)
+            dst.flow(Value(v_), Use(t_))
+
+        for u in self.r.downsets[t]:
+            u_ = self.copy_type(u, dst, copied)
+            dst.flow(Value(t_), Use(u_))
+
+        return t_
 
 
 def check_heads(lhs: VTypeHead, rhs: UTypeHead) -> list[tuple[Value, Use]]:

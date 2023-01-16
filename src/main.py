@@ -16,6 +16,8 @@ print (0? (ident 7))
     ctx.init_default_env()
     ctx = ctx.module(src)
     print(ctx.engine)
+    print("----------")
+    print(ctx.engine.extract(16))
 
     # current idea:
     #   - use type system to distinguish between pure and imperative functions
