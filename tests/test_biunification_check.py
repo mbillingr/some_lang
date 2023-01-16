@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 
 import pytest
+import typing
 
 from some_lang.biunification.type_checker import (
     TypeCheckerCore,
@@ -54,7 +55,8 @@ def test_type_fail_through_var():
 
 @dataclasses.dataclass
 class VBool(VTypeHead):
-    pass
+    def reify(self, engine: TypeCheckerCore) -> typing.Any:
+        raise NotImplementedError()
 
 
 @dataclasses.dataclass
@@ -64,11 +66,17 @@ class UBool(UTypeHead):
             raise TypeError(self, val)
         return []
 
+    def reify(self, engine: TypeCheckerCore) -> typing.Any:
+        raise NotImplementedError()
+
 
 @dataclasses.dataclass
 class VFunc(VTypeHead):
     arg: Use
     ret: Value
+
+    def reify(self, engine: TypeCheckerCore) -> typing.Any:
+        raise NotImplementedError()
 
 
 @dataclasses.dataclass
@@ -80,3 +88,6 @@ class UFunc(UTypeHead):
         if not isinstance(val, VFunc):
             raise TypeError(self, val)
         return [(self.ret, val.ret), (val.arg, self.arg)]
+
+    def reify(self, engine: TypeCheckerCore) -> typing.Any:
+        raise NotImplementedError()

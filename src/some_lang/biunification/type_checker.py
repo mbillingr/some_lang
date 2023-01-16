@@ -12,6 +12,10 @@ class VTypeHead(abc.ABC):
         for field in dataclasses.fields(self):
             yield field.name, getattr(self, field.name)
 
+    @abc.abstractmethod
+    def reify(self, engine: TypeCheckerCore) -> typing.Any:
+        pass
+
 
 class UTypeHead(abc.ABC):
     @abc.abstractmethod
@@ -23,6 +27,10 @@ class UTypeHead(abc.ABC):
         for field in dataclasses.fields(self):
             yield field.name, getattr(self, field.name)
 
+    @abc.abstractmethod
+    def reify(self, engine: TypeCheckerCore) -> typing.Any:
+        pass
+
 
 TypeNode: typing.TypeAlias = typing.Literal["Var"] | VTypeHead | UTypeHead
 Value = typing.NewType("Value", Node)
@@ -33,6 +41,15 @@ class TypeCheckerCore:
     def __init__(self) -> None:
         self.r = Reachability()
         self.types: list[TypeNode] = []
+
+    def get_type(self, t: int) -> TypeNode:
+        return self.types[t]
+
+    def reify(self, t: int) -> typing.Any:
+        ty = self.get_type(t)
+        if ty == "Var":
+            return f"var{t}"
+        return ty.reify(self)
 
     def new_val(self, val_type: VTypeHead) -> Value:
         i = self.r.add_node()
@@ -77,9 +94,6 @@ class TypeCheckerCore:
                 out.append(f"{'t'+str(i):>4}  {t} <: t{j}")
         return "\n".join(out)
 
-    def reify(self, t: int):
-        return f"{self.types[t]}{t}"
-
     def extract(self, t: int) -> TypeCheckerCore:
         """Extract the subgraph relevant for one specific type."""
         out = TypeCheckerCore()
@@ -121,6 +135,30 @@ class TypeCheckerCore:
             dst.flow(Value(t_), Use(u_))
 
         return t_
+
+    def reify_all(self, types=None):
+        types = types or [None] * len(self.types)
+
+        def recurse(t):
+            if self.types[t] == "Var":
+                inflows = set(recurse(i) for i in self.r.upsets[t])
+                if len(inflows) == 1:
+                    result = inflows.pop()
+                else:
+                    outflows = set(recurse(i) for i in self.r.downsets[t])
+                    print(inflows)
+                    print(outflows)
+                    raise NotImplementedError()
+            else:
+                result = self.reify(t)
+            types[t] = result
+            return result
+
+        for i, t in enumerate(self.types):
+            if types[i] is None:
+                recurse(i)
+
+        return types
 
 
 def check_heads(lhs: VTypeHead, rhs: UTypeHead) -> list[tuple[Value, Use]]:

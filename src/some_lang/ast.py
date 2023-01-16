@@ -29,22 +29,22 @@ class TypeExpression(abc.ABC):
     pass
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class UnknownType(TypeExpression):
     pass
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class BooleanType(TypeExpression):
     pass
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class IntegerType(TypeExpression):
     pass
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class FunctionType(TypeExpression):
     arg: TypeExpression
     res: TypeExpression

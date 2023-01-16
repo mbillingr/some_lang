@@ -1,11 +1,21 @@
 import dataclasses
 
-from some_lang.biunification.type_checker import VTypeHead, UTypeHead, Value, Use, TypeCheckerCore
+import typing
+
+from some_lang import ast
+from some_lang.biunification.type_checker import (
+    VTypeHead,
+    UTypeHead,
+    Value,
+    Use,
+    TypeCheckerCore,
+)
 
 
 @dataclasses.dataclass
 class VBool(VTypeHead):
-    pass
+    def reify(self, engine: TypeCheckerCore) -> typing.Any:
+        return ast.BooleanType()
 
 
 @dataclasses.dataclass
@@ -15,10 +25,14 @@ class UBool(UTypeHead):
             raise TypeError(self, val)
         return []
 
+    def reify(self, engine: TypeCheckerCore) -> typing.Any:
+        return ast.BooleanType()
+
 
 @dataclasses.dataclass
 class VInt(VTypeHead):
-    pass
+    def reify(self, engine: TypeCheckerCore) -> typing.Any:
+        return ast.IntegerType()
 
 
 @dataclasses.dataclass
@@ -28,11 +42,17 @@ class UInt(UTypeHead):
             raise TypeError(self, val)
         return []
 
+    def reify(self, engine: TypeCheckerCore) -> typing.Any:
+        return ast.IntegerType()
+
 
 @dataclasses.dataclass
 class VFunc(VTypeHead):
     arg: Use
     ret: Value
+
+    def reify(self, engine: TypeCheckerCore) -> typing.Any:
+        return ast.FunctionType(engine.reify(self.arg), engine.reify(self.ret))
 
 
 @dataclasses.dataclass
@@ -44,3 +64,6 @@ class UFunc(UTypeHead):
         if not isinstance(val, VFunc):
             raise TypeError(self, val)
         return [(val.ret, self.ret), (self.arg, val.arg)]
+
+    def reify(self, engine: TypeCheckerCore) -> typing.Any:
+        return ast.FunctionType(engine.reify(self.arg), engine.reify(self.ret))
