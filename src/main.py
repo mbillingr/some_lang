@@ -1,8 +1,4 @@
-from some_lang import parser
-from some_lang.biunification.type_checker import TypeCheckerCore
-from some_lang.interpreter import run_module
 from some_lang.lang_frontend import Context
-from some_lang.type_checker import check_module
 
 if __name__ == "__main__":
     src = """

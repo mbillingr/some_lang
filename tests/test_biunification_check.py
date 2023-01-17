@@ -4,7 +4,7 @@ import dataclasses
 
 import pytest
 
-from some_lang.biunification.type_checker import (
+from biunification.type_checker import (
     TypeCheckerCore,
     VTypeHead,
     UTypeHead,

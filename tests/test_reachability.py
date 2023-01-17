@@ -1,4 +1,4 @@
-from some_lang.biunification.reachability import Reachability as R
+from biunification.reachability import Reachability as R
 
 
 def test_single_edge():

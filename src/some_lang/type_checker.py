@@ -1,7 +1,5 @@
-from typing import TypeAlias
-
 from some_lang import ast, type_heads
-from some_lang.biunification.type_checker import Value, TypeCheckerCore, Use
+from biunification.type_checker import Value, TypeCheckerCore, Use
 from some_lang.env import EmptyEnv, Env
 
 

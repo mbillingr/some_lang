@@ -3,7 +3,7 @@ import abc
 import dataclasses
 import typing
 
-from some_lang.biunification.reachability import Reachability, Node
+from biunification.reachability import Reachability, Node
 
 
 class VTypeHead(abc.ABC):
