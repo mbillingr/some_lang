@@ -26,7 +26,11 @@ class DefinitionPattern:
 
 
 class TypeExpression(abc.ABC):
-    pass
+    @classmethod
+    def is_supertype(cls, t):
+        if not isinstance(t, type):
+            t = t.__class__
+        return cls == t or (hasattr(t, "supertype") and cls.is_supertype(t.supertype))
 
 
 @dataclasses.dataclass(frozen=True)
@@ -35,13 +39,26 @@ class UnknownType(TypeExpression):
 
 
 @dataclasses.dataclass(frozen=True)
+class TypeVar(TypeExpression):
+    name: str
+
+
+@dataclasses.dataclass(frozen=True)
 class BooleanType(TypeExpression):
+    pass
+
+
+@dataclasses.dataclass(frozen=True)
+class NumberType(TypeExpression):
     pass
 
 
 @dataclasses.dataclass(frozen=True)
 class IntegerType(TypeExpression):
     pass
+
+
+IntegerType.supertype = NumberType
 
 
 @dataclasses.dataclass(frozen=True)

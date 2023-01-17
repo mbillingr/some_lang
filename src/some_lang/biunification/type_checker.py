@@ -136,30 +136,70 @@ class TypeCheckerCore:
 
         return t_
 
-    def reify_all(self, types=None):
+    def reify_all(self, tvar_constructor=object, types=None):
         types = types or [None] * len(self.types)
 
         def recurse(t):
+            if types[t] is not None:
+                return types[t]
+
             if self.types[t] == "Var":
-                inflows = set(recurse(i) for i in self.r.upsets[t])
-                if len(inflows) == 1:
-                    result = inflows.pop()
+                inflows = [recurse(i) for i in self.r.upsets[t]]
+                if inflows:
+                    result = make_union(*inflows)
                 else:
                     outflows = set(recurse(i) for i in self.r.downsets[t])
-                    print(inflows)
-                    print(outflows)
-                    raise NotImplementedError()
+                    if not outflows:
+                        result = tvar_constructor()
+                    else:
+                        print(inflows)
+                        print(outflows)
+                        raise NotImplementedError()
             else:
                 result = self.reify(t)
             types[t] = result
             return result
 
         for i, t in enumerate(self.types):
-            if types[i] is None:
-                recurse(i)
+            recurse(i)
 
         return types
 
 
 def check_heads(lhs: VTypeHead, rhs: UTypeHead) -> list[tuple[Value, Use]]:
     return rhs.check(lhs)
+
+
+def make_union(*types):
+    match types:
+        case ():
+            raise NotImplementedError()
+        case (t,):
+            return t
+        case _:
+            u = Union(set(types))
+            if len(u.types) == 1:
+                u = u.types.pop()
+            return u
+
+
+class Union:
+    def __init__(self, types):
+        self.types = set()
+        for t in types:
+            self.add(t)
+
+    def add(self, t):
+        types_out = set()
+        for tu in self.types:
+            if t.is_supertype(tu):
+                types_out.add(t)
+            elif tu.is_supertype(t):
+                return
+            else:
+                types_out.add(tu)
+        types_out.add(t)
+        self.types = types_out
+
+    def __repr__(self):
+        return f"Union{self.types}"

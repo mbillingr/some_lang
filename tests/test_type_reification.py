@@ -67,6 +67,12 @@ def test_reify_variable():
     assert engine.reify_all() == [ast.IntegerType()] * 3
 
 
+def test_unconstrained_variable():
+    engine = TypeCheckerCore()
+    engine.var()
+    assert engine.reify_all(TVarBuilder()) == [ast.TypeVar("1")]
+
+
 def test_choose_vtype_for_variables():
     engine = TypeCheckerCore()
     v = engine.new_val(type_heads.VInt())
@@ -74,24 +80,31 @@ def test_choose_vtype_for_variables():
     vv, vu = engine.var()
     engine.flow(v, vu)
     engine.flow(vv, u)
-    assert engine.reify_all() == [ast.IntegerType(), "Number", ast.IntegerType()]
+    assert engine.reify_all()[-1] == ast.IntegerType()
 
 
-def test_use_most_specific_type():
+def test_multiple_vtypes_for_variable():
     engine = TypeCheckerCore()
-    i = engine.new_val(type_heads.VInt())
-    v = engine.new_val(VNumber())
+    v1 = engine.new_val(type_heads.VInt())
+    v2 = engine.new_val(VNumber())
+    v, u = engine.var()
+    engine.flow(v1, u)
+    engine.flow(v2, u)
+    assert engine.reify_all()[-1] == ast.NumberType()
+
+
+def test_constrained_variable():
+    engine = TypeCheckerCore()
     u = engine.new_use(UNumber())
+    v, _ = engine.var()
     engine.flow(v, u)
-    engine.flow(i, u)
-    print(engine)
-    assert engine.reify_all() == [ast.IntegerType(), "Number", ast.IntegerType()]
+    assert engine.reify_all()[-1] == "TODO"
 
 
 @dataclasses.dataclass
 class VNumber(VTypeHead):
     def reify(self, engine: TypeCheckerCore) -> typing.Any:
-        return "Number"
+        return ast.NumberType()
 
 
 @dataclasses.dataclass
@@ -107,4 +120,13 @@ class UNumber(UTypeHead):
         return []
 
     def reify(self, engine: TypeCheckerCore) -> typing.Any:
-        return "Number"
+        return ast.NumberType()
+
+
+class TVarBuilder:
+    def __init__(self):
+        self.count = 0
+
+    def __call__(self):
+        self.count += 1
+        return ast.TypeVar(str(self.count))
