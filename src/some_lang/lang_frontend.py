@@ -56,53 +56,57 @@ class Context:
 
         type_checker.check_expr(src, self.type_env, self.engine, callback=annotate_expr)
         print(self.engine)
-        return code_gen(src, self.type_env, self.engine, expr_types)
+        return code_gen(src, {}, self.engine, expr_types)
 
 
 def code_gen(expr, env, engine, expr_types):
+    tx = gen_type(expr_types[id(expr)], env, engine)
     match expr:
         case ast.Integer(val):
-            return str(val)
+            return f"val: {tx} = {val}"
         case ast.Reference(var):
-            return var
+            return f"val: {tx} = {var}"
         case ast.Lambda(arg, bdy):
             b = code_gen(bdy, env, engine, expr_types)
-            return f"lambda {arg}: {b}"
+            return f"val: {tx} = lambda {arg}:\n{b}\nreturn val"
         case ast.Application(rator, rand):
             f = code_gen(rator, env, engine, expr_types)
-            tf = gen_type(expr_types[id(rator)], engine)
             a = code_gen(rand, env, engine, expr_types)
-            ta = gen_type(expr_types[id(rand)], engine)
             return (
-                f"func: {tf} = {f}\npush(func)\narg: {ta} = {a}\nfunc=pop()\nfunc(arg)"
+                f"{f}\npush(val)\n{a}\narg = val\nfunc=pop()\nval: {tx} = func(arg)"
             )
         case _:
             raise NotImplementedError(expr)
 
 
-def gen_type(t: int, engine, skip=None):
+def gen_type(t: int, env, engine, skip=None):
+    if t in env:
+        return env[t]
     skip = skip or set()
     match engine.types[t]:
         case "Var":
             types = {
-                gen_type(s, engine, skip | {t})
+                gen_type(s, env, engine, skip | {t})
                 for s in engine.r.upsets[t]
                 if s not in skip
             }
-            if not types:
-                types = {
-                    gen_type(s, engine, skip | {t})
-                    for s in engine.r.downsets[t]
-                    if s not in skip
-                }
-            if not types:
-                return "?"
-            return "|".join(types)
+            if types: return "|".join(types)
+
+            types = {
+                gen_type(s, env, engine, skip | {t})
+                for s in engine.r.downsets[t]
+                if s not in skip
+            }
+            tv = f"t{len(env)}"
+            if types:
+                tv += f"<:{'&'.join(types)}"
+            env[t] = tv
+            return tv
         case type_heads.VInt():
             return "int"
         case type_heads.UInt():
             return "int"
         case type_heads.VFunc(a, r):
-            return f"({gen_type(a, engine)} -> {gen_type(r, engine)})"
+            return f"({gen_type(a, env, engine)} -> {gen_type(r, env, engine)})"
         case other:
             raise NotImplementedError(other)

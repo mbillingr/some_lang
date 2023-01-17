@@ -83,7 +83,7 @@ def check_expr(
             ret_type, ret_bound = engine.var()
             bound = engine.new_use(type_heads.UFunc(arg_type, ret_bound))
             engine.flow(func_type, bound)
-            return ret_type
+            return callback(expr, ret_type)
         case ast.Lambda(var, bdy):
             arg_type, arg_bound = engine.var()
             res_type, res_usage = engine.var()

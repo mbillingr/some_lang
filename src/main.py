@@ -19,6 +19,7 @@ print (0? (ident 7))
     print("----------")
 
     ctx = Context()
+    ctx.init_default_env()
     print(ctx.compile_expr("((lambda (x) x) (lambda (a) (lambda (b) a)))"))
     raise NotImplementedError(
         "correctly annotate type variables... arg: (_0 -> (_1 -> _0))"

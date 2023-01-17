@@ -35,6 +35,11 @@ class UnknownType(TypeExpression):
 
 
 @dataclasses.dataclass
+class AnyType(TypeExpression):
+    pass
+
+
+@dataclasses.dataclass
 class BooleanType(TypeExpression):
     pass
 
