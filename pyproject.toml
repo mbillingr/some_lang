@@ -10,6 +10,7 @@ packages = [{ include = "some_lang", from = "src" }]
 python = "^3.11"
 pytest = "^7.2.0"
 mypy = "^0.991"
+pyparsing = "^3.0.9"
 
 
 [build-system]
