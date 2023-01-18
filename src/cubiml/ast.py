@@ -34,5 +34,17 @@ class FieldAccess(Expression):
     expr: Expression
 
 
+@dataclasses.dataclass(frozen=True)
+class Function(Expression):
+    var: str
+    body: Expression
+
+
+@dataclasses.dataclass(frozen=True)
+class Application(Expression):
+    fun: Expression
+    arg: Expression
+
+
 TRUE = Boolean(True)
 FALSE = Boolean(False)

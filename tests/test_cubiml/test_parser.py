@@ -40,6 +40,9 @@ def test_parse_field_access():
     assert parser.expr.parse_string("{}.abc")[0] == ast.FieldAccess(
         "abc", ast.Record({})
     )
+    assert parser.expr.parse_string("{}.x.y")[0] == ast.FieldAccess(
+        "y", ast.FieldAccess("x", ast.Record({}))
+    )
 
 
 def test_parse_paren_exp():
@@ -49,8 +52,27 @@ def test_parse_paren_exp():
     )
 
 
+def test_parse_function():
+    assert parser.expr.parse_string("fun x -> x")[0] == ast.Function(
+        "x", ast.Reference("x")
+    )
+
+
+def test_parse_application():
+    assert parser.expr.parse_string("a b")[0] == ast.Application(
+        ast.Reference("a"), ast.Reference("b")
+    )
+    assert parser.expr.parse_string("a b c")[0] == ast.Application(
+        ast.Application(ast.Reference("a"), ast.Reference("b")), ast.Reference("c")
+    )
+    assert (
+        parser.expr.parse_string("a b c d")[0]
+        == parser.expr.parse_string("(((a b) c) d)")[0]
+    )
+
+
 def test_get_expr_location():
-    src = "if a then a else a"
+    src = " if a then a else a"
     exp = parser.expr.parse_string(src)[0]
 
     assert parser.get_loc(exp) == 0
