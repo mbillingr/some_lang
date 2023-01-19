@@ -45,6 +45,19 @@ class Case(Expression):
 
 
 @dataclasses.dataclass(frozen=True)
+class MatchArm:
+    variant: str
+    binding: str
+    body: Expression
+
+
+@dataclasses.dataclass(frozen=True)
+class Match(Expression):
+    expr: Expression
+    arms: list[MatchArm]
+
+
+@dataclasses.dataclass(frozen=True)
 class Function(Expression):
     var: str
     body: Expression

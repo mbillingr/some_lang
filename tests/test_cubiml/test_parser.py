@@ -117,6 +117,18 @@ def test_parse_case():
     assert parser.expr.parse_string("`Foo true")[0] == ast.Case("Foo", ast.TRUE)
 
 
+def test_parse_match():
+    assert parser.expr.parse_string("match x with | `A y -> y | `B z -> z")[
+        0
+    ] == ast.Match(
+        ast.Reference("x"),
+        [
+            ast.MatchArm("A", "y", ast.Reference("y")),
+            ast.MatchArm("B", "z", ast.Reference("z")),
+        ],
+    )
+
+
 def test_parse_toplevel():
     assert parser.script.parse_string("let x = y;")[0] == ast.Script(
         [ast.DefineLet("x", ast.Reference("y"))]
