@@ -125,3 +125,72 @@ def test_match():
 
     with pytest.raises(TypeError, match="Bool"):
         type_checker.check_expr(ast.Match(ast.TRUE, []), env, engine)
+
+
+def test_funcdef():
+    engine = type_checker.TypeCheckerCore()
+    env = type_checker.Bindings()
+
+    assert engine.types[
+        type_checker.check_expr(ast.Function("x", ast.TRUE), env, engine)
+    ] == type_heads.VFunc(type_checker.Use(0), type_checker.Value(1))
+
+
+def test_funcall():
+    engine = type_checker.TypeCheckerCore()
+    env = type_checker.Bindings()
+
+    assert (
+        engine.types[
+            type_checker.check_expr(
+                ast.Application(ast.Function("x", ast.TRUE), ast.FALSE), env, engine
+            )
+        ]
+        == "Var"
+    )
+
+    with pytest.raises(TypeError, match="Bool"):
+        type_checker.check_expr(ast.Application(ast.TRUE, ast.FALSE), env, engine)
+
+
+def test_let():
+    engine = type_checker.TypeCheckerCore()
+    env = type_checker.Bindings()
+
+    assert (
+        engine.types[
+            type_checker.check_expr(
+                ast.Let("x", ast.TRUE, ast.Reference("x")), env, engine
+            )
+        ]
+        == type_heads.VBool()
+    )
+
+
+def test_letrec():
+    engine = type_checker.TypeCheckerCore()
+    env = type_checker.Bindings()
+
+    assert (
+        engine.types[
+            type_checker.check_expr(
+                ast.LetRec(
+                    [
+                        ast.FuncDef(
+                            "foo",
+                            ast.Function(
+                                "x",
+                                ast.Application(
+                                    ast.Reference("foo"), ast.Reference("x")
+                                ),
+                            ),
+                        )
+                    ],
+                    ast.Application(ast.Reference("foo"), ast.TRUE),
+                ),
+                env,
+                engine,
+            )
+        ]
+        == "Var"
+    )

@@ -2,7 +2,7 @@ import contextlib
 import dataclasses
 from typing import Optional
 
-from biunification.type_checker import TypeCheckerCore, Value
+from biunification.type_checker import TypeCheckerCore, Use, Value
 from cubiml import ast, type_heads
 
 
@@ -103,5 +103,38 @@ def check_expr(
             engine.flow(match_t, use)
 
             return result_t
+        case ast.Function(var, body):
+            arg_t, arg_u = engine.var()
+            with bindings.child_scope() as bindings_:
+                bindings_.insert(var, arg_t)
+                body_t = check_expr(body, bindings_, engine)
+            return engine.new_val(type_heads.VFunc(arg_u, body_t))
+        case ast.Application(fun, arg):
+            fun_t = check_expr(fun, bindings, engine)
+            arg_t = check_expr(arg, bindings, engine)
+
+            ret_t, ret_u = engine.var()
+            use = engine.new_use(type_heads.UFunc(arg_t, ret_u))
+            engine.flow(fun_t, use)
+            return ret_t
+        case ast.Let(var, val, body):
+            val_t = check_expr(val, bindings, engine)
+            with bindings.child_scope() as bindings_:
+                bindings_.insert(var, val_t)
+                body_t = check_expr(body, bindings_, engine)
+            return body_t
+        case ast.LetRec(defs, body):
+            with bindings.child_scope() as bindings_:
+                temp_us = []
+                for d in defs:
+                    temp_t, temp_u = engine.var()
+                    bindings_.insert(d.name, temp_t)
+                    temp_us.append(temp_u)
+
+                for d, use in zip(defs, temp_us):
+                    var_t = check_expr(d.fun, bindings_, engine)
+                    engine.flow(var_t, use)
+
+                return check_expr(body, bindings_, engine)
         case _:
             raise NotImplementedError(expr)

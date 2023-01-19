@@ -78,8 +78,8 @@ class Let(Expression):
 
 
 @dataclasses.dataclass(frozen=True)
-class FuncDef(Expression):
-    var: str
+class FuncDef:
+    name: str
     fun: Function
 
 

@@ -64,10 +64,10 @@ def evaluate(expr: ast.Expression, env: Mapping[str, Any]) -> Any:
 def make_letrec_env(
     bind: list[ast.FuncDef], env: Mapping[str, Any]
 ) -> Mapping[str, Any]:
-    recenv = {b.var: None for b in bind}
+    recenv = {b.name: None for b in bind}
     env = MultiEnv(recenv, env)
     for b in bind:
-        recenv[b.var] = Function(env, b.fun.var, b.fun.body)
+        recenv[b.name] = Function(env, b.fun.var, b.fun.body)
     return env
 
 
