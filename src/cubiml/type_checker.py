@@ -22,8 +22,9 @@ class RepeatedCaseError(Exception):
 
 
 class Bindings:
-    def __init__(self, m: Optional[dict[str, Value]] = None):
-        self.m: dict[str, Value] = m or {}
+    def __init__(self):
+        self.m: dict[str, Value] = {}
+        self.changes: list[tuple[str, Optional[Value]]] = []
 
     def get(self, k: str):
         try:
@@ -32,12 +33,25 @@ class Bindings:
             raise UnboundError(k) from None
 
     def insert(self, k: str, v: Value):
+        old = self.m.get(k)
+        self.changes.append((k, old))
         self.m[k] = v
 
     @contextlib.contextmanager
     def child_scope(self):
-        child_scope = Bindings(self.m.copy())
-        yield child_scope
+        n = len(self.changes)
+        try:
+            yield self
+        finally:
+            self.unwind(n)
+
+    def unwind(self, n):
+        while len(self.changes) > n:
+            k, old = self.changes.pop()
+            if old is None:
+                del self.m[k]
+            else:
+                self.m[k] = old
 
 
 def check_expr(
