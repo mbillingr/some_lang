@@ -40,7 +40,7 @@ simple_expr = pp.Forward()
 call_expr = pp.Forward()
 
 boolean = pp.MatchFirst(["false", "true"]).set_parse_action(
-    lambda t: ast.Boolean(t[0] == "true")
+    lambda t: ast.Literal(t[0] == "true")
 )
 
 varref = ident.copy().set_parse_action(lambda t: ast.Reference(t[0]))
@@ -53,7 +53,7 @@ record = (
     pp.Suppress("{")
     + pp.delimited_list(pp.Group(ident + pp.Suppress("=") + expr), ";")[..., 1]
     + pp.Suppress("}")
-).add_parse_action(lambda tok: ast.Record(dict(map(tuple, tok))))
+).add_parse_action(lambda tok: ast.Record(list(map(tuple, tok))))
 
 field_access = (simple_expr + pp.OneOrMore("." + ident)).add_parse_action(
     lambda t: functools.reduce(lambda x, f: ast.FieldAccess(f, x), t[2::2], t[0])

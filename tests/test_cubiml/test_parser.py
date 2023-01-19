@@ -11,8 +11,8 @@ def test_parse_valid_identifiers():
 
 
 def test_parse_boolean_literal():
-    assert parser.expr.parse_string("true")[0] == ast.Boolean(True)
-    assert parser.expr.parse_string("false")[0] == ast.Boolean(False)
+    assert parser.expr.parse_string("true")[0] == ast.Literal(True)
+    assert parser.expr.parse_string("false")[0] == ast.Literal(False)
 
 
 def test_parse_variable_reference():
@@ -26,29 +26,29 @@ def test_parse_conditional():
 
 
 def test_parse_records():
-    assert parser.expr.parse_string("{}")[0] == ast.Record({})
-    assert parser.expr.parse_string("{a=true}")[0] == ast.Record({"a": ast.TRUE})
+    assert parser.expr.parse_string("{}")[0] == ast.Record([])
+    assert parser.expr.parse_string("{a=true}")[0] == ast.Record([("a", ast.TRUE)])
     assert parser.expr.parse_string("{a=true; b=false}")[0] == ast.Record(
-        {"a": ast.TRUE, "b": ast.FALSE}
+        [("a", ast.TRUE), ("b", ast.FALSE)]
     )
     assert parser.expr.parse_string("{a=true; b=false; foo={}}")[0] == ast.Record(
-        {"a": ast.TRUE, "b": ast.FALSE, "foo": ast.Record({})}
+        [("a", ast.TRUE), ("b", ast.FALSE), ("foo", ast.Record([]))]
     )
 
 
 def test_parse_field_access():
     assert parser.expr.parse_string("{}.abc")[0] == ast.FieldAccess(
-        "abc", ast.Record({})
+        "abc", ast.Record([])
     )
     assert parser.expr.parse_string("{}.x.y")[0] == ast.FieldAccess(
-        "y", ast.FieldAccess("x", ast.Record({}))
+        "y", ast.FieldAccess("x", ast.Record([]))
     )
 
 
 def test_parse_paren_exp():
     src = "(if true then {} else {}).x"
     assert parser.expr.parse_string(src)[0] == ast.FieldAccess(
-        "x", ast.Conditional(ast.TRUE, ast.Record({}), ast.Record({}))
+        "x", ast.Conditional(ast.TRUE, ast.Record([]), ast.Record([]))
     )
 
 

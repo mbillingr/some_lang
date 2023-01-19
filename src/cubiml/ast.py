@@ -1,5 +1,6 @@
 import abc
 import dataclasses
+from typing import Any
 
 
 class ToplevelItem(abc.ABC):
@@ -11,8 +12,8 @@ class Expression(ToplevelItem):
 
 
 @dataclasses.dataclass(frozen=True)
-class Boolean(Expression):
-    val: bool
+class Literal(Expression):
+    val: Any
 
 
 @dataclasses.dataclass(frozen=True)
@@ -29,7 +30,7 @@ class Conditional(Expression):
 
 @dataclasses.dataclass(frozen=True)
 class Record(Expression):
-    fields: dict[str, Expression]
+    fields: list[tuple[str, Expression]]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -104,5 +105,5 @@ class Script:
     statements: list[ToplevelItem]
 
 
-TRUE = Boolean(True)
-FALSE = Boolean(False)
+TRUE = Literal(True)
+FALSE = Literal(False)

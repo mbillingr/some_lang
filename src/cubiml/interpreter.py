@@ -23,7 +23,7 @@ def run_script(script: ast.Script, env: Mapping[str, Any]) -> Any:
 def evaluate(expr: ast.Expression, env: Mapping[str, Any]) -> Any:
     while True:
         match expr:
-            case ast.Boolean(val):
+            case ast.Literal(val):
                 return val
             case ast.Reference(var):
                 return env[var]
