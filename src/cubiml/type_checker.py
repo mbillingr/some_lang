@@ -1,9 +1,31 @@
 import contextlib
 import dataclasses
+from copy import deepcopy
 from typing import Optional
 
 from biunification.type_checker import TypeCheckerCore, Use, Value
 from cubiml import ast, type_heads
+
+
+class TypeChecker:
+    def __init__(self):
+        self.engine = TypeCheckerCore()
+        self.bindings = Bindings()
+
+    def check_script(self, script: ast.Script):
+        backup = deepcopy(self.engine)
+
+        try:
+            for statement in script.statements:
+                check_toplevel(statement, self.bindings, self.engine)
+        except Exception:
+            # roll back changes
+            self.engine = backup
+            self.bindings.unwind(0)
+            raise
+
+        # persist changes
+        self.bindings.changes.clear()
 
 
 @dataclasses.dataclass

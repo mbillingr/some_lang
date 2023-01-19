@@ -5,19 +5,32 @@ from typing import Mapping, Any, Iterator
 from cubiml import ast
 
 
-def run_script(script: ast.Script, env: Mapping[str, Any]) -> Any:
-    result = None
-    for stmt in script.statements:
-        match stmt:
-            case ast.DefineLet(var, val):
-                env = extend_env(var, evaluate(val, env), env)
-            case ast.DefineLetRec(bind):
-                env = make_letrec_env(bind, env)
-            case ast.Expression():
-                result = evaluate(stmt, env)
-            case _:
-                raise NotImplementedError(stmt)
-    return result
+class Interpreter:
+    def __init__(self):
+        self.env = {}
+
+    def run_script(self, script: ast.Script):
+        env = self.env
+        for statement in script.statements:
+            env = eval_toplevel(statement, env)
+
+        self.env = {}
+        for k, v in env.items():
+            if k not in self.env:
+                self.env[k] = v
+
+
+def eval_toplevel(stmt: ast.ToplevelItem, env: Mapping[str, Any]) -> Any:
+    match stmt:
+        case ast.DefineLet(var, val):
+            return extend_env(var, evaluate(val, env), env)
+        case ast.DefineLetRec(bind):
+            return make_letrec_env(bind, env)
+        case ast.Expression():
+            evaluate(stmt, env)
+            return env
+        case _:
+            raise NotImplementedError(stmt)
 
 
 def evaluate(expr: ast.Expression, env: Mapping[str, Any]) -> Any:
@@ -97,7 +110,7 @@ class Env(collections.abc.Mapping[str, Any]):
         return 1 + len(self.env)
 
     def __iter__(self) -> Iterator[tuple[str, Any]]:
-        yield self.var, self.val
+        yield self.var
         yield from self.env
 
 

@@ -1,6 +1,6 @@
 import pytest
 
-from cubiml import type_checker, ast, type_heads
+from cubiml import type_checker, ast, type_heads, parser
 
 
 def test_literal():
@@ -234,3 +234,37 @@ def test_toplevel_letrec():
         ]
         == "Var"
     )
+
+
+def test_script():
+    src = """
+let not = fun b -> if b then false else true;
+
+let rec even = fun n -> 
+        match n with
+            | `Z x -> true
+            | `S k -> odd k
+    and odd = fun n ->
+        match n with
+            | `Z x -> false
+            | `S k -> even k;
+
+if not (odd (`S `S `Z {})) then `Ok {} else `Fail {}
+"""
+    script = parser.parse_script(src)
+    type_checker.TypeChecker().check_script(script)
+
+
+def test_script_rollback():
+    tc = type_checker.TypeChecker()
+    tc.check_script(parser.parse_script("let x = true"))
+
+    try:
+        tc.check_script(parser.parse_script("let y = true; let z = true true"))
+    except Exception:
+        pass
+
+    tc.check_script(parser.parse_script("x"))  # should pass
+
+    with pytest.raises(type_checker.UnboundError):
+        tc.check_script(parser.parse_script("y"))

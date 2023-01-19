@@ -136,5 +136,5 @@ let rec even = fun n ->
 
 even (`S `S `Z false)
 """
-    exp = parser.parse_script(src)
-    assert interpreter.run_script(exp, {}) is True
+    script = parser.parse_script(src)
+    interpreter.Interpreter().run_script(script)
