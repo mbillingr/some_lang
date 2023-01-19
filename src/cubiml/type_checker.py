@@ -139,16 +139,31 @@ def check_expr(
             return body_t
         case ast.LetRec(defs, body):
             with bindings.child_scope() as bindings_:
-                temp_us = []
-                for d in defs:
-                    temp_t, temp_u = engine.var()
-                    bindings_.insert(d.name, temp_t)
-                    temp_us.append(temp_u)
-
-                for d, use in zip(defs, temp_us):
-                    var_t = check_expr(d.fun, bindings_, engine)
-                    engine.flow(var_t, use)
-
+                check_letrec(defs, bindings_, engine)
                 return check_expr(body, bindings_, engine)
         case _:
             raise NotImplementedError(expr)
+
+
+def check_letrec(defs, bindings, engine):
+    temp_us = []
+    for d in defs:
+        temp_t, temp_u = engine.var()
+        bindings.insert(d.name, temp_t)
+        temp_us.append(temp_u)
+    for d, use in zip(defs, temp_us):
+        var_t = check_expr(d.fun, bindings, engine)
+        engine.flow(var_t, use)
+
+
+def check_toplevel(stmt: ast.ToplevelItem, bindings: Bindings, engine: TypeCheckerCore):
+    match stmt:
+        case ast.Expression():
+            check_expr(stmt, bindings, engine)
+        case ast.DefineLet(var, val):
+            var_t = check_expr(val, bindings, engine)
+            bindings.insert(var, var_t)
+        case ast.DefineLetRec(defs):
+            check_letrec(defs, bindings, engine)
+        case _:
+            raise NotImplementedError(stmt)

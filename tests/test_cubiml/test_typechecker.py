@@ -194,3 +194,43 @@ def test_letrec():
         ]
         == "Var"
     )
+
+
+def test_toplevel_expr():
+    engine = type_checker.TypeCheckerCore()
+    env = type_checker.Bindings()
+
+    type_checker.check_toplevel(ast.FALSE, env, engine)  # should not raise
+
+    with pytest.raises(TypeError):
+        type_checker.check_toplevel(ast.Application(ast.FALSE, ast.FALSE), env, engine)
+
+
+def test_toplevel_let():
+    engine = type_checker.TypeCheckerCore()
+    env = type_checker.Bindings()
+
+    type_checker.check_toplevel(ast.DefineLet("x", ast.TRUE), env, engine)
+
+    assert (
+        engine.types[type_checker.check_expr(ast.Reference("x"), env, engine)]
+        == type_heads.VBool()
+    )
+
+
+def test_toplevel_letrec():
+    engine = type_checker.TypeCheckerCore()
+    env = type_checker.Bindings()
+
+    type_checker.check_toplevel(
+        ast.DefineLetRec([ast.FuncDef("foo", ast.Function("x", ast.TRUE))]), env, engine
+    )
+
+    assert (
+        engine.types[
+            type_checker.check_expr(
+                ast.Application(ast.Reference("foo"), ast.Reference("foo")), env, engine
+            )
+        ]
+        == "Var"
+    )
