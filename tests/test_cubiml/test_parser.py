@@ -71,6 +71,69 @@ def test_parse_application():
     )
 
 
+def test_parse_let():
+    assert parser.expr.parse_string("let x = y in x")[0] == ast.Let(
+        "x", ast.Reference("y"), ast.Reference("x")
+    )
+
+
+def test_parse_letrec():
+    assert parser.expr.parse_string("let rec hang = fun x -> hang x in hang")[
+        0
+    ] == ast.LetRec(
+        [
+            ast.FuncDef(
+                "hang",
+                ast.Function(
+                    "x", ast.Application(ast.Reference("hang"), ast.Reference("x"))
+                ),
+            )
+        ],
+        ast.Reference("hang"),
+    )
+
+    assert parser.expr.parse_string(
+        "let rec a = fun x -> b x and b = fun y -> a y in a"
+    )[0] == ast.LetRec(
+        [
+            ast.FuncDef(
+                "a",
+                ast.Function(
+                    "x", ast.Application(ast.Reference("b"), ast.Reference("x"))
+                ),
+            ),
+            ast.FuncDef(
+                "b",
+                ast.Function(
+                    "y", ast.Application(ast.Reference("a"), ast.Reference("y"))
+                ),
+            ),
+        ],
+        ast.Reference("a"),
+    )
+
+
+def test_parse_toplevel():
+    assert parser.script.parse_string("let x = y;")[0] == ast.Script(
+        [ast.DefineLet("x", ast.Reference("y"))]
+    )
+    assert parser.script.parse_string("let rec x = fun x -> x;")[0] == ast.Script(
+        [ast.DefineLetRec([ast.FuncDef("x", ast.Function("x", ast.Reference("x")))])]
+    )
+    assert parser.script.parse_string("let rec x = fun x -> x and y = fun y -> y;")[
+        0
+    ] == ast.Script(
+        [
+            ast.DefineLetRec(
+                [
+                    ast.FuncDef("x", ast.Function("x", ast.Reference("x"))),
+                    ast.FuncDef("y", ast.Function("y", ast.Reference("y"))),
+                ]
+            )
+        ]
+    )
+
+
 def test_get_expr_location():
     src = " if a then a else a"
     exp = parser.expr.parse_string(src)[0]

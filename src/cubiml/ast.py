@@ -2,7 +2,11 @@ import abc
 import dataclasses
 
 
-class Expression(abc.ABC):
+class ToplevelItem(abc.ABC):
+    pass
+
+
+class Expression(ToplevelItem):
     pass
 
 
@@ -44,6 +48,41 @@ class Function(Expression):
 class Application(Expression):
     fun: Expression
     arg: Expression
+
+
+@dataclasses.dataclass(frozen=True)
+class Let(Expression):
+    var: str
+    val: Expression
+    body: Expression
+
+
+@dataclasses.dataclass(frozen=True)
+class FuncDef(Expression):
+    var: str
+    fun: Function
+
+
+@dataclasses.dataclass(frozen=True)
+class LetRec(Expression):
+    bind: list[FuncDef]
+    body: Expression
+
+
+@dataclasses.dataclass(frozen=True)
+class DefineLet(ToplevelItem):
+    var: str
+    val: Expression
+
+
+@dataclasses.dataclass(frozen=True)
+class DefineLetRec(ToplevelItem):
+    bind: list[FuncDef]
+
+
+@dataclasses.dataclass(frozen=True)
+class Script:
+    statements: list[ToplevelItem]
 
 
 TRUE = Boolean(True)
