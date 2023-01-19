@@ -5,6 +5,17 @@ import pyparsing as pp
 
 from cubiml import ast
 
+
+def parse_script(src: str) -> ast.Script:
+    return script.parse_string(src, True)[0]
+
+
+def parse_expr(src: str) -> ast.Expression:
+    return expr.parse_string(src, True)[0]
+
+
+### Grammar
+
 keyword = (
     pp.Literal("if")
     | "then"
