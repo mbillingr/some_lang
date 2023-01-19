@@ -30,6 +30,44 @@ class UInt(UTypeHead):
 
 
 @dataclasses.dataclass
+class VObj(VTypeHead):
+    fields: dict[str, Value]
+
+
+@dataclasses.dataclass
+class UObj(UTypeHead):
+    field: str
+    use: Use
+
+    def check(self, val: VTypeHead) -> list[tuple[Value, Use]]:
+        if not isinstance(val, VObj):
+            raise TypeError(self, val)
+        try:
+            return [(val.fields[self.field], self.use)]
+        except KeyError:
+            raise TypeError("Missing Field", self.field) from None
+
+
+@dataclasses.dataclass
+class VCase(VTypeHead):
+    tag: str
+    typ: Value
+
+
+@dataclasses.dataclass
+class UCase(UTypeHead):
+    cases: dict[str, Use]
+
+    def check(self, val: VTypeHead) -> list[tuple[Value, Use]]:
+        if not isinstance(val, VCase):
+            raise TypeError(self, val)
+        try:
+            return [(val.typ, self.cases[val.tag])]
+        except KeyError:
+            raise TypeError("Unhandled Case", val.tag) from None
+
+
+@dataclasses.dataclass
 class VFunc(VTypeHead):
     arg: Use
     ret: Value

@@ -41,15 +41,15 @@ class FieldAccess(Expression):
 
 @dataclasses.dataclass(frozen=True)
 class Case(Expression):
-    variant: str
-    value: Expression
+    tag: str
+    val: Expression
 
 
 @dataclasses.dataclass(frozen=True)
 class MatchArm:
-    variant: str
-    binding: str
-    body: Expression
+    tag: str
+    var: str
+    bdy: Expression
 
 
 @dataclasses.dataclass(frozen=True)

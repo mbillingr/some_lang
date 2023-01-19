@@ -41,8 +41,8 @@ def evaluate(expr: ast.Expression, env: Mapping[str, Any]) -> Any:
             case ast.Match(exp, arms):
                 (tag, val) = evaluate(exp, env)
                 for arm in arms:
-                    if arm.variant == tag:
-                        return evaluate(arm.body, extend_env(arm.binding, val, env))
+                    if arm.tag == tag:
+                        return evaluate(arm.bdy, extend_env(arm.var, val, env))
                 raise RuntimeError("No arm matched")
             case ast.Function(var, body):
                 return Function(env, var, body)
