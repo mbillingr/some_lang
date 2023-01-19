@@ -113,6 +113,10 @@ def test_parse_letrec():
     )
 
 
+def test_parse_case():
+    assert parser.expr.parse_string("`Foo true")[0] == ast.Case("Foo", ast.TRUE)
+
+
 def test_parse_toplevel():
     assert parser.script.parse_string("let x = y;")[0] == ast.Script(
         [ast.DefineLet("x", ast.Reference("y"))]

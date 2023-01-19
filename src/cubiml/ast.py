@@ -39,6 +39,12 @@ class FieldAccess(Expression):
 
 
 @dataclasses.dataclass(frozen=True)
+class Case(Expression):
+    variant: str
+    value: Expression
+
+
+@dataclasses.dataclass(frozen=True)
 class Function(Expression):
     var: str
     body: Expression
