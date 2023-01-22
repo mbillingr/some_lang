@@ -1,6 +1,6 @@
 import pytest
 
-from cubiml import type_checker, ast, type_heads, parser
+from cubiml import type_checker, abstract_syntax as ast, type_heads, parser
 
 
 def test_literal():

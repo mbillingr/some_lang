@@ -2,8 +2,9 @@ import functools
 import string
 
 import pyparsing as pp
+from pyparsing.exceptions import ParseException
 
-from cubiml import ast
+from cubiml import abstract_syntax as ast
 
 
 def parse_script(src: str) -> ast.Script:

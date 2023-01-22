@@ -74,7 +74,7 @@ class TypeCheckerCore:
                 t = f"t{i}"
             out.append(f"{'t'+str(i):>4}  {t}")
             for j in self.r.downsets[i]:
-                out.append(f"{'t'+str(i):>4}  {t} <: t{j}")
+                out.append(f"{'t'+str(i):>4}  {t} -> t{j}")
         return "\n".join(out)
 
     def reify(self, t: int):

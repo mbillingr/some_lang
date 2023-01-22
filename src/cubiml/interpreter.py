@@ -2,7 +2,7 @@ import collections
 import dataclasses
 from typing import Mapping, Any, Iterator
 
-from cubiml import ast
+from cubiml import abstract_syntax as ast
 
 
 class Interpreter:
@@ -10,25 +10,28 @@ class Interpreter:
         self.env = {}
 
     def run_script(self, script: ast.Script):
+        result = None
         env = self.env
         for statement in script.statements:
-            env = eval_toplevel(statement, env)
+            result, env = eval_toplevel(statement, env)
 
         self.env = {}
         for k, v in env.items():
             if k not in self.env:
                 self.env[k] = v
 
+        return result
 
-def eval_toplevel(stmt: ast.ToplevelItem, env: Mapping[str, Any]) -> Any:
+
+def eval_toplevel(stmt: ast.ToplevelItem, env: Mapping[str, Any]) -> (Any, Mapping[str, Any]):
     match stmt:
         case ast.DefineLet(var, val):
-            return extend_env(var, evaluate(val, env), env)
+            return None, extend_env(var, evaluate(val, env), env)
         case ast.DefineLetRec(bind):
-            return make_letrec_env(bind, env)
-        case ast.Expression():
-            evaluate(stmt, env)
-            return env
+            return None, make_letrec_env(bind, env)
+        case ast.Expression() as exp:
+            val = evaluate(exp, env)
+            return val, env
         case _:
             raise NotImplementedError(stmt)
 
@@ -46,7 +49,7 @@ def evaluate(expr: ast.Expression, env: Mapping[str, Any]) -> Any:
                 else:
                     expr = alternative
             case ast.Record(fields):
-                return {k: evaluate(v, env) for k, v in fields.items()}
+                return {k: evaluate(v, env) for k, v in fields}
             case ast.FieldAccess(field, exp):
                 return evaluate(exp, env)[field]
             case ast.Case(tag, exp):

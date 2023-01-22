@@ -4,7 +4,7 @@ from copy import deepcopy
 from typing import Optional
 
 from biunification.type_checker import TypeCheckerCore, Use, Value
-from cubiml import ast, type_heads
+from cubiml import abstract_syntax as ast, type_heads
 
 
 class TypeChecker:
@@ -16,8 +16,9 @@ class TypeChecker:
         backup = deepcopy(self.engine)
 
         try:
+            result = None
             for statement in script.statements:
-                check_toplevel(statement, self.bindings, self.engine)
+                result = check_toplevel(statement, self.bindings, self.engine)
         except Exception:
             # roll back changes
             self.engine = backup
@@ -26,6 +27,7 @@ class TypeChecker:
 
         # persist changes
         self.bindings.changes.clear()
+        return result
 
 
 @dataclasses.dataclass
@@ -178,14 +180,16 @@ def check_letrec(defs, bindings, engine):
         engine.flow(var_t, use)
 
 
-def check_toplevel(stmt: ast.ToplevelItem, bindings: Bindings, engine: TypeCheckerCore):
+def check_toplevel(stmt: ast.ToplevelItem, bindings: Bindings, engine: TypeCheckerCore) -> Value:
     match stmt:
-        case ast.Expression():
-            check_expr(stmt, bindings, engine)
+        case ast.Expression() as expr:
+            return check_expr(expr, bindings, engine)
         case ast.DefineLet(var, val):
             var_t = check_expr(val, bindings, engine)
             bindings.insert(var, var_t)
+            return var_t
         case ast.DefineLetRec(defs):
             check_letrec(defs, bindings, engine)
+            return None
         case _:
             raise NotImplementedError(stmt)

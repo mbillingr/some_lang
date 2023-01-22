@@ -1,6 +1,6 @@
 import pytest
 
-from cubiml import parser, ast
+from cubiml import parser, abstract_syntax as ast
 
 
 def test_parse_valid_identifiers():

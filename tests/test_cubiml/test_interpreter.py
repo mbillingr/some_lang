@@ -1,4 +1,4 @@
-from cubiml import ast, interpreter, parser
+from cubiml import abstract_syntax as ast, interpreter, parser
 
 
 def test_simple_exprs():
