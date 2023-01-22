@@ -26,7 +26,7 @@ def test_conditional():
 
 def test_record():
     assert interpreter.evaluate(
-        ast.Record({"a": ast.TRUE, "b": ast.Record({})}), {}
+        ast.Record([("a", ast.TRUE), ("b", ast.Record({}))]), {}
     ) == {
         "a": True,
         "b": {},
@@ -40,7 +40,7 @@ def test_record():
     assert (
         interpreter.evaluate(
             ast.FieldAccess(
-                "b", ast.Record({"a": ast.FALSE, "b": ast.TRUE, "c": ast.FALSE})
+                "b", ast.Record([("a", ast.FALSE), ("b", ast.TRUE), ("c", ast.FALSE)])
             ),
             {},
         )

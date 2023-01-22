@@ -1,14 +1,46 @@
+from __future__ import annotations
+
+import abc
 import dataclasses
+from typing import Generic, TypeVar, Optional
 
 from biunification.type_checker import VTypeHead, UTypeHead, Value, Use
 
 
-@dataclasses.dataclass
+T = TypeVar("T")
+
+
+@dataclasses.dataclass(frozen=True)
+class Assoc(abc.ABC, Generic[T]):
+    @abc.abstractmethod
+    def __getitem__(self, item: str):
+        pass
+
+
+@dataclasses.dataclass(frozen=True)
+class AssocEmpty(Assoc[T]):
+    def __getitem__(self, item: str):
+        raise KeyError(item)
+
+
+@dataclasses.dataclass(frozen=True)
+class AssocItem(Assoc[T]):
+    key: str
+    val: T
+    next: Assoc[T]
+
+    def __getitem__(self, item: str):
+        if self.key == item:
+            return self.val
+        return self.next[item]
+
+
+@dataclasses.dataclass(frozen=True)
 class VBool(VTypeHead):
     pass
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class UBool(UTypeHead):
     def check(self, val: VTypeHead) -> list[tuple[Value, Use]]:
         if not isinstance(val, VBool):
@@ -16,12 +48,12 @@ class UBool(UTypeHead):
         return []
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class VInt(VTypeHead):
     pass
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class UInt(UTypeHead):
     def check(self, val: VTypeHead) -> list[tuple[Value, Use]]:
         if not isinstance(val, VInt):
@@ -29,12 +61,19 @@ class UInt(UTypeHead):
         return []
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class VObj(VTypeHead):
-    fields: dict[str, Value]
+    fields: Assoc[Value]
+
+    @staticmethod
+    def from_dict(d: dict[str, Value]) -> VObj:
+        fields = AssocEmpty()
+        for k, v in d.items():
+            fields = AssocItem(k, v, fields)
+        return VObj(fields)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class UObj(UTypeHead):
     field: str
     use: Use
@@ -48,15 +87,15 @@ class UObj(UTypeHead):
             raise TypeError("Missing Field", self.field) from None
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class VCase(VTypeHead):
     tag: str
     typ: Value
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class UCase(UTypeHead):
-    cases: dict[str, Use]
+    cases: Assoc[Use]
 
     def check(self, val: VTypeHead) -> list[tuple[Value, Use]]:
         if not isinstance(val, VCase):
@@ -66,14 +105,21 @@ class UCase(UTypeHead):
         except KeyError:
             raise TypeError("Unhandled Case", val.tag) from None
 
+    @staticmethod
+    def from_dict(d: dict[str, Use]) -> UCase:
+        cases = AssocEmpty()
+        for k, v in d.items():
+            cases = AssocItem(k, v, cases)
+        return UCase(cases)
 
-@dataclasses.dataclass
+
+@dataclasses.dataclass(frozen=True)
 class VFunc(VTypeHead):
     arg: Use
     ret: Value
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class UFunc(UTypeHead):
     arg: Value
     ret: Use

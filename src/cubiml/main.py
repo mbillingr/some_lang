@@ -4,8 +4,7 @@ tckr = type_checker.TypeChecker()
 intr = interpreter.Interpreter()
 
 
-def read():
-    src = input("> ")
+def read_more(src):
     while True:
         try:
             return parser.parse_script(src)
@@ -17,7 +16,8 @@ def read():
 
 while True:
     try:
-        ast = read()
+        src = input("> ")
+        ast = read_more(src)
         ty = tckr.check_script(ast)
         print(tckr.engine)
         print(tckr.bindings.m)
@@ -30,4 +30,3 @@ while True:
         break
     except Exception as e:
         print(e)
-

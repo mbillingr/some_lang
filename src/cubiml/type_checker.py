@@ -88,14 +88,14 @@ def check_expr(
             return bindings.get(var)
         case ast.Record(fields):
             field_names = set()
-            field_types = {}
+            field_types = type_heads.AssocEmpty()
             for name, exp in fields:
                 if name in field_names:
                     raise RepeatedFieldNameError(name)
                 field_names.add(name)
 
                 t = check_expr(exp, bindings, engine)
-                field_types[name] = t
+                field_types = type_heads.AssocItem(name, t, field_types)
             return engine.new_val(type_heads.VObj(field_types))
         case ast.Case(tag, val):
             typ = check_expr(val, bindings, engine)
@@ -123,14 +123,14 @@ def check_expr(
             result_t, result_u = engine.var()
 
             case_names = set()
-            case_types = {}
+            case_types = type_heads.AssocEmpty()
             for arm in arms:
                 if arm.tag in case_names:
                     raise RepeatedCaseError(arm.tag)
                 case_names.add(arm.tag)
 
                 wrapped_t, wrapped_u = engine.var()
-                case_types[arm.tag] = wrapped_u
+                case_types = type_heads.AssocItem(arm.tag, wrapped_u, case_types)
 
                 with bindings.child_scope() as bindings_:
                     bindings_.insert(arm.var, wrapped_t)
@@ -180,7 +180,9 @@ def check_letrec(defs, bindings, engine):
         engine.flow(var_t, use)
 
 
-def check_toplevel(stmt: ast.ToplevelItem, bindings: Bindings, engine: TypeCheckerCore) -> Value:
+def check_toplevel(
+    stmt: ast.ToplevelItem, bindings: Bindings, engine: TypeCheckerCore
+) -> Value:
     match stmt:
         case ast.Expression() as expr:
             return check_expr(expr, bindings, engine)

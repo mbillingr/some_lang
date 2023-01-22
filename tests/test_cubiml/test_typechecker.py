@@ -30,11 +30,11 @@ def test_records():
 
     assert engine.types[
         type_checker.check_expr(ast.Record([]), env, engine)
-    ] == type_heads.VObj({})
+    ] == type_heads.VObj.from_dict({})
 
     assert engine.types[
         type_checker.check_expr(ast.Record([("x", ast.TRUE)]), env, engine)
-    ] == type_heads.VObj({"x": type_checker.Value(1)})
+    ] == type_heads.VObj.from_dict({"x": type_checker.Value(1)})
 
     with pytest.raises(type_checker.RepeatedFieldNameError):
         type_checker.check_expr(
