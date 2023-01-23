@@ -54,33 +54,8 @@ class Compiler:
                 return "false"
             case ast.Reference(var):
                 return var
-            case ast.Function(var, body):
-                argt = self.compile_type(
-                    self.engine.types[self.type_mapping[id(expr)]].arg
-                )
-                rett = self.compile_type(
-                    self.engine.types[self.type_mapping[id(expr)]].ret
-                )
-
-                args = f"{var}: {argt}"
-
-                with bindings.child_scope() as bindings_:
-                    bindings_.insert(var, argt)
-                    cbody = self.compile_expr(body, bindings_)
-
-                fvs = set(ast.free_vars(expr))
-                sname = f"Closure{id(expr)}"
-                fields = "\n".join(f"{var}: {bindings.get(var)}" for var in fvs)
-                defn = f"struct {sname} {{ {fields} }}"
-                prelude = "".join(f"let {var} = self.{var}.clone();\n" for var in fvs)
-                impl = (
-                    f"impl Apply<{argt}, {rett}> for {sname}\n"
-                    f"{{ fn apply(&self, {args}) -> {rett} {{ {prelude} {cbody} }} }}"
-                )
-                self.definitions.append(defn)
-                self.definitions.append(impl)
-                field_init = ",".join(fvs)
-                return f"{REF}::new({sname} {{ {field_init} }})"
+            case ast.Function() as fun:
+                return self.compile_closure(fun, bindings)
             case ast.Application(fun, arg):
                 f = self.compile_expr(fun, bindings)
                 a = self.compile_expr(arg, bindings)
@@ -93,29 +68,50 @@ class Compiler:
             case _:
                 raise NotImplementedError(expr)
 
+    def compile_closure(self, expr: ast.Function, bindings: Bindings) -> str:
+        name = f"Closure{id(expr)}"
+
+        def compile_parts():
+            fty = self.engine.types[self.type_mapping[id(expr)]]
+            argt = self.compile_type(fty.arg)
+            rett = self.compile_type(fty.ret)
+            with bindings.child_scope() as bindings_:
+                bindings_.insert(expr.var, argt)
+                body = self.compile_expr(expr.body, bindings_)
+            return body, argt, rett
+
+        def gen_code(body, argt, rett, fvs):
+            fields = "\n".join(f"{var}: {bindings.get(var)}" for var in fvs)
+            definition = f"struct {name} {{ {fields} }}"
+            prelude = "".join(f"let {var} = self.{var}.clone();\n" for var in fvs)
+            implementation = (
+                f"impl Apply<{argt}, {rett}> for {name}\n"
+                f"{{ fn apply(&self, {expr.var}: {argt}) -> {rett} {{ {prelude} {body} }} }}"
+            )
+
+            return definition, implementation
+
+        fvs = set(ast.free_vars(expr))
+        defn, impl = gen_code(*compile_parts(), fvs)
+
+        self.definitions.append(defn)
+        self.definitions.append(impl)
+        field_init = ",".join(fvs)
+        return f"{REF}::new({name} {{ {field_init} }})"
+
     @functools.lru_cache(1024)
     def compile_type(self, t: int) -> str:
-
-        seen = set()
-
-        def recur(t):
-            if t in seen:
-                raise RecursionError(t)
-            # seen.add(t)
-
-            match self.engine.types[t]:
-                case "Var":
-                    ct = self.engine.find_most_concrete_type(t)
-                    if ct is None:
-                        return "()"
-                    return recur(ct)
-                case type_heads.VBool():
-                    return "bool"
-                case type_heads.VFunc(arg, ret):
-                    a = recur(arg)
-                    r = recur(ret)
-                    return f"{REF}<dyn Apply<{a}, {r}>>"
-                case other:
-                    raise NotImplementedError(other)
-
-        return recur(t)
+        match self.engine.types[t]:
+            case "Var":
+                ct = self.engine.find_most_concrete_type(t)
+                if ct is None:
+                    return "()"
+                return self.compile_type(ct)
+            case type_heads.VBool():
+                return "bool"
+            case type_heads.VFunc(arg, ret):
+                a = self.compile_type(arg)
+                r = self.compile_type(ret)
+                return f"{REF}<dyn Apply<{a}, {r}>>"
+            case other:
+                raise NotImplementedError(other)
