@@ -65,8 +65,25 @@ class Compiler:
                 b = self.compile_expr(consequence, bindings)
                 c = self.compile_expr(alternative, bindings)
                 return f"if {a} {{ {b} }} else {{ {c} }}"
+            case ast.Record() as rec:
+                return self.compile_record(rec, bindings)
             case _:
                 raise NotImplementedError(expr)
+
+    def compile_record(self, expr: ast.Record, bindings):
+        field_names = [f[0] for f in expr.fields]
+        field_types = [
+            self.compile_type(self.type_mapping[id(f[1])]) for f in expr.fields
+        ]
+        field_values = [self.compile_expr(f[1], bindings) for f in expr.fields]
+
+        name = f"Record{id(expr)}"
+
+        decl_fields = ",".join(f"{k}:{t}" for k, t in zip(field_names, field_types))
+        self.definitions.append(f"#[derive(Debug)] struct {name} {{ {decl_fields} }}")
+
+        init_fields = ",".join(f"{k}:{v}" for k, v in zip(field_names, field_values))
+        return f"{name} {{ {init_fields} }}"
 
     def compile_closure(self, expr: ast.Function, bindings: Bindings) -> str:
         name = f"Closure{id(expr)}"
@@ -82,7 +99,7 @@ class Compiler:
 
         def gen_code(body, argt, rett, fvs):
             fields = "\n".join(f"{var}: {bindings.get(var)}" for var in fvs)
-            definition = f"struct {name} {{ {fields} }}"
+            definition = f"#[derive(Debug)] struct {name} {{ {fields} }}"
             prelude = "".join(f"let {var} = self.{var}.clone();\n" for var in fvs)
             implementation = (
                 f"impl Apply<{argt}, {rett}> for {name}\n"
