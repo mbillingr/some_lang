@@ -122,6 +122,17 @@ class TypeCheckerCore:
 
         return t_
 
+    def find_most_concrete_type(self, t: int) -> typing.Optional[int]:
+        if isinstance(self.types[t], VTypeHead):
+            return t
+
+        for v in self.r.upsets[t]:
+            ct = self.find_most_concrete_type(v)
+            if isinstance(self.types[ct], VTypeHead):
+                return ct
+
+        return None
+
 
 def check_heads(lhs: VTypeHead, rhs: UTypeHead) -> list[tuple[Value, Use]]:
     return rhs.check(lhs)
