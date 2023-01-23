@@ -2,6 +2,8 @@ import abc
 import dataclasses
 from typing import Any
 
+import typing
+
 
 class ToplevelItem(abc.ABC):
     pass
@@ -107,3 +109,24 @@ class Script:
 
 TRUE = Literal(True)
 FALSE = Literal(False)
+
+
+def free_vars(expr: Expression) -> typing.Iterator[str]:
+    match expr:
+        case Literal(_):
+            return
+        case Reference(var):
+            yield var
+        case Function(var, body):
+            for fv in free_vars(body):
+                if fv != var:
+                    yield fv
+        case Application(fun, arg):
+            yield from free_vars(fun)
+            yield from free_vars(arg)
+        case Conditional(a, b, c):
+            yield from free_vars(a)
+            yield from free_vars(b)
+            yield from free_vars(c)
+        case _:
+            raise NotImplementedError(expr)

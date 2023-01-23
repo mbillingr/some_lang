@@ -103,9 +103,9 @@ class TypeCheckerCore:
             }
             dst_type_head = type_head.__class__(**components)
             match type_head:
-                case VTypeHead() as vth:
+                case VTypeHead():
                     t_ = dst.new_val(dst_type_head)
-                case UTypeHead() as uth:
+                case UTypeHead():
                     t_ = dst.new_use(dst_type_head)
                 case other:
                     raise RuntimeError("Should not reach", other)
@@ -122,12 +122,19 @@ class TypeCheckerCore:
 
         return t_
 
-    def find_most_concrete_type(self, t: int) -> typing.Optional[int]:
+    def find_most_concrete_type(self, t: int, seen: typing.Optional[set[int]]=None) -> typing.Optional[int]:
+        seen = seen or set()
+        if t in seen:
+            return None
+        seen.add(t)
+
         if isinstance(self.types[t], VTypeHead):
             return t
 
         for v in self.r.upsets[t]:
-            ct = self.find_most_concrete_type(v)
+            ct = self.find_most_concrete_type(v, seen)
+            if ct is None:
+                continue
             if isinstance(self.types[ct], VTypeHead):
                 return ct
 
