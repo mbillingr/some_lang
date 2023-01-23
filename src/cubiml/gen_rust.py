@@ -59,6 +59,11 @@ class Compiler:
                 f = self.compile_expr(fun, type_mapping, engine)
                 a = self.compile_expr(arg, type_mapping, engine)
                 return f"{f}({a})"
+            case ast.Conditional(condition, consequence, alternative):
+                a = self.compile_expr(condition, type_mapping, engine)
+                b = self.compile_expr(consequence, type_mapping, engine)
+                c = self.compile_expr(alternative, type_mapping, engine)
+                return f"if {a} {{ {b} }} else {{ {c} }}"
             case _:
                 raise NotImplementedError(expr)
 
