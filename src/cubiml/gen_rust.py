@@ -6,13 +6,15 @@ from cubiml.type_checker import Bindings
 
 
 STD_DEFS = """
+trait Boolean { }
 trait Apply<A,R> { fn apply(&self, a:A)->R; }
 
 /// The Bottom type is never instantiated
+#[derive(Debug)]
 struct Bottom;
 
 impl<A, R> Apply<A, R> for Bottom {
-    fn apply(&self, a:A)->R { unreachable!() }
+    fn apply(&self, _:A)->R { unreachable!() }
 }
 """
 
@@ -55,7 +57,7 @@ class Compiler:
                 return self.compile_expr(expr, self.bindings)
             case ast.DefineLet(var, val):
                 cval = self.compile_expr(val, self.bindings)
-                ty = self.compile_type(self.type_mapping[id(val)])
+                ty = self.compile_type(self._type_of(val))
                 self.bindings.insert(var, ty)
                 return f"let {var} = {cval};"
             case _:
@@ -79,11 +81,20 @@ class Compiler:
                 a = self.compile_expr(condition, bindings)
                 b = self.compile_expr(consequence, bindings)
                 c = self.compile_expr(alternative, bindings)
-                return f"if {a} {{ {b} }} else {{ {c} }}"
+
+                ty = self.compile_type(self._type_of(expr))
+
+                return (
+                    f"{{let tmp: {ty} = if {a} {{ "
+                    f"    {REF}::new({b}) "
+                    f"}} else {{ "
+                    f"    {REF}::new({c}) }}; "
+                    f"tmp }}"
+                )
             case ast.Record() as rec:
                 return self.compile_record(rec, bindings)
             case ast.FieldAccess(field, rec):
-                ty = self.compile_type(self.type_mapping[id(expr)])
+                ty = self.compile_type(self._type_of(expr))
                 self.traits.add(("get", field))
                 r = self.compile_expr(rec, bindings)
                 return f"{r}.get_{field}()"
@@ -95,16 +106,18 @@ class Compiler:
         field_values = [self.compile_expr(f[1], bindings) for f in expr.fields]
         init_fields = ",".join(f"{k}:{v}" for k, v in zip(field_names, field_values))
 
-        name = self.compile_type(self.type_mapping[id(expr)])
+        name = self.compile_type(self._type_of(expr))
         return f"{name} {{ {init_fields} }}"
 
     def compile_closure(self, expr: ast.Function, bindings: Bindings) -> str:
         name = f"Closure{id(expr)}"
 
         def compile_parts():
-            fty = self.engine.types[self.type_mapping[id(expr)]]
+            fty = self.engine.types[self._type_of(expr)]
             argt = self.compile_type(fty.arg)
             rett = self.compile_type(fty.ret)
+            bdyt = self.compile_type(self._type_of(expr.body))
+            assert bdyt == rett
             with bindings.child_scope() as bindings_:
                 bindings_.insert(expr.var, argt)
                 body = self.compile_expr(expr.body, bindings_)
@@ -133,10 +146,16 @@ class Compiler:
     def compile_type(self, t: int) -> str:
         match self.engine.types[t]:
             case "Var":
-                ct = self.engine.find_most_concrete_type(t)
-                if ct is None:
-                    return "Bottom"
-                return self.compile_type(ct)
+                vts = list(self.engine.all_upvtypes(t))
+                match vts:
+                    case []:
+                        return "Bottom"
+                    case [ty]:
+                        return self.compile_type(ty)
+                    case _:
+                        traits = (self.traits_for_type(t) for t in vts)
+                        common_traits = set.intersection(*traits)
+                        return f"{REF}<dyn {'+'.join(common_traits)}>"
             case type_heads.VBool():
                 return "bool"
             case type_heads.VFunc(arg, ret):
@@ -145,6 +164,21 @@ class Compiler:
                 return f"{REF}<dyn Apply<{a}, {r}>>"
             case type_heads.VObj(_):
                 return f"Record{t}"
+            case other:
+                raise NotImplementedError(other)
+
+    @functools.lru_cache(1024)
+    def traits_for_type(self, t: int) -> set[str]:
+        match self.engine.types[t]:
+            case type_heads.VBool():
+                return {"Boolean"}
+            case type_heads.VFunc(arg, ret):
+                a = self.compile_type(arg)
+                r = self.compile_type(ret)
+                return {f"Apply<{a}, {r}>"}
+            case type_heads.VObj(fields):
+                fts = ((f, self.compile_type(t)) for f, t in fields.items())
+                return {f"Has{f}<{ty}>" for f, ty in fts}
             case other:
                 raise NotImplementedError(other)
 
@@ -161,7 +195,7 @@ class Compiler:
                 fds = ",".join(
                     f"{f}: {self.compile_type(t)}" for f, t in fields.items()
                 )
-                tdef = f"#[derive(Debug)] struct {ty} {{ {fds} }}"
+                tdef = f"#[derive(Debug, Clone)] struct {ty} {{ {fds} }}"
 
                 impls = []
                 for f, t in fields.items():
@@ -170,7 +204,7 @@ class Compiler:
                     impls.append(
                         (
                             f"impl Has{f}<{ft}> for {ty} "
-                            f"{{ fn get_{f}(&self) -> {ft} {{ self.{f} }} }}"
+                            f"{{ fn get_{f}(&self) -> {ft} {{ self.{f}.clone() }} }}"
                         )
                     )
 
@@ -181,9 +215,15 @@ class Compiler:
     def compile_trait(self, *args) -> str:
         match args:
             case ("get", field):
-                trait_def = f"trait Has{field}<T> {{ fn get_{field}(&self) -> T; }}"
+                trait_def = (
+                    f"trait Has{field}<T>: std::fmt::Debug "
+                    f"{{ fn get_{field}(&self) -> T; }}"
+                )
                 bot_impl = (
                     f"impl<T> Has{field}<T> for Bottom "
                     f"{{ fn get_{field}(&self) -> T {{unreachable!()}} }}"
                 )
                 return "\n".join((trait_def, bot_impl))
+
+    def _type_of(self, expr: ast.Expression) -> int:
+        return self.type_mapping[id(expr)]
