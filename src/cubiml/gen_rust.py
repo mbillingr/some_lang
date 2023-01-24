@@ -7,6 +7,13 @@ from cubiml.type_checker import Bindings
 
 STD_DEFS = """
 trait Apply<A,R> { fn apply(&self, a:A)->R; }
+
+/// The Bottom type is never instantiated
+struct Bottom;
+
+impl<A, R> Apply<A, R> for Bottom {
+    fn apply(&self, a:A)->R { unreachable!() }
+}
 """
 
 REF = "std::rc::Rc"
@@ -19,6 +26,7 @@ class Compiler:
         self.bindings = Bindings()
         self.definitions = []
         self.script = []
+        self.traits = set()
 
     def finalize(self) -> str:
         if len(self.script) > 0:
@@ -27,7 +35,14 @@ class Compiler:
             script = []
         script = "\n".join(script)
         funcs = "\n\n".join(self.definitions)
-        return f"fn main() {{ {script} }}\n\n{funcs}\n\n{STD_DEFS}"
+        typedefs = "\n\n".join(
+            filter(
+                lambda x: x,
+                (self.compile_typedef(t) for t in range(len(self.engine.types))),
+            )
+        )
+        traits = "\n".join(self.compile_trait(*t) for t in self.traits)
+        return f"fn main() {{ {script} }}\n\n{funcs}\n\n{typedefs}\n\n{traits}\n\n{STD_DEFS}"
 
     def compile_script(self, script: ast.Script):
         for stmt in script.statements:
@@ -67,22 +82,20 @@ class Compiler:
                 return f"if {a} {{ {b} }} else {{ {c} }}"
             case ast.Record() as rec:
                 return self.compile_record(rec, bindings)
+            case ast.FieldAccess(field, rec):
+                ty = self.compile_type(self.type_mapping[id(expr)])
+                self.traits.add(("get", field))
+                r = self.compile_expr(rec, bindings)
+                return f"{r}.get_{field}()"
             case _:
                 raise NotImplementedError(expr)
 
     def compile_record(self, expr: ast.Record, bindings):
         field_names = [f[0] for f in expr.fields]
-        field_types = [
-            self.compile_type(self.type_mapping[id(f[1])]) for f in expr.fields
-        ]
         field_values = [self.compile_expr(f[1], bindings) for f in expr.fields]
-
-        name = f"Record{id(expr)}"
-
-        decl_fields = ",".join(f"{k}:{t}" for k, t in zip(field_names, field_types))
-        self.definitions.append(f"#[derive(Debug)] struct {name} {{ {decl_fields} }}")
-
         init_fields = ",".join(f"{k}:{v}" for k, v in zip(field_names, field_values))
+
+        name = self.compile_type(self.type_mapping[id(expr)])
         return f"{name} {{ {init_fields} }}"
 
     def compile_closure(self, expr: ast.Function, bindings: Bindings) -> str:
@@ -122,7 +135,7 @@ class Compiler:
             case "Var":
                 ct = self.engine.find_most_concrete_type(t)
                 if ct is None:
-                    return "()"
+                    return "Bottom"
                 return self.compile_type(ct)
             case type_heads.VBool():
                 return "bool"
@@ -130,5 +143,47 @@ class Compiler:
                 a = self.compile_type(arg)
                 r = self.compile_type(ret)
                 return f"{REF}<dyn Apply<{a}, {r}>>"
+            case type_heads.VObj(_):
+                return f"Record{t}"
             case other:
                 raise NotImplementedError(other)
+
+    def compile_typedef(self, t: int) -> str:
+        match self.engine.types[t]:
+            case "Var" | type_heads.VBool():
+                return ""
+            case type_heads.UTypeHead():
+                return ""
+            case type_heads.VFunc():
+                return ""
+            case type_heads.VObj(fields):
+                ty = self.compile_type(t)
+                fds = ",".join(
+                    f"{f}: {self.compile_type(t)}" for f, t in fields.items()
+                )
+                tdef = f"#[derive(Debug)] struct {ty} {{ {fds} }}"
+
+                impls = []
+                for f, t in fields.items():
+                    self.traits.add(("get", f))
+                    ft = self.compile_type(t)
+                    impls.append(
+                        (
+                            f"impl Has{f}<{ft}> for {ty} "
+                            f"{{ fn get_{f}(&self) -> {ft} {{ self.{f} }} }}"
+                        )
+                    )
+
+                return "\n".join([tdef] + impls)
+            case other:
+                raise NotImplementedError(other)
+
+    def compile_trait(self, *args) -> str:
+        match args:
+            case ("get", field):
+                trait_def = f"trait Has{field}<T> {{ fn get_{field}(&self) -> T; }}"
+                bot_impl = (
+                    f"impl<T> Has{field}<T> for Bottom "
+                    f"{{ fn get_{field}(&self) -> T {{unreachable!()}} }}"
+                )
+                return "\n".join((trait_def, bot_impl))

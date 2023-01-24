@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import dataclasses
+import typing
 from typing import Generic, TypeVar, Optional
 
 from biunification.type_checker import VTypeHead, UTypeHead, Value, Use
@@ -16,11 +17,18 @@ class Assoc(abc.ABC, Generic[T]):
     def __getitem__(self, item: str):
         pass
 
+    @abc.abstractmethod
+    def items(self) -> typing.Iterator[tuple[str, T]]:
+        pass
+
 
 @dataclasses.dataclass(frozen=True)
 class AssocEmpty(Assoc[T]):
     def __getitem__(self, item: str):
         raise KeyError(item)
+
+    def items(self) -> typing.Iterator[tuple[str, T]]:
+        return iter(())
 
 
 @dataclasses.dataclass(frozen=True)
@@ -33,6 +41,10 @@ class AssocItem(Assoc[T]):
         if self.key == item:
             return self.val
         return self.next[item]
+
+    def items(self) -> typing.Iterator[tuple[str, T]]:
+        yield self.key, self.val
+        yield from self.next.items()
 
 
 @dataclasses.dataclass(frozen=True)

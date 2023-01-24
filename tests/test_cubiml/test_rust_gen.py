@@ -11,7 +11,14 @@ def test_stuff():
     #    (twice (twice id)) true
     # """
     # )
-    ast = parser.parse_script("{a=true;f=false}")
+    #ast = parser.parse_script("{a=true;f=false}.a")
+    #ast = parser.parse_script("""
+    #    let take_a = fun r -> r.a;
+    #    take_a {a=true; b=false}
+    #""")
+    ast = parser.parse_script("""
+            (fun x -> if x.a then x.b else x.c) {a=true;b={};c={}}
+        """)
     tck = type_checker.TypeChecker()
     typemap = tck.check_script(ast)
     print(tck.engine)
