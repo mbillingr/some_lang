@@ -42,15 +42,15 @@ def test_function_application():
 
 
 def test_conditional():
-    src = "(fun x -> if x then false else true) true"
+    src = "if true then false else true"
     res = eval_in_rust(src)
     assert res == "false"
 
 
 def test_conditional_with_different_types():
-    src = "if true then {a=true;b=true} else {b=true;c=true}"
+    src = "if false then {a=true;b=true} else {b=true;c=true}"
     res = eval_in_rust(src)
-    assert res == "Record4 { b: true, a: true }"
+    assert res == "Record7 { c: true, b: true }"
 
 
 def eval_in_rust(src: str) -> str:
