@@ -47,6 +47,12 @@ def test_conditional():
     assert res == "false"
 
 
+def test_conditional_with_different_types():
+    src = "if true then {a=true;b=true} else {b=true;c=true}"
+    res = eval_in_rust(src)
+    assert res == "Record4 { b: true, a: true }"
+
+
 def eval_in_rust(src: str) -> str:
     ast = parser.parse_script(src)
     tck = type_checker.TypeChecker()

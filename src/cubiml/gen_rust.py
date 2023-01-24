@@ -45,10 +45,17 @@ class Runner:
             except subprocess.CalledProcessError as e:
                 raise RuntimeError(e.stdout)
 
-        return subprocess.run(bin_name, check=True, capture_output=True).stdout.decode("utf-8").strip()
+        return (
+            subprocess.run(bin_name, check=True, capture_output=True)
+            .stdout.decode("utf-8")
+            .strip()
+        )
 
-def rustfmt(src:str) -> str:
-    return subprocess.run("rustfmt", capture_output=True, check=True, input=src.encode("utf-8")).stdout.decode("utf-8")
+
+def rustfmt(src: str) -> str:
+    return subprocess.run(
+        "rustfmt", capture_output=True, check=True, input=src.encode("utf-8")
+    ).stdout.decode("utf-8")
 
 
 class Compiler:
@@ -113,14 +120,12 @@ class Compiler:
                 c = self.compile_expr(alternative, bindings)
 
                 ty = self.compile_type(self._type_of(expr))
-
-                return (
-                    f"{{let tmp: {ty} = if {a} {{ "
-                    f"    {REF}::new({b}) "
-                    f"}} else {{ "
-                    f"    {REF}::new({c}) }}; "
-                    f"tmp }}"
-                )
+                if ty.startswith(REF):
+                    b = f"{REF}::new({b})"
+                    c = f"{REF}::new({c})"
+                    return f"{{let tmp: {ty} = if {a} {{ {b} }} else {{ {c} }}; tmp }}"
+                else:
+                    return f"if {a} {{ {b} }} else {{ {c} }}"
             case ast.Record() as rec:
                 return self.compile_record(rec, bindings)
             case ast.FieldAccess(field, rec):
@@ -172,17 +177,20 @@ class Compiler:
         field_init = ",".join(fvs)
         return f"{REF}::new({name} {{ {field_init} }})"
 
-    @functools.lru_cache(1024)
+    # @functools.lru_cache(1024)
     def compile_type(self, t: int) -> str:
         match self.engine.types[t]:
             case "Var":
                 vts = list(self.engine.all_upvtypes(t))
-                match vts:
+                tys = [self.compile_type(ty) for ty in vts]
+                match tys:
                     case []:
                         return "Bottom"
-                    case [ty]:
-                        return self.compile_type(ty)
+                    case [tc]:
+                        return tc
                     case _:
+                        if all(tys[0] == tc for tc in tys):
+                            return tys[0]
                         traits = (self.traits_for_type(t) for t in vts)
                         common_traits = set.intersection(*traits)
                         return f"{REF}<dyn {'+'.join(common_traits)}>"
