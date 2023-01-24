@@ -1,4 +1,7 @@
 import functools
+import subprocess
+import tempfile
+import uuid
 
 from biunification.type_checker import TypeCheckerCore
 from cubiml import abstract_syntax as ast, type_heads
@@ -6,7 +9,9 @@ from cubiml.type_checker import Bindings
 
 
 STD_DEFS = """
-trait Boolean { }
+trait Boolean: std::fmt::Debug { }
+impl Boolean for bool {}
+
 trait Apply<A,R> { fn apply(&self, a:A)->R; }
 
 /// The Bottom type is never instantiated
@@ -19,6 +24,31 @@ impl<A, R> Apply<A, R> for Bottom {
 """
 
 REF = "std::rc::Rc"
+
+
+class Runner:
+    def __init__(self, type_mapping, engine):
+        self.compiler = Compiler(type_mapping, engine)
+
+    def run_script(self, script: ast.Script):
+        self.compiler.compile_script(script)
+        rust_code = self.compiler.finalize()
+        rust_code = rustfmt(rust_code)
+        print(rust_code)
+
+        with tempfile.NamedTemporaryFile() as tfsrc:
+            bin_name = f"/tmp/{uuid.uuid4()}"
+            tfsrc.write(rust_code.encode("utf-8"))
+            tfsrc.flush()
+            try:
+                subprocess.run(["rustc", tfsrc.name, "-o", bin_name], check=True)
+            except subprocess.CalledProcessError as e:
+                raise RuntimeError(e.stdout)
+
+        return subprocess.run(bin_name, check=True, capture_output=True).stdout.decode("utf-8").strip()
+
+def rustfmt(src:str) -> str:
+    return subprocess.run("rustfmt", capture_output=True, check=True, input=src.encode("utf-8")).stdout.decode("utf-8")
 
 
 class Compiler:

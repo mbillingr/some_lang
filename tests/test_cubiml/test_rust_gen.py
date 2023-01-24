@@ -25,7 +25,31 @@ def test_stuff():
     tck = type_checker.TypeChecker()
     typemap = tck.check_script(ast)
     print(tck.engine)
-    compiler = gen_rust.Compiler(typemap, tck.engine)
-    compiler.compile_script(ast)
-    print(compiler.finalize())
-    assert compiler.finalize() == ""
+    runner = gen_rust.Runner(typemap, tck.engine)
+    assert runner.run_script(ast) == "bla"
+
+
+def test_toplevel_binding():
+    src = "let x = false; x"
+    res = eval_in_rust(src)
+    assert res == "false"
+
+
+def test_function_application():
+    src = "(fun x -> x) true"
+    res = eval_in_rust(src)
+    assert res == "true"
+
+
+def test_conditional():
+    src = "(fun x -> if x then false else true) true"
+    res = eval_in_rust(src)
+    assert res == "false"
+
+
+def eval_in_rust(src: str) -> str:
+    ast = parser.parse_script(src)
+    tck = type_checker.TypeChecker()
+    typemap = tck.check_script(ast)
+    runner = gen_rust.Runner(typemap, tck.engine)
+    return runner.run_script(ast)
