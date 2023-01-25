@@ -251,8 +251,9 @@ class Compiler:
                             f"{{ fn get_{f}(&self) -> {ft} {{ self.{f}.clone() }} }}"
                         )
                     )
-                fmt = "; ".join(f"{f}={{}}" for f, _ in fields.items())
-                fvals = ", ".join(f"self.{f}" for f, _ in fields.items())
+                rfields = [f for f, _ in fields.items()][::-1]
+                fmt = "; ".join(f"{f}={{}}" for f in rfields)
+                fvals = ", ".join(f"self.{f}" for f in rfields)
                 impls.append(
                     (
                         f"impl std::fmt::Display for {ty} "
