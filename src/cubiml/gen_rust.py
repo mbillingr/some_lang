@@ -157,6 +157,13 @@ class Compiler:
                 self.traits.add(("get", field))
                 r = self.compile_expr(rec, bindings)
                 return f"{r}.get_{field}()"
+            case ast.Let(var, val, body):
+                valt = self.compile_type(self._type_of(val))
+                with bindings.child_scope() as bindings_:
+                    bindings_.insert(var, valt)
+                    cbody = self.compile_expr(body, bindings_)
+                cval = self.compile_expr(val, bindings)
+                return f"{{let {var} = {cval}; {cbody} }}"
             case _:
                 raise NotImplementedError(expr)
 
