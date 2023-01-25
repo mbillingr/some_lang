@@ -58,7 +58,9 @@ class TestLanguage:
         assert res == "false"
 
     def test_case_and_match(self, evaluator):
-        raise NotImplementedError()
+        src = "match `Bar {} with | `Foo x -> false | `Bar x -> true"
+        res = evaluator(src)
+        assert res == "true"
 
     def test_let_expression(self, evaluator):
         src = "(let x = {} in x)"
