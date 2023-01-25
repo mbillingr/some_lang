@@ -58,7 +58,7 @@ class TestLanguage:
         assert res == "false"
 
     def test_case_and_match(self, evaluator):
-        src = "match `Bar {} with | `Foo x -> false | `Bar x -> true"
+        src = "match `Bar {} with | `Foo x -> false | `Bar y -> true"
         res = evaluator(src)
         assert res == "true"
 

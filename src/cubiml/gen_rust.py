@@ -15,7 +15,7 @@ impl Boolean for bool {}
 trait Apply<A,R>: std::fmt::Debug { fn apply(&self, a:A)->R; }
 
 /// The Bottom type is never instantiated
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 struct Bottom;
 
 impl<A, R> Apply<A, R> for Bottom {
@@ -81,10 +81,7 @@ class Compiler:
         script = "\n".join(script)
         funcs = "\n\n".join(self.definitions)
         typedefs = "\n\n".join(
-            filter(
-                lambda x: x,
-                (self.compile_typedef(t) for t in range(len(self.engine.types))),
-            )
+            set.union(*(self.compile_typedef(t) for t in range(len(self.engine.types))))
         )
         traits = "\n".join(self.compile_trait(*t) for t in self.traits)
         return f"fn main() {{ {script} }}\n\n{funcs}\n\n{typedefs}\n\n{traits}\n\n{STD_DEFS}"
@@ -140,6 +137,21 @@ class Compiler:
                 self.traits.add(("get", field))
                 r = self.compile_expr(rec, bindings)
                 return f"{r}.get_{field}()"
+            case ast.Case(tag, val):
+                return f"Case{tag}({self.compile_expr(val, bindings)})"
+            case ast.Match(val, arms):
+                result = [
+                    f"{{ let tmp: &dyn std::any::Any = &{self.compile_expr(val, bindings)};",
+                ]
+                for arm in arms:
+                    with bindings.child_scope() as bindings_:
+                        bindings_.insert(arm.var, None)
+                        ax = self.compile_expr(arm.bdy, bindings_)
+                        result.append(
+                            f"if let Some({arm.var}) = tmp.downcast_ref::<Case{arm.tag}>() {{ {ax} }} else "
+                        )
+                result.append("{ unreachable!() } }")
+                return "\n".join(result)
             case ast.Let(var, val, body):
                 valt = self.compile_type(self._type_of(val))
                 with bindings.child_scope() as bindings_:
@@ -268,7 +280,7 @@ class Compiler:
             "\n".join(field_init),
         )
 
-    # @functools.lru_cache(1024)
+    @functools.lru_cache(1024)
     def compile_type(self, t: int) -> str:
         match self.engine.types[t]:
             case "Var":
@@ -311,14 +323,12 @@ class Compiler:
             case other:
                 raise NotImplementedError(other)
 
-    def compile_typedef(self, t: int) -> str:
+    def compile_typedef(self, t: int) -> set[str]:
         match self.engine.types[t]:
             case "Var" | type_heads.VBool():
-                return ""
-            case type_heads.UTypeHead():
-                return ""
+                return set()
             case type_heads.VFunc():
-                return ""
+                return set()
             case type_heads.VObj(fields):
                 ty = self.compile_type(t)
                 fds = ",".join(
@@ -349,7 +359,20 @@ class Compiler:
                     )
                 )
 
-                return "\n".join([tdef] + impls)
+                return {"\n".join([tdef] + impls)}
+            case type_heads.VCase(tag, ty):
+                return {
+                    f"#[derive(Debug, Clone)] struct Case{tag}({self.compile_type(ty)});"
+                }
+            case type_heads.UCase(cases) as uc:
+                defs = set()
+                for tag, u in cases.items():
+                    defs.add(
+                        f"#[derive(Debug, Clone)] struct Case{tag}({self.compile_type(u)});"
+                    )
+                return defs
+            case type_heads.UTypeHead():
+                return set()
             case other:
                 raise NotImplementedError(other)
 
