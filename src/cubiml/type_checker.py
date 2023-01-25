@@ -171,13 +171,13 @@ def check_expr(
             return callback(expr, body_t)
         case ast.LetRec(defs, body):
             with bindings.child_scope() as bindings_:
-                check_letrec(defs, bindings_, engine)
+                check_letrec(defs, bindings_, engine, callback)
                 return callback(expr, check_expr(body, bindings_, engine, callback))
         case _:
             raise NotImplementedError(expr)
 
 
-def check_letrec(defs, bindings, engine, callback=lambda _, t: t):
+def check_letrec(defs, bindings, engine, callback):
     temp_us = []
     for d in defs:
         temp_t, temp_u = engine.var()

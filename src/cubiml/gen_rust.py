@@ -104,23 +104,7 @@ class Compiler:
                 self.bindings.insert(var, ty)
                 return f"let {var} = {cval};"
             case ast.DefineLetRec(defs):
-                for d in defs:
-                    ty = self.compile_type(self._type_of(d.fun))
-                    self.bindings.insert(d.name, ty)
-                allocs = []
-                inits = []
-                for d in defs:
-                    a, i = self.compile_letrec(d.name, d.fun, self.bindings)
-                    allocs.append(a)
-                    inits.append(i)
-                vars = ",".join(d.name for d in defs)
-                return (
-                    f"let ({vars}) = unsafe {{"
-                    + "// Abusing uninitialized memory and risking Undefined Behavior sucks, "
-                    + "but I don't know a better way to initialize recursive bindings \n"
-                    + "\n".join(allocs + inits)
-                    + f"({vars}) }};"
-                )
+                return self.compile_letrec(defs, self.bindings)
             case _:
                 raise NotImplementedError(stmt)
 
@@ -164,6 +148,14 @@ class Compiler:
                     cbody = self.compile_expr(body, bindings_)
                 cval = self.compile_expr(val, bindings)
                 return f"{{let {var} = {cval}; {cbody} }}"
+            case ast.LetRec(defs, body):
+                with bindings.child_scope() as bindings_:
+                    return (
+                        "{"
+                        + self.compile_letrec(defs, bindings_)
+                        + self.compile_expr(body, bindings_)
+                        + "}"
+                    )
             case _:
                 raise NotImplementedError(expr)
 
@@ -208,7 +200,27 @@ class Compiler:
         field_init = ",".join(fvs)
         return f"{REF}::new({name} {{ {field_init} }})"
 
-    def compile_letrec(
+    def compile_letrec(self, defs, bindings):
+        for d in defs:
+            ty = self.compile_type(self._type_of(d.fun))
+            bindings.insert(d.name, ty)
+        allocs = []
+        inits = []
+        for d in defs:
+            a, i = self.compile_letrec_closure(d.name, d.fun, bindings)
+            allocs.append(a)
+            inits.append(i)
+
+        vars = ", ".join(d.name for d in defs)
+        return (
+            f"let ({vars}) = unsafe {{"
+            + "// Abusing uninitialized memory and risking Undefined Behavior sucks, "
+            + "but I don't know a better way to initialize recursive bindings \n"
+            + "\n".join(allocs + inits)
+            + f"({vars}) }};"
+        )
+
+    def compile_letrec_closure(
         self, fname: str, expr: ast.Function, bindings: Bindings
     ) -> tuple[str, str]:
         def compile_parts():
@@ -247,7 +259,8 @@ class Compiler:
             f"{v}: std::mem::MaybeUninit::uninit().assume_init()" for v in fvs
         )
         field_init = (
-            f"std::ptr::write(&{fname}.{v} as *const _ as *mut _, {v}.clone());"
+            f"{{let tmp: {bindings.get(v)} = {v}.clone();"
+            f"std::ptr::write(&{fname}.{v} as *const _ as *mut _, tmp);}}"
             for v in fvs
         )
 
