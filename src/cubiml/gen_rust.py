@@ -21,6 +21,12 @@ struct Bottom;
 impl<A, R> Apply<A, R> for Bottom {
     fn apply(&self, _:A)->R { unreachable!() }
 }
+
+impl std::fmt::Display for Bottom {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        unreachable!()
+    }
+}
 """
 
 REF = "std::rc::Rc"
@@ -69,7 +75,7 @@ class Compiler:
 
     def finalize(self) -> str:
         if len(self.script) > 0:
-            script = self.script[:-1] + [f'println!("{{:?}}", {self.script[-1]})']
+            script = self.script[:-1] + [f'println!("{{}}", {self.script[-1]})']
         else:
             script = []
         script = "\n".join(script)
@@ -245,6 +251,17 @@ class Compiler:
                             f"{{ fn get_{f}(&self) -> {ft} {{ self.{f}.clone() }} }}"
                         )
                     )
+                fmt = "; ".join(f"{f}={{}}" for f, _ in fields.items())
+                fvals = ", ".join(f"self.{f}" for f, _ in fields.items())
+                impls.append(
+                    (
+                        f"impl std::fmt::Display for {ty} "
+                        f"{{ fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {{"
+                        f'write!(f, "{{{{")?;'
+                        f'write!(f, "{fmt}", {fvals})?;'
+                        f'write!(f, "}}}}") }} }}'
+                    )
+                )
 
                 return "\n".join([tdef] + impls)
             case other:
@@ -254,7 +271,7 @@ class Compiler:
         match args:
             case ("get", field):
                 trait_def = (
-                    f"trait Has{field}<T>: std::fmt::Debug "
+                    f"trait Has{field}<T>: std::fmt::Display "
                     f"{{ fn get_{field}(&self) -> T; }}"
                 )
                 bot_impl = (

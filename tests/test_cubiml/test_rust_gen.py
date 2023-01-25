@@ -36,9 +36,9 @@ def test_toplevel_binding():
 
 
 def test_function_application():
-    src = "(fun x -> x) true"
+    src = "(fun x -> x) {}"
     res = eval_in_rust(src)
-    assert res == "true"
+    assert res == "{}"
 
 
 def test_conditional():
@@ -50,7 +50,7 @@ def test_conditional():
 def test_conditional_with_different_types():
     src = "if false then {a=true;b=true} else {b=true;c=true}"
     res = eval_in_rust(src)
-    assert res == "Record7 { c: true, b: true }"
+    assert res == "{c=true; b=true}"
 
 
 def test_toplevel_recursive_binding():
@@ -77,9 +77,9 @@ def test_case_and_match():
 
 
 def test_let_expression():
-    src = "(let x = true in x)"
+    src = "(let x = {} in x)"
     res = eval_in_rust(src)
-    assert res == "true"
+    assert res == "{}"
 
 
 def test_letrec_expression():
