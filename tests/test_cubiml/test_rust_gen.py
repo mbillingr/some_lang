@@ -53,6 +53,41 @@ def test_conditional_with_different_types():
     assert res == "Record7 { c: true, b: true }"
 
 
+def test_toplevel_recursive_binding():
+    src = """
+        let rec turn = fun x -> foo true
+            and foo = fun x -> if x then x else turn x;
+        turn
+    """
+    res = eval_in_rust(src)
+    assert res == "true"
+
+
+def test_record_and_field_access():
+    src = """
+        let data = {alpha=true;beta=false;gamma={}};
+        data.beta
+    """
+    res = eval_in_rust(src)
+    assert res == "false"
+
+
+def test_case_and_match():
+    raise NotImplementedError()
+
+
+def test_let_expression():
+    src = "(let x = true in x)"
+    res = eval_in_rust(src)
+    assert res == "true"
+
+
+def test_letrec_expression():
+    src = "(let rec foo = fun x -> if x then foo false else true in foo true)"
+    res = eval_in_rust(src)
+    assert res == "true"
+
+
 def eval_in_rust(src: str) -> str:
     ast = parser.parse_script(src)
     tck = type_checker.TypeChecker()
