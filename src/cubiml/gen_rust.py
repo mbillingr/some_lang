@@ -12,7 +12,7 @@ STD_DEFS = """
 trait Boolean: std::fmt::Debug { }
 impl Boolean for bool {}
 
-trait Apply<A,R> { fn apply(&self, a:A)->R; }
+trait Apply<A,R>: std::fmt::Debug { fn apply(&self, a:A)->R; }
 
 /// The Bottom type is never instantiated
 #[derive(Debug)]
@@ -103,6 +103,24 @@ class Compiler:
                 ty = self.compile_type(self._type_of(val))
                 self.bindings.insert(var, ty)
                 return f"let {var} = {cval};"
+            case ast.DefineLetRec(defs):
+                for d in defs:
+                    ty = self.compile_type(self._type_of(d.fun))
+                    self.bindings.insert(d.name, ty)
+                allocs = []
+                inits = []
+                for d in defs:
+                    a, i = self.compile_letrec(d.name, d.fun, self.bindings)
+                    allocs.append(a)
+                    inits.append(i)
+                vars = ",".join(d.name for d in defs)
+                return (
+                    f"let ({vars}) = unsafe {{"
+                    + "// Abusing uninitialized memory and risking Undefined Behavior sucks, "
+                    + "but I don't know a better way to initialize recursive bindings \n"
+                    + "\n".join(allocs + inits)
+                    + f"({vars}) }};"
+                )
             case _:
                 raise NotImplementedError(stmt)
 
@@ -182,6 +200,54 @@ class Compiler:
         self.definitions.append(impl)
         field_init = ",".join(fvs)
         return f"{REF}::new({name} {{ {field_init} }})"
+
+    def compile_letrec(
+        self, fname: str, expr: ast.Function, bindings: Bindings
+    ) -> tuple[str, str]:
+        def compile_parts():
+            fty = self.engine.types[self._type_of(expr)]
+            argt = self.compile_type(fty.arg)
+            rett = self.compile_type(fty.ret)
+            bdyt = self.compile_type(self._type_of(expr.body))
+            assert bdyt == rett
+            with bindings.child_scope() as bindings_:
+                bindings_.insert(expr.var, argt)
+                body = self.compile_expr(expr.body, bindings_)
+            return body, argt, rett
+
+        def gen_code(body, argt, rett, fvs):
+            fields = "\n".join(f"{var}: {bindings.get(var)}" for var in fvs)
+            definition = f"#[derive(Debug)] struct {name} {{ {fields} }}"
+            prelude = "".join(f"let {var} = self.{var}.clone();\n" for var in fvs)
+            implementation = (
+                f"impl Apply<{argt}, {rett}> for {name}\n"
+                f"{{ fn apply(&self, {expr.var}: {argt}) -> {rett} {{ {prelude} {body} }} }}"
+                f"impl std::fmt::Display for {name} "
+                f"{{ fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result "
+                f'{{write!(f, "<fun>") }} }}'
+            )
+
+            return definition, implementation
+
+        name = f"Closure{id(expr)}"
+
+        fvs = set(ast.free_vars(expr))
+        defn, impl = gen_code(*compile_parts(), fvs)
+
+        self.definitions.append(defn)
+        self.definitions.append(impl)
+        field_alloc = ",".join(
+            f"{v}: std::mem::MaybeUninit::uninit().assume_init()" for v in fvs
+        )
+        field_init = (
+            f"std::ptr::write(&{fname}.{v} as *const _ as *mut _, {v}.clone());"
+            for v in fvs
+        )
+
+        return (
+            f"let {fname} = {REF}::new({name} {{ {field_alloc} }});",
+            "\n".join(field_init),
+        )
 
     # @functools.lru_cache(1024)
     def compile_type(self, t: int) -> str:
