@@ -26,7 +26,7 @@ def test_stuff():
     typemap = tck.check_script(ast)
     print(tck.engine)
     runner = gen_rust.Runner(typemap, tck.engine)
-    assert runner.run_script(ast) == "bla"
+    assert runner.run_script(ast) == "true"
 
 
 def eval_in_rust(src: str) -> str:

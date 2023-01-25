@@ -137,7 +137,6 @@ class Compiler:
             case ast.Record() as rec:
                 return self.compile_record(rec, bindings)
             case ast.FieldAccess(field, rec):
-                ty = self.compile_type(self._type_of(expr))
                 self.traits.add(("get", field))
                 r = self.compile_expr(rec, bindings)
                 return f"{r}.get_{field}()"
