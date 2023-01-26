@@ -186,30 +186,10 @@ class Compiler:
     def compile_closure(self, expr: ast.Function, bindings: Bindings) -> str:
         name = f"Closure{id(expr)}"
 
-        def compile_parts():
-            fty = self.engine.types[self._type_of(expr)]
-            argt = self.compile_type(fty.arg)
-            rett = self.compile_type(fty.ret)
-            bdyt = self.compile_type(self._type_of(expr.body))
-            assert bdyt == rett
-            with bindings.child_scope() as bindings_:
-                bindings_.insert(expr.var, argt)
-                body = self.compile_expr(expr.body, bindings_)
-            return body, argt, rett
-
-        def gen_code(body, argt, rett, fvs):
-            fields = "\n".join(f"{var}: {bindings.get(var)}" for var in fvs)
-            definition = f"#[derive(Debug)] struct {name} {{ {fields} }}"
-            prelude = "".join(f"let {var} = self.{var}.clone();\n" for var in fvs)
-            implementation = (
-                f"impl Apply<{argt}, {rett}> for {name}\n"
-                f"{{ fn apply(&self, {expr.var}: {argt}) -> {rett} {{ {prelude} {body} }} }}"
-            )
-
-            return definition, implementation
-
         fvs = set(ast.free_vars(expr))
-        defn, impl = gen_code(*compile_parts(), fvs)
+        defn, impl = self._gen_closure_code(
+            name, expr.var, *self._compile_closure_parts(expr, bindings), fvs, bindings
+        )
 
         self.definitions.append(defn)
         self.definitions.append(impl)
@@ -239,35 +219,13 @@ class Compiler:
     def compile_letrec_closure(
         self, fname: str, expr: ast.Function, bindings: Bindings
     ) -> tuple[str, str]:
-        def compile_parts():
-            fty = self.engine.types[self._type_of(expr)]
-            argt = self.compile_type(fty.arg)
-            rett = self.compile_type(fty.ret)
-            bdyt = self.compile_type(self._type_of(expr.body))
-            assert bdyt == rett
-            with bindings.child_scope() as bindings_:
-                bindings_.insert(expr.var, argt)
-                body = self.compile_expr(expr.body, bindings_)
-            return body, argt, rett
-
-        def gen_code(body, argt, rett, fvs):
-            fields = "\n".join(f"{var}: {bindings.get(var)}" for var in fvs)
-            definition = f"#[derive(Debug)] struct {name} {{ {fields} }}"
-            prelude = "".join(f"let {var} = self.{var}.clone();\n" for var in fvs)
-            implementation = (
-                f"impl Apply<{argt}, {rett}> for {name}\n"
-                f"{{ fn apply(&self, {expr.var}: {argt}) -> {rett} {{ {prelude} {body} }} }}"
-                f"impl std::fmt::Display for {name} "
-                f"{{ fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result "
-                f'{{write!(f, "<fun>") }} }}'
-            )
-
-            return definition, implementation
 
         name = f"Closure{id(expr)}"
 
         fvs = set(ast.free_vars(expr))
-        defn, impl = gen_code(*compile_parts(), fvs)
+        defn, impl = self._gen_closure_code(
+            name, expr.var, *self._compile_closure_parts(expr, bindings), fvs, bindings
+        )
 
         self.definitions.append(defn)
         self.definitions.append(impl)
@@ -284,6 +242,42 @@ class Compiler:
             f"let {fname} = {REF}::new({name} {{ {field_alloc} }});",
             "\n".join(field_init),
         )
+
+    def _compile_closure_parts(
+        self, expr: ast.Function, bindings: Bindings
+    ) -> tuple[str, str, str]:
+        fty = self.engine.types[self._type_of(expr)]
+        argt = self.compile_type(fty.arg)
+        rett = self.compile_type(fty.ret)
+        bdyt = self.compile_type(self._type_of(expr.body))
+        assert bdyt == rett
+        with bindings.child_scope() as bindings_:
+            bindings_.insert(expr.var, argt)
+            body = self.compile_expr(expr.body, bindings_)
+        return body, argt, rett
+
+    def _gen_closure_code(
+        self,
+        name: str,
+        argn: str,
+        body: str,
+        argt: str,
+        rett: str,
+        fvs: set[str],
+        bindings: Bindings,
+    ):
+        fields = "\n".join(f"{var}: {bindings.get(var)}" for var in fvs)
+        definition = f"#[derive(Debug)] struct {name} {{ {fields} }}"
+        prelude = "".join(f"let {var} = self.{var}.clone();\n" for var in fvs)
+        implementation = (
+            f"impl Apply<{argt}, {rett}> for {name}\n"
+            f"{{ fn apply(&self, {argn}: {argt}) -> {rett} {{ {prelude} {body} }} }}"
+            f"impl std::fmt::Display for {name} "
+            f"{{ fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result "
+            f'{{write!(f, "<fun>") }} }}'
+        )
+
+        return definition, implementation
 
     @functools.lru_cache(1024)
     def compile_type(self, t: int) -> str:
