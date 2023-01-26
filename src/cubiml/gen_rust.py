@@ -1,11 +1,14 @@
+from __future__ import annotations
+
+import contextlib
 import functools
 import subprocess
 import tempfile
 import uuid
+from typing import Optional
 
 from biunification.type_checker import TypeCheckerCore
 from cubiml import abstract_syntax as ast, type_heads
-from cubiml.type_checker import Bindings
 
 
 STD_DEFS = """
@@ -39,8 +42,10 @@ class Runner:
     def run_script(self, script: ast.Script):
         self.compiler.compile_script(script)
         rust_code = self.compiler.finalize()
-        rust_code = rustfmt(rust_code)
-        print(rust_code)
+        try:
+            rust_code = rustfmt(rust_code)
+        finally:
+            print(rust_code)
 
         with tempfile.NamedTemporaryFile() as tfsrc:
             bin_name = f"/tmp/{uuid.uuid4()}"
@@ -391,3 +396,33 @@ class Compiler:
 
     def _type_of(self, expr: ast.Expression) -> int:
         return self.type_mapping[id(expr)]
+
+
+class Bindings:
+    def __init__(self):
+        self.m: dict[str, str] = {}
+        self.changes: list[tuple[str, Optional[str]]] = []
+
+    def get(self, k: str) -> str:
+        return self.m[k]
+
+    def insert(self, k: str, v: str):
+        old = self.m.get(k)
+        self.changes.append((k, old))
+        self.m[k] = v
+
+    @contextlib.contextmanager
+    def child_scope(self):
+        n = len(self.changes)
+        try:
+            yield self
+        finally:
+            self.unwind(n)
+
+    def unwind(self, n):
+        while len(self.changes) > n:
+            k, old = self.changes.pop()
+            if old is None:
+                del self.m[k]
+            else:
+                self.m[k] = old

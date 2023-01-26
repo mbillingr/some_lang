@@ -1,7 +1,7 @@
 import contextlib
 import dataclasses
 from copy import deepcopy
-from typing import Optional
+from typing import Optional, TypeAlias, Callable
 
 from biunification.type_checker import TypeCheckerCore, Use, Value
 from cubiml import abstract_syntax as ast, type_heads
@@ -50,10 +50,13 @@ class RepeatedCaseError(Exception):
     tag: str
 
 
+Scheme: TypeAlias = Callable[[TypeCheckerCore], Value]
+
+
 class Bindings:
     def __init__(self):
-        self.m: dict[str, Value] = {}
-        self.changes: list[tuple[str, Optional[Value]]] = []
+        self.m: dict[str, Scheme] = {}
+        self.changes: list[tuple[str, Optional[Scheme]]] = []
 
     def get(self, k: str):
         try:
@@ -62,6 +65,9 @@ class Bindings:
             raise UnboundError(k) from None
 
     def insert(self, k: str, v: Value):
+        self.insert_scheme(k, lambda _: v)
+
+    def insert_scheme(self, k: str, v: Scheme):
         old = self.m.get(k)
         self.changes.append((k, old))
         self.m[k] = v
@@ -93,7 +99,8 @@ def check_expr(
         case ast.Literal(bool()):
             return callback(expr, engine.new_val(type_heads.VBool()))
         case ast.Reference(var):
-            return callback(expr, bindings.get(var))
+            scheme = bindings.get(var)
+            return callback(expr, scheme(engine))
         case ast.Record(fields):
             field_names = set()
             field_types = type_heads.AssocEmpty()
@@ -164,9 +171,9 @@ def check_expr(
             engine.flow(fun_t, use)
             return callback(expr, ret_t)
         case ast.Let(var, val, body):
-            val_t = check_expr(val, bindings, engine, callback)
+            val_scheme = check_let(val, bindings, engine, callback)
             with bindings.child_scope() as bindings_:
-                bindings_.insert(var, val_t)
+                bindings_.insert_scheme(var, val_scheme)
                 body_t = check_expr(body, bindings_, engine, callback)
             return callback(expr, body_t)
         case ast.LetRec(defs, body):
@@ -175,6 +182,20 @@ def check_expr(
                 return callback(expr, check_expr(body, bindings_, engine, callback))
         case _:
             raise NotImplementedError(expr)
+
+
+def check_let(
+    expr: ast.Expression, bindings: Bindings, engine: TypeCheckerCore, callback
+) -> Scheme:
+    saved_bindings = Bindings()
+    saved_bindings.m = bindings.m.copy()
+    saved_expr = expr
+
+    f = lambda eng: check_expr(saved_expr, saved_bindings, eng, callback)
+
+    # check at least once, even if the var is never referenced
+    callback(expr, f(engine))
+    return f
 
 
 def check_letrec(defs, bindings, engine, callback):
@@ -193,16 +214,14 @@ def check_toplevel(
     bindings: Bindings,
     engine: TypeCheckerCore,
     callback=lambda _, t: t,
-) -> Value:
+):
     match stmt:
         case ast.Expression() as expr:
-            return check_expr(expr, bindings, engine, callback)
+            check_expr(expr, bindings, engine, callback)
         case ast.DefineLet(var, val):
-            var_t = check_expr(val, bindings, engine, callback)
-            bindings.insert(var, var_t)
-            return var_t
+            val_scheme = check_let(val, bindings, engine, callback)
+            bindings.insert_scheme(var, val_scheme)
         case ast.DefineLetRec(defs):
             check_letrec(defs, bindings, engine, callback)
-            return None
         case _:
             raise NotImplementedError(stmt)
