@@ -25,14 +25,62 @@ impl<A, R> Apply<A, R> for Bottom {
     fn apply(&self, _:A)->R { unreachable!() }
 }
 
-impl std::fmt::Display for Bottom {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl<A, R, T: Apply<A, R>> Apply<A, R> for Option<T> {
+    fn apply(&self, a: A) -> R {
+        self.as_ref().unwrap().apply(a)
+    }
+}
+
+impl<A, R, T: Apply<A, R>> Apply<A, R> for std::cell::RefCell<T> {
+    fn apply(&self, a: A) -> R {
+        self.borrow().apply(a)
+    }
+}
+
+trait Show {
+    fn show(&self) -> String;
+}
+
+impl Show for Bottom {
+    fn show(&self) -> String {
         unreachable!()
+    }
+}
+
+impl Show for bool {
+    fn show(&self) -> String {
+        format!("{}", self)
+    }
+}
+
+impl<T: Show> Show for std::rc::Rc<T>
+{
+    fn show(&self) -> String {
+        (**self).show()
+    }
+}
+
+impl<T: Show> Show for std::cell::RefCell<T>
+{
+    fn show(&self) -> String {
+        self.borrow().show()
+    }
+}
+
+impl<T: Show> Show for std::option::Option<T>
+{
+    fn show(&self) -> String {
+        match self {
+            std::option::Option::None => "<uninitialized>".to_string(),
+            std::option::Option::Some(x) => x.show()
+        }
     }
 }
 """
 
 REF = "std::rc::Rc"
+CEL = "std::cell::RefCell"
+OPT = "std::option::Option"
 
 
 class Runner:
@@ -52,7 +100,10 @@ class Runner:
             tfsrc.write(rust_code.encode("utf-8"))
             tfsrc.flush()
             try:
-                subprocess.run(["rustc", tfsrc.name, "-o", bin_name], check=True)
+                subprocess.run(
+                    ["rustc", tfsrc.name, "-o", bin_name, "-C", "opt-level=0"],
+                    check=True,
+                )
             except subprocess.CalledProcessError as e:
                 raise RuntimeError(e.stdout)
 
@@ -80,7 +131,7 @@ class Compiler:
 
     def finalize(self) -> str:
         if len(self.script) > 0:
-            script = self.script[:-1] + [f'println!("{{}}", {self.script[-1]})']
+            script = self.script[:-1] + [f'println!("{{}}", {self.script[-1]}.show())']
         else:
             script = []
         script = "\n".join(script)
@@ -208,13 +259,7 @@ class Compiler:
             inits.append(i)
 
         vars = ", ".join(d.name for d in defs)
-        return (
-            f"let ({vars}) = unsafe {{"
-            + "// Abusing uninitialized memory and risking Undefined Behavior sucks, "
-            + "but I don't know a better way to initialize recursive bindings \n"
-            + "\n".join(allocs + inits)
-            + f"({vars}) }};"
-        )
+        return "\n".join(allocs + inits)
 
     def compile_letrec_closure(
         self, fname: str, expr: ast.Function, bindings: Bindings
@@ -229,18 +274,13 @@ class Compiler:
 
         self.definitions.append(defn)
         self.definitions.append(impl)
-        field_alloc = ",".join(
-            f"{v}: std::mem::MaybeUninit::uninit().assume_init()" for v in fvs
-        )
-        field_init = (
-            f"{{let tmp: {bindings.get(v)} = {v}.clone();"
-            f"std::ptr::write(&{fname}.{v} as *const _ as *mut _, tmp);}}"
-            for v in fvs
-        )
+        field_init = ", ".join(f"{v}: {v}.clone()" for v in fvs)
 
         return (
-            f"let {fname} = {REF}::new({name} {{ {field_alloc} }});",
-            "\n".join(field_init),
+            f"/* TODO we're leaking memory here because of all the mutual references."
+            f" Is there a better way? */"
+            f"let {fname} = {REF}::new({CEL}::new({OPT}::None));",
+            f"*{fname}.borrow_mut() = {OPT}::Some({name} {{ {field_init} }});",
         )
 
     def _compile_closure_parts(
@@ -272,9 +312,9 @@ class Compiler:
         implementation = (
             f"impl Apply<{argt}, {rett}> for {name}\n"
             f"{{ fn apply(&self, {argn}: {argt}) -> {rett} {{ {prelude} {body} }} }}"
-            f"impl std::fmt::Display for {name} "
-            f"{{ fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result "
-            f'{{write!(f, "<fun>") }} }}'
+            f"impl Show for {name} "
+            f"{{ fn show(&self) -> String "
+            f'{{ "<fun>".to_string() }} }}'
         )
 
         return definition, implementation
@@ -347,14 +387,11 @@ class Compiler:
                     )
                 rfields = [f for f, _ in fields.items()][::-1]
                 fmt = "; ".join(f"{f}={{}}" for f in rfields)
-                fvals = ", ".join(f"self.{f}" for f in rfields)
+                fvals = ", ".join(f"self.{f}.show()" for f in rfields)
                 impls.append(
                     (
-                        f"impl std::fmt::Display for {ty} "
-                        f"{{ fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {{"
-                        f'write!(f, "{{{{")?;'
-                        f'write!(f, "{fmt}", {fvals})?;'
-                        f'write!(f, "}}}}") }} }}'
+                        f"impl Show for {ty} "
+                        f'{{ fn show(&self) -> String {{ format!("{{{{{fmt}}}}}", {fvals})  }} }}'
                     )
                 )
 
@@ -379,8 +416,7 @@ class Compiler:
         match args:
             case ("get", field):
                 trait_def = (
-                    f"trait Has{field}<T>: std::fmt::Display "
-                    f"{{ fn get_{field}(&self) -> T; }}"
+                    f"trait Has{field}<T>: Show " f"{{ fn get_{field}(&self) -> T; }}"
                 )
                 bot_impl = (
                     f"impl<T> Has{field}<T> for Bottom "
