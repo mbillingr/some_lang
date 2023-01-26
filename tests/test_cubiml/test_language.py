@@ -13,6 +13,7 @@ def eval_in_rust(src: str) -> str:
 
 def eval_in_python(src: str) -> str:
     ast = parser.parse_script(src)
+    type_checker.TypeChecker().check_script(ast)
     runner = interpreter.Interpreter()
     res = runner.run_script(ast)
     return transform_python_result(res)
@@ -71,6 +72,18 @@ class TestLanguage:
         src = "(let rec foo = fun x -> if x then foo false else true in foo true)"
         res = evaluator(src)
         assert res == "true"
+
+    def test_let_polymorphism(self, evaluator):
+        src = """
+            let id = fun x -> x;
+            
+            let a = (id {a={}}).a;
+            let b = (id {b={}}).b;
+            
+            {a={}; b={}}
+        """
+        res = evaluator(src)
+        assert res == "{a={}; b={}}"
 
 
 def transform_python_result(res) -> str:
