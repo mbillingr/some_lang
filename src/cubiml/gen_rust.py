@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import abc
 import contextlib
+import dataclasses
 import functools
 import subprocess
 import tempfile
@@ -89,7 +91,8 @@ class Runner:
 
     def run_script(self, script: ast.Script):
         self.compiler.compile_script(script)
-        rust_code = self.compiler.finalize()
+        rust_ast = self.compiler.finalize()
+        rust_code = str(rust_ast)
         try:
             rust_code = rustfmt(rust_code)
         finally:
@@ -129,46 +132,53 @@ class Compiler:
         self.script = []
         self.traits = set()
 
-    def finalize(self) -> str:
+    def finalize(self) -> RustAst:
         if len(self.script) > 0:
             script = self.script[:-1] + [f'println!("{{}}", {self.script[-1]}.show())']
         else:
             script = []
-        script = "\n".join(script)
-        funcs = "\n\n".join(self.definitions)
-        typedefs = "\n\n".join(
-            set.union(*(self.compile_typedef(t) for t in range(len(self.engine.types))))
+        script = RustBlock(script)
+        typedefs = set.union(
+            *(self.compile_typedef(t) for t in range(len(self.engine.types)))
         )
-        traits = "\n".join(self.compile_trait(*t) for t in self.traits)
-        return f"fn main() {{ {script} }}\n\n{funcs}\n\n{typedefs}\n\n{traits}\n\n{STD_DEFS}"
+        traits = (self.compile_trait(*t) for t in self.traits)
+        return RustToplevel(
+            [
+                RustFn("main", [], None, script),
+                *self.definitions,
+                *typedefs,
+                *traits,
+                RustInline(STD_DEFS),
+            ]
+        )
 
     def compile_script(self, script: ast.Script):
         for stmt in script.statements:
-            self.script.append(self.compile_toplevel(stmt))
+            self.script.extend(self.compile_toplevel(stmt))
         self.bindings.changes.clear()
 
-    def compile_toplevel(self, stmt: ast.ToplevelItem) -> str:
+    def compile_toplevel(self, stmt: ast.ToplevelItem) -> list[RustExpr]:
         match stmt:
             case ast.Expression() as expr:
-                return self.compile_expr(expr, self.bindings)
+                return [self.compile_expr(expr, self.bindings)]
             case ast.DefineLet(var, val):
                 cval = self.compile_expr(val, self.bindings)
                 ty = self.compile_type(self._type_of(val))
                 self.bindings.insert(var, ty)
-                return f"let {var} = {cval};"
+                return [RustInline(f"let {var} = {cval}")]
             case ast.DefineLetRec(defs):
                 return self.compile_letrec(defs, self.bindings)
             case _:
                 raise NotImplementedError(stmt)
 
-    def compile_expr(self, expr: ast.Expression, bindings: Bindings) -> str:
+    def compile_expr(self, expr: ast.Expression, bindings: Bindings) -> RustExpr:
         match expr:
             case ast.Literal(True):
-                return "true"
+                return RustLiteral("true")
             case ast.Literal(False):
-                return "false"
+                return RustLiteral("false")
             case ast.Reference(var):
-                return var
+                return RustLiteral(var)
             case ast.Function() as fun:
                 return self.compile_closure(fun, bindings)
             case ast.Application(fun, arg):
@@ -181,7 +191,7 @@ class Compiler:
                 c = self.compile_expr(alternative, bindings)
 
                 ty = self.compile_type(self._type_of(expr))
-                if ty.startswith(REF):
+                if isinstance(ty, RustObjType):
                     b = f"{REF}::new({b})"
                     c = f"{REF}::new({c})"
                     return f"{{let tmp: {ty} = if {a} {{ {b} }} else {{ {c} }}; tmp }}"
@@ -217,11 +227,9 @@ class Compiler:
                 return f"{{let {var} = {cval}; {cbody} }}"
             case ast.LetRec(defs, body):
                 with bindings.child_scope() as bindings_:
-                    return (
-                        "{"
-                        + self.compile_letrec(defs, bindings_)
-                        + self.compile_expr(body, bindings_)
-                        + "}"
+                    return RustBlock(
+                        self.compile_letrec(defs, bindings_)
+                        + [self.compile_expr(body, bindings_)]
                     )
             case _:
                 raise NotImplementedError(expr)
@@ -234,7 +242,7 @@ class Compiler:
         name = self.compile_type(self._type_of(expr))
         return f"{name} {{ {init_fields} }}"
 
-    def compile_closure(self, expr: ast.Function, bindings: Bindings) -> str:
+    def compile_closure(self, expr: ast.Function, bindings: Bindings) -> RustExpr:
         name = f"Closure{self._type_of(expr)}"
 
         fvs = set(ast.free_vars(expr))
@@ -244,10 +252,9 @@ class Compiler:
 
         self.definitions.append(defn)
         self.definitions.append(impl)
-        field_init = ",".join(fvs)
-        return f"{REF}::new({name} {{ {field_init} }})"
+        return RustNewObj(RustNewStruct(name, list(zip(fvs, map(RustLiteral, fvs)))))
 
-    def compile_letrec(self, defs, bindings):
+    def compile_letrec(self, defs, bindings) -> [RustAst]:
         for d in defs:
             ty = self.compile_type(self._type_of(d.fun))
             bindings.insert(d.name, ty)
@@ -259,8 +266,13 @@ class Compiler:
             inits.append(i)
 
         return (
-            f"/* TODO we're leaking memory here because of all the mutual references."
-            f" Is there a better way? */" + "\n".join(allocs + inits)
+            [
+                RustComment(
+                    "TODO we're leaking memory here because of all the mutual references. Is there a better way?"
+                )
+            ]
+            + allocs
+            + inits
         )
 
     def compile_letrec_closure(
@@ -319,14 +331,14 @@ class Compiler:
         return definition, implementation
 
     @functools.lru_cache(1024)
-    def compile_type(self, t: int) -> str:
+    def compile_type(self, t: int) -> RustType:
         match self.engine.types[t]:
             case "Var":
                 vts = list(self.engine.all_upvtypes(t))
                 tys = [self.compile_type(ty) for ty in vts]
                 match tys:
                     case []:
-                        return "Bottom"
+                        return RustAtomicType("Bottom")
                     case [tc]:
                         return tc
                     case _:
@@ -334,34 +346,34 @@ class Compiler:
                             return tys[0]
                         traits = (self.traits_for_type(t) for t in vts)
                         common_traits = set.intersection(*traits)
-                        return f"{REF}<dyn {'+'.join(common_traits)}>"
+                        return RustObjType(common_traits)
             case type_heads.VBool():
-                return "bool"
+                return RustAtomicType("bool")
             case type_heads.VFunc(arg, ret):
                 a = self.compile_type(arg)
                 r = self.compile_type(ret)
-                return f"{REF}<dyn Apply<{a}, {r}>>"
+                return RustObjType({RustTrait("Apply", (a, r))})
             case type_heads.VObj(_):
-                return f"Record{t}"
+                return RustAtomicType(f"Record{t}")
             case other:
                 raise NotImplementedError(other)
 
     @functools.lru_cache(1024)
-    def traits_for_type(self, t: int) -> set[str]:
+    def traits_for_type(self, t: int) -> set[RustTrait]:
         match self.engine.types[t]:
             case type_heads.VBool():
-                return {"Boolean"}
+                return {RustTrait("Boolean")}
             case type_heads.VFunc(arg, ret):
                 a = self.compile_type(arg)
                 r = self.compile_type(ret)
-                return {f"Apply<{a}, {r}>"}
+                return {RustTrait("Apply", (a, r))}
             case type_heads.VObj(fields):
                 fts = ((f, self.compile_type(t)) for f, t in fields.items())
-                return {f"Has{f}<{ty}>" for f, ty in fts}
+                return {RustTrait(f"Has{f}", (ty,)) for f, ty in fts}
             case other:
                 raise NotImplementedError(other)
 
-    def compile_typedef(self, t: int) -> set[str]:
+    def compile_typedef(self, t: int) -> set[RustAst]:
         match self.engine.types[t]:
             case "Var" | type_heads.VBool():
                 return set()
@@ -394,16 +406,20 @@ class Compiler:
                     )
                 )
 
-                return {"\n".join([tdef] + impls)}
+                return {RustInline("\n".join([tdef] + impls))}
             case type_heads.VCase(tag, ty):
                 return {
-                    f"#[derive(Debug, Clone)] struct Case{tag}({self.compile_type(ty)});"
+                    RustInline(
+                        f"#[derive(Debug, Clone)] struct Case{tag}({self.compile_type(ty)});"
+                    )
                 }
             case type_heads.UCase(cases) as uc:
                 defs = set()
                 for tag, u in cases.items():
                     defs.add(
-                        f"#[derive(Debug, Clone)] struct Case{tag}({self.compile_type(u)});"
+                        RustInline(
+                            f"#[derive(Debug, Clone)] struct Case{tag}({self.compile_type(u)});"
+                        )
                     )
                 return defs
             case type_heads.UTypeHead():
@@ -411,7 +427,7 @@ class Compiler:
             case other:
                 raise NotImplementedError(other)
 
-    def compile_trait(self, *args) -> str:
+    def compile_trait(self, *args) -> RustAst:
         match args:
             case ("get", field):
                 trait_def = (
@@ -421,7 +437,7 @@ class Compiler:
                     f"impl<T> Has{field}<T> for Bottom "
                     f"{{ fn get_{field}(&self) -> T {{unreachable!()}} }}"
                 )
-                return "\n".join((trait_def, bot_impl))
+                return RustInline("\n".join((trait_def, bot_impl)))
 
     def _type_of(self, expr: ast.Expression) -> int:
         return self.type_mapping[id(expr)]
@@ -455,3 +471,118 @@ class Bindings:
                 del self.m[k]
             else:
                 self.m[k] = old
+
+
+class RustAst(abc.ABC):
+    @abc.abstractmethod
+    def __str__(self) -> str:
+        pass
+
+
+@dataclasses.dataclass(frozen=True)
+class RustComment(RustAst):
+    text: str
+
+    def __str__(self) -> str:
+        return f"/* {self.text} */"
+
+
+@dataclasses.dataclass(frozen=True)
+class RustInline(RustAst):
+    code: str
+
+    def __str__(self) -> str:
+        return self.code
+
+
+@dataclasses.dataclass(frozen=True)
+class RustToplevel(RustAst):
+    items: list[RustAst]
+
+    def __str__(self) -> str:
+        return "\n\n".join(map(str, self.items))
+
+
+@dataclasses.dataclass(frozen=True)
+class RustTrait(RustAst):
+    name: str
+    params: tuple[RustAst] = ()
+
+    def __str__(self) -> str:
+        if not self.params:
+            return self.name
+        return self.name + "<" + ", ".join(map(str, self.params)) + ">"
+
+
+class RustType(RustAst):
+    pass
+
+
+@dataclasses.dataclass(frozen=True)
+class RustAtomicType(RustType):
+    name: str
+
+    def __str__(self) -> str:
+        return self.name
+
+
+@dataclasses.dataclass(frozen=True)
+class RustObjType(RustType):
+    interfaces: set[RustTrait]
+
+    def __str__(self) -> str:
+        ifs = "+".join(map(str, self.interfaces))
+        return f"{REF}<dyn {ifs}>"
+
+
+class RustExpr(RustAst):
+    pass
+
+
+@dataclasses.dataclass(frozen=True)
+class RustBlock(RustExpr):
+    items: list[RustExpr]
+
+    def __str__(self) -> str:
+        return "".join(["{", ";".join(map(str, self.items)), "}"])
+
+
+@dataclasses.dataclass(frozen=True)
+class RustLiteral(RustExpr):
+    code: str
+
+    def __str__(self) -> str:
+        return self.code
+
+
+@dataclasses.dataclass(frozen=True)
+class RustNewObj(RustExpr):
+    inner: RustExpr
+
+    def __str__(self) -> str:
+        return f"std::rc::Rc::new({self.inner})"
+
+
+@dataclasses.dataclass(frozen=True)
+class RustNewStruct(RustExpr):
+    name: str
+    fields: list[tuple[str, RustExpr]]
+
+    def __str__(self) -> str:
+        fis = ", ".join(f"{f}:{v}" for f, v in self.fields)
+        return f"{self.name} {{ {fis} }}"
+
+
+@dataclasses.dataclass(frozen=True)
+class RustFn(RustAst):
+    name: str
+    args: list[tuple[(str, RustType)]]
+    rett: Optional[RustType]
+    body: RustBlock
+
+    def __str__(self) -> str:
+        args = ", ".join(f"{a}:{t}" for a, t in self.args)
+        if self.rett is None:
+            return f"fn {self.name}({args}) {self.body}"
+        else:
+            return f"fn {self.name}({args}) -> {self.rett} {self.body}"
