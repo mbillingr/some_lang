@@ -235,7 +235,7 @@ class Compiler:
         return f"{name} {{ {init_fields} }}"
 
     def compile_closure(self, expr: ast.Function, bindings: Bindings) -> str:
-        name = f"Closure{id(expr)}"
+        name = f"Closure{self._type_of(expr)}"
 
         fvs = set(ast.free_vars(expr))
         defn, impl = self._gen_closure_code(
@@ -258,14 +258,15 @@ class Compiler:
             allocs.append(a)
             inits.append(i)
 
-        vars = ", ".join(d.name for d in defs)
-        return "\n".join(allocs + inits)
+        return (
+            f"/* TODO we're leaking memory here because of all the mutual references."
+            f" Is there a better way? */" + "\n".join(allocs + inits)
+        )
 
     def compile_letrec_closure(
         self, fname: str, expr: ast.Function, bindings: Bindings
     ) -> tuple[str, str]:
-
-        name = f"Closure{id(expr)}"
+        name = f"Closure{self._type_of(expr)}"
 
         fvs = set(ast.free_vars(expr))
         defn, impl = self._gen_closure_code(
@@ -277,8 +278,6 @@ class Compiler:
         field_init = ", ".join(f"{v}: {v}.clone()" for v in fvs)
 
         return (
-            f"/* TODO we're leaking memory here because of all the mutual references."
-            f" Is there a better way? */"
             f"let {fname} = {REF}::new({CEL}::new({OPT}::None));",
             f"*{fname}.borrow_mut() = {OPT}::Some({name} {{ {field_init} }});",
         )
