@@ -384,7 +384,11 @@ class Compiler:
                 fds = ",".join(
                     f"{f}: {self.compile_type(t)}" for f, t in fields.items()
                 )
-                tdef = f"#[derive(Debug, Clone)] struct {ty} {{ {fds} }}"
+                trs = {f: self.traits_for_type(t) for f, t in fields.items()}
+                trs = ",".join(
+                    f"T{i}: {'+'.join(map(str,t))}" for i, t in enumerate(trs.values(), start=1)
+                )
+                tdef = f"#[derive(Debug, Clone)] struct {ty}<{trs}> {{ {fds} }}"
 
                 impls = []
                 for f, t in fields.items():
