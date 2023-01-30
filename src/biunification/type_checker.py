@@ -65,7 +65,11 @@ class TypeCheckerCore:
                 lhs_head = self.types[lhs]
                 rhs_head = self.types[rhs]
                 if isinstance(lhs_head, VTypeHead) and isinstance(rhs_head, UTypeHead):
-                    pending_edges += check_heads(lhs_head, rhs_head)
+                    try:
+                        pending_edges += check_heads(lhs_head, rhs_head)
+                    except TypeError as e:
+                        raise TypeError(lhs, rhs, e) from None
+
 
     def __str__(self):
         out = []

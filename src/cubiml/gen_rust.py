@@ -131,6 +131,7 @@ class Compiler:
         self.definitions = []
         self.script = []
         self.traits = set()
+        self.function_free_vars = {}
 
     def finalize(self) -> RustAst:
         if len(self.script) > 0:
@@ -146,6 +147,7 @@ class Compiler:
             [
                 RustFn("main", [], None, script),
                 *self.definitions,
+                *self.gen_typedefs(),
                 *typedefs,
                 *traits,
                 RustInline(STD_DEFS),
@@ -153,6 +155,11 @@ class Compiler:
         )
 
     def compile_script(self, script: ast.Script):
+        function_free = ast.FunctionFreeVars(script)
+        for fun, fvs in function_free.vars.items():
+            ty = self._type_of(fun)
+            self.function_free_vars[ty] = fvs
+
         for stmt in script.statements:
             self.script.extend(self.compile_toplevel(stmt))
         self.bindings.changes.clear()
@@ -386,7 +393,8 @@ class Compiler:
                 )
                 trs = {f: self.traits_for_type(t) for f, t in fields.items()}
                 trs = ",".join(
-                    f"T{i}: {'+'.join(map(str,t))}" for i, t in enumerate(trs.values(), start=1)
+                    f"T{i}: {'+'.join(map(str,t))}"
+                    for i, t in enumerate(trs.values(), start=1)
                 )
                 tdef = f"#[derive(Debug, Clone)] struct {ty}<{trs}> {{ {fds} }}"
 
@@ -445,6 +453,72 @@ class Compiler:
 
     def _type_of(self, expr: ast.Expression) -> int:
         return self.type_mapping[id(expr)]
+
+    def gen_typedefs(self) -> list[RustAst]:
+        defs = []
+        for t, ty in enumerate(self.engine.types):
+            match ty:
+                case "Var":
+                    defs.append(
+                        RustToplevelGroup(
+                            [
+                                RustTypeAlias(
+                                    self.v_name(t),
+                                    RustObjType({RustTrait(self.u_name(t))}),
+                                ),
+                                self.gen_utraitdef(t),
+                            ]
+                        )
+                    )
+                case type_heads.VBool():
+                    defs.append(RustTypeAlias(self.v_name(t), RustAtomicType("bool")))
+                case type_heads.UBool():
+                    defs.append(self.gen_utraitdef(t))
+                case type_heads.VFunc(arg, ret):
+                    free_vars = self.function_free_vars[t]
+                    # todo: impl Apply
+                    defs.append(RustStructDef(self.v_name(t), free_vars))
+                case type_heads.UFunc(arg, ret):
+                    # todo: args
+                    defs.append(
+                        self.gen_utraitdef(
+                            t,
+                            (
+                                RustTrait(
+                                    "Apply",
+                                    (
+                                        RustAtomicType(self.v_name(arg)),
+                                        RustAtomicType(self.v_name(ret)),
+                                    ),
+                                ),
+                            ),
+                        )
+                    )
+                case type_heads.VObj(fields):
+                    defs.append(
+                        RustStructDef(
+                            self.v_name(t),
+                            [
+                                (f, RustAtomicType(self.v_name(ft)))
+                                for f, ft in fields.items()
+                            ],
+                        )
+                    )
+                case _:
+                    raise NotImplementedError(ty)
+        return defs
+
+    def gen_utraitdef(self, t, supertraits=()):
+        supertraits += tuple(
+            map(RustTrait, map(self.u_name, self.engine.r.downsets[t]))
+        )
+        return RustTraitDef(self.u_name(t), supertraits)
+
+    def v_name(self, t):
+        return f"V{t}"
+
+    def u_name(self, t):
+        return f"U{t}"
 
 
 class Bindings:
@@ -508,9 +582,17 @@ class RustToplevel(RustAst):
 
 
 @dataclasses.dataclass(frozen=True)
+class RustToplevelGroup(RustAst):
+    items: list[RustAst]
+
+    def __str__(self) -> str:
+        return "\n".join(map(str, self.items))
+
+
+@dataclasses.dataclass(frozen=True)
 class RustTrait(RustAst):
     name: str
-    params: tuple[RustAst] = ()
+    params: tuple[RustAst, ...] = ()
 
     def __str__(self) -> str:
         if not self.params:
@@ -537,6 +619,35 @@ class RustObjType(RustType):
     def __str__(self) -> str:
         ifs = "+".join(map(str, self.interfaces))
         return f"{REF}<dyn {ifs}>"
+
+
+@dataclasses.dataclass(frozen=True)
+class RustTypeAlias(RustAst):
+    name: str
+    type: RustType
+
+    def __str__(self) -> str:
+        return f"type {self.name} = {self.type};"
+
+
+@dataclasses.dataclass(frozen=True)
+class RustTraitDef(RustAst):
+    name: str
+    supertraits: tuple[RustTrait]
+
+    def __str__(self) -> str:
+        trs = " + ".join(map(str, self.supertraits))
+        return f"trait {self.name}: {trs} {{}}"
+
+
+@dataclasses.dataclass(frozen=True)
+class RustStructDef(RustAst):
+    name: str
+    fields: list[tuple[str, RustType]] = ()
+
+    def __str__(self) -> str:
+        fields = "".join(f"{f}: {t}," for f, t in self.fields)
+        return f"struct {self.name} {{ {fields} }}"
 
 
 class RustExpr(RustAst):
