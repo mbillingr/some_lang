@@ -39,50 +39,16 @@ impl<A, R, T: Apply<A, R>> Apply<A, R> for std::cell::RefCell<T> {
     }
 }
 
-trait Show {
-    fn show(&self) -> String;
-}
-
-impl Show for Bottom {
-    fn show(&self) -> String {
-        unreachable!()
-    }
-}
-
-impl Show for bool {
-    fn show(&self) -> String {
-        format!("{}", self)
-    }
-}
-
-impl<T: Show> Show for std::rc::Rc<T>
-{
-    fn show(&self) -> String {
-        (**self).show()
-    }
-}
-
-impl<T: Show> Show for std::cell::RefCell<T>
-{
-    fn show(&self) -> String {
-        self.borrow().show()
-    }
-}
-
-impl<T: Show> Show for std::option::Option<T>
-{
-    fn show(&self) -> String {
-        match self {
-            std::option::Option::None => "<uninitialized>".to_string(),
-            std::option::Option::Some(x) => x.show()
-        }
-    }
-}
 """
 
 REF = "std::rc::Rc"
 CEL = "std::cell::RefCell"
 OPT = "std::option::Option"
+
+DEFAULT_TRAITS = (
+    "'static",
+    "std::fmt::Debug",
+)
 
 
 class Runner:
@@ -135,7 +101,7 @@ class Compiler:
 
     def finalize(self) -> RustAst:
         if len(self.script) > 0:
-            script = self.script[:-1] + [f'println!("{{}}", {self.script[-1]}.show())']
+            script = self.script[:-1] + [f'println!("{{:?}}", {self.script[-1]})']
         else:
             script = []
         script = RustBlock(script)
@@ -156,8 +122,8 @@ class Compiler:
 
     def compile_script(self, script: ast.Script):
         function_free = ast.FunctionFreeVars(script)
-        for fun, fvs in function_free.vars.items():
-            ty = self._type_of(fun)
+        for fun_id, fvs in function_free.vars.items():
+            ty = self.type_mapping[fun_id]
             self.function_free_vars[ty] = fvs
 
         for stmt in script.statements:
@@ -246,20 +212,21 @@ class Compiler:
         field_values = [self.compile_expr(f[1], bindings) for f in expr.fields]
         init_fields = ",".join(f"{k}:{v}" for k, v in zip(field_names, field_values))
 
-        name = self.compile_type(self._type_of(expr))
+        name = self.v_name(self._type_of(expr))
         return f"{name} {{ {init_fields} }}"
 
     def compile_closure(self, expr: ast.Function, bindings: Bindings) -> RustExpr:
-        name = f"Closure{self._type_of(expr)}"
+        ty = self._type_of(expr)
+        name = self.v_name(ty)
 
-        fvs = set(ast.free_vars(expr))
+        fvs = self.function_free_vars[ty]
         defn, impl = self._gen_closure_code(
             name, expr.var, *self._compile_closure_parts(expr, bindings), fvs, bindings
         )
 
-        self.definitions.append(defn)
+        # self.definitions.append(defn)
         self.definitions.append(impl)
-        return RustNewObj(RustNewStruct(name, list(zip(fvs, map(RustLiteral, fvs)))))
+        return RustNewStruct(name, list(zip(fvs, map(RustLiteral, fvs))))
 
     def compile_letrec(self, defs, bindings) -> [RustAst]:
         for d in defs:
@@ -303,7 +270,7 @@ class Compiler:
 
     def _compile_closure_parts(
         self, expr: ast.Function, bindings: Bindings
-    ) -> tuple[str, str, str]:
+    ) -> tuple[RustExpr, RustType, RustType, RustType]:
         fty = self.engine.types[self._type_of(expr)]
         argt = self.compile_type(fty.arg)
         rett = self.compile_type(fty.ret)
@@ -312,27 +279,32 @@ class Compiler:
         with bindings.child_scope() as bindings_:
             bindings_.insert(expr.var, argt)
             body = self.compile_expr(expr.body, bindings_)
-        return body, argt, rett
+        return body, fty.arg, fty.ret
 
     def _gen_closure_code(
         self,
         name: str,
         argn: str,
-        body: str,
-        argt: str,
-        rett: str,
+        body: RustExpr,
+        argt: int,
+        rett: int,
         fvs: set[str],
         bindings: Bindings,
     ):
         fields = "\n".join(f"{var}: {bindings.get(var)}" for var in fvs)
         definition = f"#[derive(Debug)] struct {name} {{ {fields} }}"
         prelude = "".join(f"let {var} = self.{var}.clone();\n" for var in fvs)
+
+        arg_bounds = "+".join(map(str, self.traits_for_type(argt)))
+        ret_type = self.v_name(rett)
+
+        # I really hate that we always create a new Rc in the function body.
+        # But without specialization, it seems difficult to know if a Rc was passed in. And even then it might not be
+        # possible to convert a trait object to a super-trait object.
+        # TODO: It may be possible to optimize this for certain special cases, such as argt == rett.
         implementation = (
-            f"impl Apply<{argt}, {rett}> for {name}\n"
-            f"{{ fn apply(&self, {argn}: {argt}) -> {rett} {{ {prelude} {body} }} }}"
-            f"impl Show for {name} "
-            f"{{ fn show(&self) -> String "
-            f'{{ "<fun>".to_string() }} }}'
+            f"impl<A: {arg_bounds}> Apply<A, {ret_type}> for {name}\n"
+            f"{{ fn apply(&self, {argn}: A) -> {ret_type} {{ {prelude} {REF}::new({body}) }} }}"
         )
 
         return definition, implementation
@@ -368,6 +340,8 @@ class Compiler:
     @functools.lru_cache(1024)
     def traits_for_type(self, t: int) -> set[RustTrait]:
         match self.engine.types[t]:
+            case "Var":
+                return {self.u_name(b) for b in self.engine.r.downsets[t]}
             case type_heads.VBool():
                 return {RustTrait("Boolean")}
             case type_heads.VFunc(arg, ret):
@@ -408,16 +382,6 @@ class Compiler:
                             f"{{ fn get_{f}(&self) -> {ft} {{ self.{f}.clone() }} }}"
                         )
                     )
-                rfields = [f for f, _ in fields.items()][::-1]
-                fmt = "; ".join(f"{f}={{}}" for f in rfields)
-                fvals = ", ".join(f"self.{f}.show()" for f in rfields)
-                impls.append(
-                    (
-                        f"impl Show for {ty} "
-                        f'{{ fn show(&self) -> String {{ format!("{{{{{fmt}}}}}", {fvals})  }} }}'
-                    )
-                )
-
                 return {RustInline("\n".join([tdef] + impls))}
             case type_heads.VCase(tag, ty):
                 return {
@@ -466,7 +430,10 @@ class Compiler:
                                     self.v_name(t),
                                     RustObjType({RustTrait(self.u_name(t))}),
                                 ),
-                                self.gen_utraitdef(t),
+                                self.gen_utraitdef(t, DEFAULT_TRAITS),
+                                RustInline(
+                                    f"impl<T: {'+'.join(map(str, self.trait_bounds(t, DEFAULT_TRAITS)))}> {self.u_name(t)} for T {{}}"
+                                ),
                             ]
                         )
                     )
@@ -476,8 +443,14 @@ class Compiler:
                     defs.append(self.gen_utraitdef(t))
                 case type_heads.VFunc(arg, ret):
                     free_vars = self.function_free_vars[t]
-                    # todo: impl Apply
                     defs.append(RustStructDef(self.v_name(t), free_vars))
+                    defs.append(
+                        RustInline(
+                            f"impl std::fmt::Debug for {self.v_name(t)} {{ "
+                            f"fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {{ "
+                            f'write!(f, "<fun>")  }} }}'
+                        )
+                    )
                 case type_heads.UFunc(arg, ret):
                     # todo: args
                     defs.append(
@@ -496,12 +469,15 @@ class Compiler:
                     )
                 case type_heads.VObj(fields):
                     defs.append(
-                        RustStructDef(
-                            self.v_name(t),
-                            [
-                                (f, RustAtomicType(self.v_name(ft)))
-                                for f, ft in fields.items()
-                            ],
+                        RustDerive(
+                            ("Debug",),
+                            RustStructDef(
+                                self.v_name(t),
+                                [
+                                    (f, RustAtomicType(self.v_name(ft)))
+                                    for f, ft in fields.items()
+                                ],
+                            ),
                         )
                     )
                 case _:
@@ -509,10 +485,12 @@ class Compiler:
         return defs
 
     def gen_utraitdef(self, t, supertraits=()):
-        supertraits += tuple(
+        return RustTraitDef(self.u_name(t), self.trait_bounds(t, supertraits))
+
+    def trait_bounds(self, t, supertraits=()):
+        return supertraits + tuple(
             map(RustTrait, map(self.u_name, self.engine.r.downsets[t]))
         )
-        return RustTraitDef(self.u_name(t), supertraits)
 
     def v_name(self, t):
         return f"V{t}"
@@ -648,6 +626,16 @@ class RustStructDef(RustAst):
     def __str__(self) -> str:
         fields = "".join(f"{f}: {t}," for f, t in self.fields)
         return f"struct {self.name} {{ {fields} }}"
+
+
+@dataclasses.dataclass(frozen=True)
+class RustDerive(RustAst):
+    derives: list[str]
+    typedef: RustAst
+
+    def __str__(self) -> str:
+        drvs = ",".join(self.derives)
+        return f"#[derive({drvs})] {self.typedef}"
 
 
 class RustExpr(RustAst):

@@ -7,6 +7,7 @@ def eval_in_rust(src: str) -> str:
     ast = parser.parse_script(src)
     tck = type_checker.TypeChecker()
     typemap = tck.check_script(ast)
+    print(tck.engine)
     runner = gen_rust.Runner(typemap, tck.engine)
     return runner.run_script(ast)
 
@@ -27,7 +28,7 @@ class TestLanguage:
         assert res == "false"
 
     def test_function_application(self, evaluator):
-        src = "(fun x -> x) {}"
+        src = "(fun x -> x) ((fun x -> x) {})"
         res = evaluator(src)
         assert res == "{}"
 

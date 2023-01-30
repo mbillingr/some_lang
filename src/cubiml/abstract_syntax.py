@@ -188,5 +188,5 @@ class FunctionFreeVars:
         match node:
             case Function(var, body):
                 fvs = free_vars(node)
-                self.vars[node] = fvs
+                self.vars[id(node)] = fvs
             case _: pass
