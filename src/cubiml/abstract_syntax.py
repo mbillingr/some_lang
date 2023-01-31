@@ -5,6 +5,10 @@ from typing import Any
 import typing
 
 
+class AstNode(abc.ABC):
+    pass
+
+
 class ToplevelItem(abc.ABC):
     pass
 
@@ -48,7 +52,7 @@ class Case(Expression):
 
 
 @dataclasses.dataclass(frozen=True)
-class MatchArm:
+class MatchArm(AstNode):
     tag: str
     var: str
     bdy: Expression
@@ -80,7 +84,7 @@ class Let(Expression):
 
 
 @dataclasses.dataclass(frozen=True)
-class FuncDef:
+class FuncDef(AstNode):
     name: str
     fun: Function
 
@@ -103,7 +107,7 @@ class DefineLetRec(ToplevelItem):
 
 
 @dataclasses.dataclass(frozen=True)
-class Script:
+class Script(AstNode):
     statements: list[ToplevelItem]
 
 
@@ -134,3 +138,57 @@ def free_vars(expr: Expression) -> typing.Iterator[str]:
             yield from free_vars(rec)
         case _:
             raise NotImplementedError(expr)
+
+
+def visit(expr: Expression, visitor):
+    try:
+        _visit(expr, visitor)
+    except StopIteration:
+        pass
+
+
+def _visit(node: AstNode, visitor):
+    visitor(node)
+    match node:
+        case Script(statements):
+            for stmt in statements:
+                _visit(stmt, visitor)
+        case DefineLet(_, expr):
+            _visit(expr, visitor)
+        case DefineLetRec(defs):
+            for d in defs:
+                _visit(d, visitor)
+        case Literal(_):
+            return
+        case Reference(_):
+            return
+        case Function(_, body):
+            _visit(body, visitor)
+        case Application(fun, arg):
+            _visit(fun, visitor)
+            _visit(arg, visitor)
+        case Conditional(a, b, c):
+            _visit(a, visitor)
+            _visit(b, visitor)
+            _visit(c, visitor)
+        case Record(fields):
+            for f in fields:
+                _visit(f[1], visitor)
+        case FieldAccess(_, rec):
+            _visit(rec, visitor)
+        case _:
+            raise NotImplementedError(node)
+
+
+class FunctionFreeVars:
+    def __init__(self, node: AstNode):
+        self.vars = {}
+        visit(node, self)
+
+    def __call__(self, node: AstNode):
+        match node:
+            case Function(var, body):
+                fvs = free_vars(node)
+                self.vars[id(node)] = fvs
+            case _:
+                pass
