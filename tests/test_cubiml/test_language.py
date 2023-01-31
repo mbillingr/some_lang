@@ -1,6 +1,6 @@
 import pytest
 
-from cubiml import parser, type_checker, gen_rust, interpreter
+from cubiml import parser, type_checker, gen_cpp, gen_rust, interpreter
 
 
 def eval_in_rust(src: str) -> str:
@@ -8,6 +8,14 @@ def eval_in_rust(src: str) -> str:
     tck = type_checker.TypeChecker()
     typemap = tck.check_script(ast)
     runner = gen_rust.Runner(typemap, tck.engine)
+    return runner.run_script(ast)
+
+
+def eval_in_cpp(src: str) -> str:
+    ast = parser.parse_script(src)
+    tck = type_checker.TypeChecker()
+    typemap = tck.check_script(ast)
+    runner = gen_cpp.Runner(typemap, tck.engine)
     return runner.run_script(ast)
 
 
@@ -19,8 +27,13 @@ def eval_in_python(src: str) -> str:
     return transform_python_result(res)
 
 
-@pytest.mark.parametrize("evaluator", [eval_in_python, eval_in_rust])
+@pytest.mark.parametrize("evaluator", [eval_in_python, eval_in_rust, eval_in_cpp])
 class TestLanguage:
+    def test_just_a_literal(self, evaluator):
+        src = "true"
+        res = evaluator(src)
+        assert res == "true"
+
     def test_toplevel_binding(self, evaluator):
         src = "let x = false; x"
         res = evaluator(src)
