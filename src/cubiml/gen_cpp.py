@@ -22,7 +22,8 @@ namespace core {
 class Bool {
 public:
     bool value;
-    Bool(bool value): value(value) {}
+    Bool(bool value): value(value) {}    
+    operator bool() { return value; }
 };
 
 std::ostream &operator<<(std::ostream &os, Bool const &obj) { 
@@ -84,7 +85,7 @@ class Compiler:
         if len(self.script) > 0:
             match script:
                 case [*_, CppExprStatement(expr)]:
-                    script[-1] = CppInline(f"std::cout << {expr} << std::endl;")
+                    script[-1] = CppInline(f"std::cout << ({expr}) << std::endl;")
         script.append(CppInline("return 0;"))
 
         return CppToplevel(
@@ -114,6 +115,12 @@ class Compiler:
                 return CppLiteral("core::Bool(true)")
             case ast.Literal(False):
                 return CppLiteral("core::Bool(false)")
+            case ast.Conditional(condition, consequence, alternative):
+                a = self.compile_expr(condition, bindings)
+                b = self.compile_expr(consequence, bindings)
+                c = self.compile_expr(alternative, bindings)
+                return CppIfExpr(a, b, c)
+
             case _:
                 raise NotImplementedError(expr)
 
@@ -176,6 +183,16 @@ class CppLiteral(CppExpression):
 
     def __str__(self) -> str:
         return self.value
+
+
+@dataclasses.dataclass
+class CppIfExpr(CppExpression):
+    condition: CppExpression
+    consequence: CppExpression
+    alternative: CppExpression
+
+    def __str__(self) -> str:
+        return f"{self.condition} ? {self.consequence} : {self.alternative}"
 
 
 @dataclasses.dataclass
