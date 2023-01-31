@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import abc
 import dataclasses
+import functools
 import subprocess
 import tempfile
 import uuid
+
+import typing
 
 from biunification.type_checker import TypeCheckerCore
 from cubiml import abstract_syntax as ast, type_heads
@@ -53,7 +56,7 @@ class Runner:
             tfsrc.flush()
             try:
                 subprocess.run(
-                    ["g++", "-o", bin_name, tfsrc.name],
+                    ["g++", "-O1", "-o", bin_name, tfsrc.name],
                     check=True,
                 )
             except subprocess.CalledProcessError as e:
@@ -91,8 +94,10 @@ class Compiler:
         return CppToplevel(
             [
                 CppToplevelGroup([CppInline(f"#include {i}") for i in self.includes]),
-                CppInline(STD_DECLS),
+                # CppInline(STD_DECLS),
                 CppInline(STD_DEFS),
+                # CppToplevelGroup(self.gen_type_decls()),
+                CppToplevelGroup(self.gen_type_defs()),
                 CppFun(CppInline("int"), "main", [], script),
             ]
         )
@@ -120,9 +125,51 @@ class Compiler:
                 b = self.compile_expr(consequence, bindings)
                 c = self.compile_expr(alternative, bindings)
                 return CppIfExpr(a, b, c)
-
+            case ast.Record(fields):
+                field_initializers = {
+                    f: self.compile_expr(v, bindings) for f, v in fields
+                }
+                tname = self.get_type(self.type_of(expr))
+                assert isinstance(tname, CppRecordType)
+                return CppNewRecord(tname, field_initializers)
             case _:
                 raise NotImplementedError(expr)
+
+    @functools.lru_cache
+    def get_type(self, t: int) -> CppType:
+        match self.engine.types[t]:
+            case type_heads.VObj(fields):
+                field_types = {
+                    fn: CppLiteral(self.v_name(ft)) for fn, ft in fields.items()
+                }
+                supertypes = [
+                    CppLiteral(self.v_name(s)) for s in self.engine.r.downsets[t]
+                ]
+                return CppRecordType(self.v_name(t), field_types, supertypes)
+            case ty:
+                raise NotImplementedError(ty)
+
+    def gen_type_defs(self) -> list[CppAst]:
+        defs = []
+        for t, ty in enumerate(self.engine.types):
+            match ty:
+                case "Var":
+                    defs.append(CppLiteral(f"struct {self.v_name(t)};"))
+                case type_heads.VBool():
+                    defs.append(CppLiteral(f"typedef core::Bool {self.v_name(t)};"))
+                case type_heads.UBool():
+                    pass
+                case type_heads.VObj(fields):
+                    defs.append(CppRecordDefinition(self.get_type(t)))
+                case _:
+                    raise NotImplementedError(ty)
+        return defs
+
+    def v_name(self, t: int) -> str:
+        return f"T{t}"
+
+    def type_of(self, expr: ast.Expression) -> int:
+        return self.type_mapping[id(expr)]
 
 
 class CppAst(abc.ABC):
@@ -162,6 +209,31 @@ class CppExpression(CppAst):
 
 
 @dataclasses.dataclass
+class CppRecordType(CppType):
+    name: str
+    fields: dict[str, CppType]
+    supertypes: typing.Sequence[CppType] = ()
+
+    def __str__(self) -> str:
+        raise NotImplementedError()
+
+
+@dataclasses.dataclass
+class CppRecordDefinition(CppAst):
+    rtype: CppRecordType
+
+    def __str__(self) -> str:
+        supers = ", ".join(map(str, self.rtype.supertypes))
+        fields = "\n".join(f"{ft} {fn};" for fn, ft in self.rtype.fields.items())
+
+        cargs = ", ".join(f"{ft} {fn}" for fn, ft in self.rtype.fields.items())
+        cinit = ", ".join(f"{fn}({fn})" for fn in self.rtype.fields)
+        constructor = f"{self.rtype.name}({cargs}): {cinit} {{  }}"
+
+        return f"struct {self.rtype.name}: {supers} {{ {fields} {constructor} }};"
+
+
+@dataclasses.dataclass
 class CppExprStatement(CppStatement):
     expr: CppExpression
 
@@ -193,6 +265,17 @@ class CppIfExpr(CppExpression):
 
     def __str__(self) -> str:
         return f"{self.condition} ? {self.consequence} : {self.alternative}"
+
+
+@dataclasses.dataclass
+class CppNewRecord(CppExpression):
+    type: CppRecordType
+    fields: dict[str, CppExpression]
+
+    def __str__(self) -> str:
+        inits_exprs = [self.fields[f] for f in self.type.fields.keys()]
+        init_str = ", ".join(map(str, inits_exprs))
+        return f"{self.type.name}({init_str})"
 
 
 @dataclasses.dataclass
