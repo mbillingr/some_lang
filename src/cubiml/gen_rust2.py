@@ -15,14 +15,25 @@ from cubiml.bindings import Bindings
 
 
 STD_DEFS = """
+
+use base::Bool;
+
 mod base {
+    pub type Ref<T> = std::rc::Rc<T>;
+
+    /// The supertype of all types.
+    pub trait Top: 'static + std::fmt::Debug {}
+    impl<T: 'static + std::fmt::Debug> Top for T {}
+    
     pub trait Bool: std::fmt::Debug {
-        fn as_bool(&self) -> bool;
+        fn is_true(&self) -> bool;
     }
     
     impl Bool for bool {
-        fn as_bool(&self) -> bool { *self }
+        fn is_true(&self) -> bool { *self }
     }
+    
+    pub trait Obj: Top {}
 }
 """
 
@@ -71,7 +82,7 @@ class Compiler:
         self.engine = engine
         self.bindings = Bindings()
         self.script: list[RsStatement] = []
-        self.includes = {"<iostream>"}
+        self.script_type = None
 
     def finalize(self) -> RsAst:
         script = self.script.copy()
@@ -82,21 +93,23 @@ class Compiler:
 
         return RsToplevel(
             [
-                RsInline(STD_DEFS),
+                RsFun("main", [], None, [RsInline('println!("{:?}", script());')]),
+                RsFun("script", [], self.script_type, self.script),
                 RsToplevelGroup(self.gen_type_defs()),
-                RsFun("main", [], None, script),
+                RsInline(STD_DEFS),
             ]
         )
 
     def compile_script(self, script: ast.Script):
         for stmt in script.statements:
             self.script.extend(self.compile_toplevel(stmt))
+            self.script_type = self.v_name(self.type_of(stmt))
         self.bindings.changes.clear()
 
     def compile_toplevel(self, stmt: ast.ToplevelItem) -> list[RsStatement]:
         match stmt:
             case ast.Expression() as expr:
-                return [RsExprStatement(self.compile_expr(expr, self.bindings))]
+                return [self.compile_expr(expr, self.bindings)]
             case _:
                 raise NotImplementedError(stmt)
 
@@ -128,10 +141,7 @@ class Compiler:
                 field_types = {
                     fn: RsLiteral(self.v_name(ft)) for fn, ft in fields.items()
                 }
-                supertypes = [
-                    RsLiteral(self.v_name(s)) for s in self.engine.r.downsets[t]
-                ]
-                return RsRecordType(self.v_name(t), field_types, supertypes)
+                return RsRecordType(self.r_name(t), field_types)
             case ty:
                 raise NotImplementedError(ty)
 
@@ -140,19 +150,40 @@ class Compiler:
         for t, ty in enumerate(self.engine.types):
             match ty:
                 case "Var":
-                    defs.append(RsLiteral(f"struct {self.v_name(t)};"))
-                case type_heads.VBool():
-                    defs.append(RsLiteral(f"trait {self.v_name(t)}: base::Bool {{}}"))
-                case type_heads.UBool():
-                    pass
+                    bounds = [RsInline("base::Top")]
+                case type_heads.VBool() | type_heads.UBool():
+                    bounds = [RsInline("base::Top"), RsInline("base::Bool")]
                 case type_heads.VObj(fields):
-                    defs.append(RsRecordDefinition(self.get_type(t)))
+                    bounds = [RsInline("base::Top"), RsInline("base::Obj")]
+                    defs.append(
+                        RsRecordDefinition(
+                            RsRecordType(
+                                self.r_name(t),
+                                {f: self.v_name(ft) for f, ft in fields.items()},
+                            )
+                        )
+                    )
                 case _:
                     raise NotImplementedError(ty)
+
+            inferred_bounds = map(self.u_name, self.engine.r.downsets[t])
+            defs.append(
+                RsObjTypeDef(
+                    self.v_name(t),
+                    self.u_name(t),
+                    {*bounds, *inferred_bounds},
+                )
+            )
         return defs
 
     def v_name(self, t: int) -> str:
-        return f"T{t}"
+        return f"V{t}"
+
+    def u_name(self, t: int) -> str:
+        return f"U{t}"
+
+    def r_name(self, t: int) -> str:
+        return f"R{t}"
 
     def type_of(self, expr: ast.Expression) -> int:
         return self.type_mapping[id(expr)]
@@ -182,6 +213,21 @@ class RsToplevelGroup(RsAst):
         return "".join(map(str, self.items))
 
 
+@dataclasses.dataclass
+class RsObjTypeDef(RsAst):
+    type_name: str
+    trait_name: str
+    bounds: set[RsTrait]
+
+    def __str__(self):
+        bounds = "+".join(map(str, self.bounds))
+        return (
+            f"type {self.type_name} = base::Ref<dyn {self.trait_name}>;\n"
+            f"trait {self.trait_name}: {bounds} {{}}\n"
+            f"impl<T: {bounds}> {self.trait_name} for T {{}}\n\n"
+        )
+
+
 class RsTrait(RsAst):
     pass
 
@@ -202,7 +248,6 @@ class RsExpression(RsAst):
 class RsRecordType(RsType):
     name: str
     fields: dict[str, RsType]
-    supertypes: typing.Sequence[RsType] = ()
 
     def __str__(self) -> str:
         raise NotImplementedError()
@@ -213,10 +258,19 @@ class RsRecordDefinition(RsAst):
     rtype: RsRecordType
 
     def __str__(self) -> str:
-        supers = ", ".join(map(str, self.rtype.supertypes))
+        ordered_fields = list(reversed(self.rtype.fields.keys()))
         fields = "\n".join(f"{fn}: {ft}," for fn, ft in self.rtype.fields.items())
 
-        return f"struct {self.rtype.name} {{ {fields} }}"
+        output_template = "; ".join(f"{fn}={{:?}}" for fn in ordered_fields)
+        output_values = ", ".join(f"self.{fn}" for fn in ordered_fields)
+
+        return (
+            f"struct {self.rtype.name} {{ {fields} }}\n"
+            f"impl base::Obj for {self.rtype.name} {{}}\n"
+            f"impl std::fmt::Debug for {self.rtype.name} {{"
+            f"  fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {{"
+            f'     write!(f, "{{{{{output_template}}}}}", {output_values}) }} }}'
+        )
 
 
 @dataclasses.dataclass
@@ -227,7 +281,7 @@ class RsExprStatement(RsStatement):
         return f"{self.expr};"
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class RsInline(RsExpression, RsStatement, RsTrait, RsType):
     code: str
 
@@ -249,7 +303,7 @@ class RsNewObj(RsExpression):
     value: RsExpression
 
     def __str__(self) -> str:
-        return f"(std::rc::Rc::new({self.value}) as std::rc::Rc<dyn {self.trait}>)"
+        return f"base::Ref::new({self.value})"
 
 
 @dataclasses.dataclass
@@ -260,7 +314,7 @@ class RsIfExpr(RsExpression):
 
     def __str__(self) -> str:
         return (
-            f"if {self.condition}.as_bool() "
+            f"if {self.condition}.is_true() "
             f"{{ {self.consequence} }} else "
             f"{{ {self.alternative} }}"
         )
@@ -272,9 +326,8 @@ class RsNewRecord(RsExpression):
     fields: dict[str, RsExpression]
 
     def __str__(self) -> str:
-        inits_exprs = [self.fields[f] for f in self.type.fields.keys()]
-        init_str = ", ".join(map(str, inits_exprs))
-        return f"{self.type.name}({init_str})"
+        init_str = ", ".join(f"{f}: {x}" for f, x in self.fields.items())
+        return f"base::Ref::new({self.type.name}{{ {init_str} }})"
 
 
 @dataclasses.dataclass
