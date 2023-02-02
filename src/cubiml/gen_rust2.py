@@ -154,16 +154,14 @@ class Compiler:
             case ast.Literal(False):
                 return RsNewObj(RsLiteral("false"))
             case ast.Reference(var):
-                return RsInline(var)
+                return RsInline(f"{var}.clone()")
             case ast.Conditional(condition, consequence, alternative):
                 a = self.compile_expr(condition, bindings)
                 b = self.compile_expr(consequence, bindings)
                 c = self.compile_expr(alternative, bindings)
                 return RsIfExpr(a, b, c)
             case ast.Function(var, body):
-                with bindings.child_scope() as bindings_:
-                    # bindings_.insert(expr.var, argt)
-                    body = self.compile_expr(body, bindings_)
+                body = self.compile_expr(body, bindings)
                 return RsNewObj(RsClosure(var, body))
             case ast.Application(fun, arg):
                 f = self.compile_expr(fun, bindings)
@@ -417,7 +415,7 @@ class RsClosure(RsExpression):
     bdy: RsExpression
 
     def __str__(self) -> str:
-        return f"base::fun(|{self.var}| {{ {self.bdy} }})"
+        return f"{{ base::fun(move |{self.var}| {{ {self.bdy} }}) }}"
 
 
 @dataclasses.dataclass

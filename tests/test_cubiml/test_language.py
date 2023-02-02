@@ -51,6 +51,11 @@ class TestLanguage:
         res = evaluator(src)
         assert res == "{}"
 
+    def test_let_over_lambda(self, evaluator):
+        src = "(let x = {} in fun y -> x) true"
+        res = evaluator(src)
+        assert res == "{}"
+
     def test_conditional(self, evaluator):
         src = "if true then false else true"
         res = evaluator(src)
