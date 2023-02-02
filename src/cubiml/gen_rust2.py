@@ -16,7 +16,7 @@ from cubiml.bindings import Bindings
 
 STD_DEFS = """
 
-use base::Bool;
+use base::{Bool, Fun, Obj};
 
 mod base {
     pub type Ref<T> = std::rc::Rc<T>;
@@ -31,6 +31,32 @@ mod base {
     
     impl Bool for bool {
         fn is_true(&self) -> bool { *self }
+    }
+    
+    pub trait Fun<A,R>: Top {
+        fn apply(&self, a: A) -> R;
+    }
+
+    pub fn fun<A, R, F>(f: F) -> Ref<Function<A, R, F>> {
+        Ref::new(Function(f, std::marker::PhantomData))
+    }
+    
+    pub struct Function<A, R, F>(F, std::marker::PhantomData<(A,R)>);
+
+    impl<A: Top, R: Top, F> Fun<A, R> for Function<A, R, F>
+    where F: 'static + Fn(A)->R
+    {
+        fn apply(&self, a: A) -> R {
+            (self.0)(a)
+        }
+    }
+    
+    impl<A, R, F> std::fmt::Debug for Function<A, R, F> {
+        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "<fun {} -> {}>", 
+                   std::any::type_name::<A>(), 
+                   std::any::type_name::<R>())
+        }
     }
     
     pub trait Obj: Top {}
@@ -129,6 +155,15 @@ class Compiler:
                 b = self.compile_expr(consequence, bindings)
                 c = self.compile_expr(alternative, bindings)
                 return RsIfExpr(a, b, c)
+            case ast.Function(var, body):
+                with bindings.child_scope() as bindings_:
+                    # bindings_.insert(expr.var, argt)
+                    body = self.compile_expr(body, bindings_)
+                return RsClosure(var, body)
+            case ast.Application(fun, arg):
+                f = self.compile_expr(fun, bindings)
+                a = self.compile_expr(arg, bindings)
+                return RsApply(f, a)
             case ast.Record(fields):
                 field_initializers = {
                     f: self.compile_expr(v, bindings) for f, v in fields
@@ -158,6 +193,10 @@ class Compiler:
                     bounds = [RsInline("base::Top")]
                 case type_heads.VBool() | type_heads.UBool():
                     bounds = [RsInline("base::Top"), RsInline("base::Bool")]
+                case type_heads.VFunc(arg, ret) | type_heads.UFunc(arg, ret):
+                    a = self.v_name(arg)
+                    r = self.v_name(ret)
+                    bounds = [RsInline("base::Top"), RsInline(f"base::Fun<{a},{r}>")]
                 case type_heads.VObj(fields):
                     bounds = [RsInline("base::Top"), RsInline("base::Obj")]
                     defs.append(
@@ -318,6 +357,24 @@ class RsNewObj(RsExpression):
 
     def __str__(self) -> str:
         return f"base::Ref::new({self.value})"
+
+
+@dataclasses.dataclass
+class RsClosure(RsExpression):
+    var: str
+    bdy: RsExpression
+
+    def __str__(self) -> str:
+        return f"base::fun(|{self.var}| {{ {self.bdy} }})"
+
+
+@dataclasses.dataclass
+class RsApply(RsExpression):
+    fun: RsExpression
+    arg: RsExpression
+
+    def __str__(self) -> str:
+        return f"{self.fun}.apply({self.arg})"
 
 
 @dataclasses.dataclass
