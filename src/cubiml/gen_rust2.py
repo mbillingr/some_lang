@@ -178,6 +178,10 @@ class Compiler:
                 return RsNewObj(RsNewRecord(tname, field_initializers))
             case ast.FieldAccess(field, obj):
                 return RsGetField(field, self.compile_expr(obj, bindings))
+            case ast.Let(var, val, body):
+                v = self.compile_expr(val, bindings)
+                b = self.compile_expr(body, bindings)
+                return RsBlock([RsInline(f"let {var} = {v};")], b)
             case _:
                 raise NotImplementedError(expr)
 
@@ -370,6 +374,16 @@ class RsInline(RsExpression, RsStatement, RsTrait, RsType):
 
     def __str__(self) -> str:
         return self.code
+
+
+@dataclasses.dataclass
+class RsBlock(RsExpression):
+    stmts: list[RsStatement]
+    final_expr: RsExpression
+
+    def __str__(self) -> str:
+        stmts = "\n".join(map(str, self.stmts))
+        return f"{{ {stmts} \n {self.final_expr} }}"
 
 
 @dataclasses.dataclass
