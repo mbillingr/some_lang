@@ -13,10 +13,12 @@ from biunification.type_checker import TypeCheckerCore
 from cubiml import abstract_syntax as ast, type_heads
 from cubiml.bindings import Bindings
 
+STD_HEADER = """
+#![feature(trait_upcasting)]
+"""
 
 STD_DEFS = """
-
-use base::{Bool, Fun, Obj};
+use base::{Bool, Func, Record};
 
 mod base {
     pub type Ref<T> = std::rc::Rc<T>;
@@ -33,17 +35,17 @@ mod base {
         fn is_true(&self) -> bool { *self }
     }
     
-    pub trait Fun<A,R>: Top {
+    pub trait Func<A,R>: Top {
         fn apply(&self, a: A) -> R;
     }
 
-    pub fn fun<A, R, F>(f: F) -> Ref<Function<A, R, F>> {
-        Ref::new(Function(f, std::marker::PhantomData))
+    pub fn fun<A, R, F>(f: F) -> Function<A, R, F> {
+        Function(f, std::marker::PhantomData)
     }
     
     pub struct Function<A, R, F>(F, std::marker::PhantomData<(A,R)>);
 
-    impl<A: Top, R: Top, F> Fun<A, R> for Function<A, R, F>
+    impl<A: Top, R: Top, F> Func<A, R> for Function<A, R, F>
     where F: 'static + Fn(A)->R
     {
         fn apply(&self, a: A) -> R {
@@ -59,7 +61,7 @@ mod base {
         }
     }
     
-    pub trait Obj: Top {}
+    pub trait Record: Top {}
 }
 """
 
@@ -109,6 +111,7 @@ class Compiler:
         self.bindings = Bindings()
         self.script: list[RsStatement] = []
         self.script_type = None
+        self.common_trait_defs: set[RsAst] = set()
 
     def finalize(self) -> RsAst:
         script = self.script.copy()
@@ -119,9 +122,11 @@ class Compiler:
 
         return RsToplevel(
             [
+                RsInline(STD_HEADER),
                 RsFun("main", [], None, [RsInline('println!("{:?}", script());')]),
                 RsFun("script", [], self.script_type, self.script),
                 RsToplevelGroup(self.gen_type_defs()),
+                RsToplevelGroup(list(self.common_trait_defs)),
                 RsInline(STD_DEFS),
             ]
         )
@@ -145,9 +150,9 @@ class Compiler:
     def compile_expr(self, expr: ast.Expression, bindings: Bindings[RsType]):
         match expr:
             case ast.Literal(True):
-                return RsNewObj(RsInline("base::Bool"), RsLiteral("true"))
+                return RsNewObj(RsLiteral("true"))
             case ast.Literal(False):
-                return RsNewObj(RsInline("base::Bool"), RsLiteral("false"))
+                return RsNewObj(RsLiteral("false"))
             case ast.Reference(var):
                 return RsInline(var)
             case ast.Conditional(condition, consequence, alternative):
@@ -159,7 +164,7 @@ class Compiler:
                 with bindings.child_scope() as bindings_:
                     # bindings_.insert(expr.var, argt)
                     body = self.compile_expr(body, bindings_)
-                return RsClosure(var, body)
+                return RsNewObj(RsClosure(var, body))
             case ast.Application(fun, arg):
                 f = self.compile_expr(fun, bindings)
                 a = self.compile_expr(arg, bindings)
@@ -170,7 +175,9 @@ class Compiler:
                 }
                 tname = self.get_type(self.type_of(expr))
                 assert isinstance(tname, RsRecordType)
-                return RsNewRecord(tname, field_initializers)
+                return RsNewObj(RsNewRecord(tname, field_initializers))
+            case ast.FieldAccess(field, obj):
+                return RsGetField(field, self.compile_expr(obj, bindings))
             case _:
                 raise NotImplementedError(expr)
 
@@ -196,9 +203,9 @@ class Compiler:
                 case type_heads.VFunc(arg, ret) | type_heads.UFunc(arg, ret):
                     a = self.v_name(arg)
                     r = self.v_name(ret)
-                    bounds = [RsInline("base::Top"), RsInline(f"base::Fun<{a},{r}>")]
+                    bounds = [RsInline("base::Top"), RsInline(f"base::Func<{a},{r}>")]
                 case type_heads.VObj(fields):
-                    bounds = [RsInline("base::Top"), RsInline("base::Obj")]
+                    bounds = [RsInline("base::Top"), RsInline("base::Record")]
                     defs.append(
                         RsRecordDefinition(
                             RsRecordType(
@@ -207,6 +214,12 @@ class Compiler:
                             )
                         )
                     )
+                    for f, _ in fields.items():
+                        self.common_trait_defs.add(RsHasFieldDefinition(f))
+                case type_heads.UObj(field, ft):
+                    f = self.v_name(ft)
+                    bounds = [RsInline("base::Top"), RsInline(f"Has{field}<{f}>")]
+                    self.common_trait_defs.add(RsHasFieldDefinition(field))
                 case _:
                     raise NotImplementedError(ty)
 
@@ -297,6 +310,15 @@ class RsRecordType(RsType):
         raise NotImplementedError()
 
 
+@dataclasses.dataclass(frozen=True)
+class RsHasFieldDefinition(RsAst):
+    field: str
+
+    def __str__(self) -> str:
+        f = self.field
+        return f"trait Has{f}<T> {{ fn get_{f}(&self) -> T; }}"
+
+
 @dataclasses.dataclass
 class RsRecordDefinition(RsAst):
     rtype: RsRecordType
@@ -305,15 +327,23 @@ class RsRecordDefinition(RsAst):
         ordered_fields = list(reversed(self.rtype.fields.keys()))
         fields = "\n".join(f"{fn}: {ft}," for fn, ft in self.rtype.fields.items())
 
+        getters = []
+        for fn, ft in self.rtype.fields.items():
+            getters.append(
+                f"impl Has{fn}<{ft}> for {self.rtype.name} "
+                f"{{ fn get_{fn}(&self) -> {ft} {{ self.{fn}.clone() }} }}"
+            )
+
         output_template = "; ".join(f"{fn}={{:?}}" for fn in ordered_fields)
         output_values = ", ".join(f"self.{fn}" for fn in ordered_fields)
 
         return (
             f"struct {self.rtype.name} {{ {fields} }}\n"
-            f"impl base::Obj for {self.rtype.name} {{}}\n"
+            f"impl base::Record for {self.rtype.name} {{}}\n"
             f"impl std::fmt::Debug for {self.rtype.name} {{"
             f"  fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {{"
             f'     write!(f, "{{{{{output_template}}}}}", {output_values}) }} }}'
+            + "\n".join(getters)
         )
 
 
@@ -352,11 +382,19 @@ class RsLiteral(RsExpression):
 
 @dataclasses.dataclass
 class RsNewObj(RsExpression):
-    trait: RsTrait
     value: RsExpression
 
     def __str__(self) -> str:
         return f"base::Ref::new({self.value})"
+
+
+@dataclasses.dataclass
+class RsGetField(RsExpression):
+    field: str
+    record: RsExpression
+
+    def __str__(self) -> str:
+        return f"{self.record}.get_{self.field}()"
 
 
 @dataclasses.dataclass
@@ -398,7 +436,7 @@ class RsNewRecord(RsExpression):
 
     def __str__(self) -> str:
         init_str = ", ".join(f"{f}: {x}" for f, x in self.fields.items())
-        return f"base::Ref::new({self.type.name}{{ {init_str} }})"
+        return f"{self.type.name}{{ {init_str} }}"
 
 
 @dataclasses.dataclass
