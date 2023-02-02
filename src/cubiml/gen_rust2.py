@@ -103,13 +103,16 @@ class Compiler:
     def compile_script(self, script: ast.Script):
         for stmt in script.statements:
             self.script.extend(self.compile_toplevel(stmt))
-            self.script_type = self.v_name(self.type_of(stmt))
+            if isinstance(stmt, ast.Expression):
+                self.script_type = self.v_name(self.type_of(stmt))
         self.bindings.changes.clear()
 
     def compile_toplevel(self, stmt: ast.ToplevelItem) -> list[RsStatement]:
         match stmt:
             case ast.Expression() as expr:
                 return [self.compile_expr(expr, self.bindings)]
+            case ast.DefineLet(var, val):
+                return [RsLetStatement(var, self.compile_expr(val, self.bindings))]
             case _:
                 raise NotImplementedError(stmt)
 
@@ -119,6 +122,8 @@ class Compiler:
                 return RsNewObj(RsInline("base::Bool"), RsLiteral("true"))
             case ast.Literal(False):
                 return RsNewObj(RsInline("base::Bool"), RsLiteral("false"))
+            case ast.Reference(var):
+                return RsInline(var)
             case ast.Conditional(condition, consequence, alternative):
                 a = self.compile_expr(condition, bindings)
                 b = self.compile_expr(consequence, bindings)
@@ -271,6 +276,15 @@ class RsRecordDefinition(RsAst):
             f"  fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {{"
             f'     write!(f, "{{{{{output_template}}}}}", {output_values}) }} }}'
         )
+
+
+@dataclasses.dataclass
+class RsLetStatement(RsStatement):
+    var: str
+    val: RsExpression
+
+    def __str__(self):
+        return f"let {self.var} = {self.val};"
 
 
 @dataclasses.dataclass
