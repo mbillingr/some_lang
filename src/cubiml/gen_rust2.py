@@ -161,8 +161,9 @@ class Compiler:
                 c = self.compile_expr(alternative, bindings)
                 return RsIfExpr(a, b, c)
             case ast.Function(var, body):
+                vty = self.engine.types[self.type_of(expr)].arg
                 body = self.compile_expr(body, bindings)
-                return RsNewObj(RsClosure(var, body))
+                return RsNewObj(RsClosure(var, RsInline(self.v_name(vty)), body))
             case ast.Application(fun, arg):
                 f = self.compile_expr(fun, bindings)
                 a = self.compile_expr(arg, bindings)
@@ -412,10 +413,11 @@ class RsGetField(RsExpression):
 @dataclasses.dataclass
 class RsClosure(RsExpression):
     var: str
+    vty: RsType
     bdy: RsExpression
 
     def __str__(self) -> str:
-        return f"{{ base::fun(move |{self.var}| {{ {self.bdy} }}) }}"
+        return f"{{ base::fun(move |{self.var}: {self.vty}| {{ {self.bdy} }}) }}"
 
 
 @dataclasses.dataclass
