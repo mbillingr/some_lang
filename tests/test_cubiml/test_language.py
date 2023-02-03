@@ -71,10 +71,10 @@ class TestLanguage:
         src = """
             let rec turn = fun x -> foo true
                 and foo = fun x -> if x then x else turn x;
-            turn
+            foo false
         """
         res = evaluator(src)
-        assert res == "<fun>"
+        assert res == "true"
 
     def test_record_and_field_access(self, evaluator):
         src = """

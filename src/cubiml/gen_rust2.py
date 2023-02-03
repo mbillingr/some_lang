@@ -144,10 +144,12 @@ class Compiler:
                 return [self.compile_expr(expr)]
             case ast.DefineLet(var, val):
                 return [RsLetStatement(var, self.compile_expr(val))]
+            case ast.DefineLetRec():
+                return self.compile_letrec(stmt)
             case _:
                 raise NotImplementedError(stmt)
 
-    def compile_expr(self, expr: ast.Expression):
+    def compile_expr(self, expr: ast.Expression) -> RsExpression:
         match expr:
             case ast.Literal(True):
                 return RsNewObj(RsLiteral("true"))
@@ -162,8 +164,16 @@ class Compiler:
                 return RsIfExpr(a, b, c)
             case ast.Function(var, body):
                 vty = self.engine.types[self.type_of(expr)].arg
+                rty = self.engine.types[self.type_of(expr)].ret
                 body = self.compile_expr(body)
-                return RsNewObj(RsClosure(var, RsInline(self.v_name(vty)), body))
+                return RsNewObj(
+                    RsClosure(
+                        var,
+                        RsInline(self.v_name(vty)),
+                        RsInline(self.v_name(rty)),
+                        body,
+                    )
+                )
             case ast.Application(fun, arg):
                 f = self.compile_expr(fun)
                 a = self.compile_expr(arg)
@@ -179,28 +189,28 @@ class Compiler:
                 v = self.compile_expr(val)
                 b = self.compile_expr(body)
                 return RsBlock([RsInline(f"let {var} = {v};")], b)
-            case ast.LetRec(_, _):
-                return self.compile_letrec(expr)
+            case ast.LetRec():
+                return RsBlock(
+                    self.compile_letrec(expr),
+                    self.compile_expr(expr.body),
+                )
             case _:
                 raise NotImplementedError(expr)
 
-    def compile_letrec(self, expr):
-        bind, body = expr.bind, expr.body
+    def compile_letrec(self, expr: ast.LetRec) -> list[RsStatement]:
+        bind = expr.bind
         name = f"letrec{id(expr)}"
         bound_names = set(fdef.name for fdef in bind)
         fvs = itertools.chain(
             *(free_vars(fdef.fun, self.type_mapping) for fdef in bind)
         )
         fvs = {v: RsLiteral(self.v_name(ty)) for v, ty in fvs if v not in bound_names}
-
         arg_types = [
             self.v_name(self.engine.types[self.type_of(fdef.fun)].arg) for fdef in bind
         ]
-
         ret_types = [
             self.v_name(self.engine.types[self.type_of(fdef.fun)].ret) for fdef in bind
         ]
-
         fndefs = [
             (
                 fdef.name,
@@ -212,32 +222,31 @@ class Compiler:
             for fdef, argt, rett in zip(bind, arg_types, ret_types)
         ]
         self.toplevel_defs.append(RsMutualClosure(name, fvs, fndefs))
-
-        b = self.compile_expr(body)
         capture = ", ".join(f"{v}:{v}.clone()" for v in fvs)
-
-        return RsBlock(
-            [
+        statements = [
+            RsLetStatement(
+                "cls",
+                RsNewObj(RsInline(f"{name}::Closure {{ {capture} }}")),
+            ),
+            *(
                 RsLetStatement(
-                    "cls",
-                    RsNewObj(RsInline(f"{name}::Closure {{ {capture} }}")),
-                ),
-                *(
-                    RsLetStatement(
-                        fdef.name,
+                    fdef.name,
+                    RsBlock(
+                        [RsInline("let cls = cls.clone();")],
                         RsNewObj(
                             RsClosure(
                                 fdef.fun.var,
                                 RsInline(aty),
+                                RsInline(rty),
                                 RsInline(f"{name}::{fdef.name}({fdef.fun.var}, &*cls)"),
                             )
                         ),
-                    )
-                    for fdef, aty in zip(bind, arg_types)
-                ),
-            ],
-            b,
-        )
+                    ),
+                )
+                for fdef, aty, rty in zip(bind, arg_types, ret_types)
+            ),
+        ]
+        return statements
 
     @functools.lru_cache
     def get_type(self, t: int) -> RsType:
@@ -438,6 +447,15 @@ class RsLetStatement(RsStatement):
 
 
 @dataclasses.dataclass
+class RsLetStatement(RsStatement):
+    var: str
+    val: RsExpression
+
+    def __str__(self):
+        return f"let {self.var} = {self.val};"
+
+
+@dataclasses.dataclass
 class RsExprStatement(RsStatement):
     expr: RsExpression
 
@@ -500,10 +518,14 @@ class RsGetField(RsExpression):
 class RsClosure(RsExpression):
     var: str
     vty: RsType
+    rty: RsType
     bdy: RsExpression
 
     def __str__(self) -> str:
-        return f"{{ base::fun(move |{self.var}: {self.vty}| {{ {self.bdy} }}) }}"
+        return (
+            f"{{ base::fun::<{self.vty}, {self.rty}, _>"
+            f"(move |{self.var}: {self.vty}| -> {self.rty} {{ {self.bdy} }}) }}"
+        )
 
 
 @dataclasses.dataclass
