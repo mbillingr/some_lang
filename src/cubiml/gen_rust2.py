@@ -12,7 +12,6 @@ import typing
 
 from biunification.type_checker import TypeCheckerCore
 from cubiml import abstract_syntax as ast, type_heads
-from cubiml.bindings import Bindings
 
 STD_HEADER = """
 #![feature(trait_upcasting)]
@@ -109,7 +108,6 @@ class Compiler:
     def __init__(self, type_mapping, engine: TypeCheckerCore):
         self.type_mapping = type_mapping
         self.engine = engine
-        self.bindings = Bindings()
         self.script: list[RsStatement] = []
         self.script_type = None
         self.common_trait_defs: set[RsAst] = set()
@@ -139,18 +137,17 @@ class Compiler:
             self.script.extend(self.compile_toplevel(stmt))
             if isinstance(stmt, ast.Expression):
                 self.script_type = self.v_name(self.type_of(stmt))
-        self.bindings.changes.clear()
 
     def compile_toplevel(self, stmt: ast.ToplevelItem) -> list[RsStatement]:
         match stmt:
             case ast.Expression() as expr:
-                return [self.compile_expr(expr, self.bindings)]
+                return [self.compile_expr(expr)]
             case ast.DefineLet(var, val):
-                return [RsLetStatement(var, self.compile_expr(val, self.bindings))]
+                return [RsLetStatement(var, self.compile_expr(val))]
             case _:
                 raise NotImplementedError(stmt)
 
-    def compile_expr(self, expr: ast.Expression, bindings: Bindings[RsType]):
+    def compile_expr(self, expr: ast.Expression):
         match expr:
             case ast.Literal(True):
                 return RsNewObj(RsLiteral("true"))
@@ -159,37 +156,35 @@ class Compiler:
             case ast.Reference(var):
                 return RsReference(var)
             case ast.Conditional(condition, consequence, alternative):
-                a = self.compile_expr(condition, bindings)
-                b = self.compile_expr(consequence, bindings)
-                c = self.compile_expr(alternative, bindings)
+                a = self.compile_expr(condition)
+                b = self.compile_expr(consequence)
+                c = self.compile_expr(alternative)
                 return RsIfExpr(a, b, c)
             case ast.Function(var, body):
                 vty = self.engine.types[self.type_of(expr)].arg
-                body = self.compile_expr(body, bindings)
+                body = self.compile_expr(body)
                 return RsNewObj(RsClosure(var, RsInline(self.v_name(vty)), body))
             case ast.Application(fun, arg):
-                f = self.compile_expr(fun, bindings)
-                a = self.compile_expr(arg, bindings)
+                f = self.compile_expr(fun)
+                a = self.compile_expr(arg)
                 return RsApply(f, a)
             case ast.Record(fields):
-                field_initializers = {
-                    f: self.compile_expr(v, bindings) for f, v in fields
-                }
+                field_initializers = {f: self.compile_expr(v) for f, v in fields}
                 tname = self.get_type(self.type_of(expr))
                 assert isinstance(tname, RsRecordType)
                 return RsNewObj(RsNewRecord(tname, field_initializers))
             case ast.FieldAccess(field, obj):
-                return RsGetField(field, self.compile_expr(obj, bindings))
+                return RsGetField(field, self.compile_expr(obj))
             case ast.Let(var, val, body):
-                v = self.compile_expr(val, bindings)
-                b = self.compile_expr(body, bindings)
+                v = self.compile_expr(val)
+                b = self.compile_expr(body)
                 return RsBlock([RsInline(f"let {var} = {v};")], b)
             case ast.LetRec(_, _):
-                return self.compile_letrec(expr, bindings)
+                return self.compile_letrec(expr)
             case _:
                 raise NotImplementedError(expr)
 
-    def compile_letrec(self, expr, bindings):
+    def compile_letrec(self, expr):
         bind, body = expr.bind, expr.body
         name = f"letrec{id(expr)}"
         bound_names = set(fdef.name for fdef in bind)
@@ -212,13 +207,13 @@ class Compiler:
                 fdef.fun.var,
                 argt,
                 rett,
-                replace_calls(bound_names, self.compile_expr(fdef.fun.body, bindings)),
+                replace_calls(bound_names, self.compile_expr(fdef.fun.body)),
             )
             for fdef, argt, rett in zip(bind, arg_types, ret_types)
         ]
         self.toplevel_defs.append(RsMutualClosure(name, fvs, fndefs))
 
-        b = self.compile_expr(body, bindings)
+        b = self.compile_expr(body)
         capture = ", ".join(f"{v}:{v}.clone()" for v in fvs)
 
         return RsBlock(
