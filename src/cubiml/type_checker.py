@@ -30,6 +30,8 @@ class TypeChecker:
             self.bindings.unwind(0)
             raise
 
+        self.engine.collapse_cycles()
+
         # persist changes
         self.bindings.changes.clear()
         return type_map

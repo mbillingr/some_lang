@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+from copy import deepcopy
 
 import pytest
 
@@ -50,6 +51,49 @@ def test_type_fail_through_var():
     with pytest.raises(TypeError):
         tc.flow(v, b)
         tc.flow(f, u)
+
+
+def test_no_cycles_to_collapse():
+    tc = TypeCheckerCore()
+    v1, u1 = tc.var()
+    v2, u2 = tc.var()
+    tc.flow(v1, u2)
+
+    original = deepcopy(tc)
+    tc.collapse_cycles()
+
+    assert tc.types == original.types
+    assert tc.r == original.r
+
+
+def test_collapse_simple_cycle():
+    tc = TypeCheckerCore()
+    v0, _ = tc.var()
+    v1, u1 = tc.var()
+    v3, u2 = tc.var()
+    tc.flow(v0, u1)
+    tc.flow(v1, u2)
+    tc.flow(v3, u1)
+
+    tc.collapse_cycles()
+
+    assert tc.types == ["Var", "Var", "erased"]
+    assert tc.r.downsets[0] == {1}
+    assert tc.r.upsets[0] == set()
+    assert tc.r.downsets[1] == set()
+    assert tc.r.upsets[1] == {0}
+
+
+def test_collapse_self_cycle():
+    tc = TypeCheckerCore()
+    v1, u1 = tc.var()
+    tc.flow(v1, u1)
+
+    tc.collapse_cycles()
+
+    assert tc.types == ["Var"]
+    assert tc.r.downsets[0] == set()
+    assert tc.r.upsets[0] == set()
 
 
 @dataclasses.dataclass

@@ -21,6 +21,10 @@ class Assoc(abc.ABC, Generic[T]):
     def items(self) -> typing.Iterator[tuple[str, T]]:
         pass
 
+    @abc.abstractmethod
+    def substitute(self, x_old, x_new) -> Assoc[T]:
+        pass
+
 
 @dataclasses.dataclass(frozen=True)
 class AssocEmpty(Assoc[T]):
@@ -29,6 +33,9 @@ class AssocEmpty(Assoc[T]):
 
     def items(self) -> typing.Iterator[tuple[str, T]]:
         return iter(())
+
+    def substitute(self, x_old, x_new) -> Assoc[T]:
+        return self
 
 
 @dataclasses.dataclass(frozen=True)
@@ -45,6 +52,13 @@ class AssocItem(Assoc[T]):
     def items(self) -> typing.Iterator[tuple[str, T]]:
         yield self.key, self.val
         yield from self.next.items()
+
+    def substitute(self, x_old, x_new) -> Assoc[T]:
+        return AssocItem(
+            self.key,
+            x_new if self.val == x_old else self.val,
+            self.next.substitute(x_old, x_new),
+        )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -84,6 +98,9 @@ class VObj(VTypeHead):
             fields = AssocItem(k, v, fields)
         return VObj(fields)
 
+    def substitute(self, t_old, t_new):
+        return VObj(self.fields.substitute(t_old, t_new))
+
 
 @dataclasses.dataclass(frozen=True)
 class UObj(UTypeHead):
@@ -98,11 +115,17 @@ class UObj(UTypeHead):
         except KeyError:
             raise TypeError("Missing Field", self.field) from None
 
+    def substitute(self, t_old, t_new):
+        return UObj(self.field, t_new if self.use == t_old else t_new)
+
 
 @dataclasses.dataclass(frozen=True)
 class VCase(VTypeHead):
     tag: str
     typ: Value
+
+    def substitute(self, t_old, t_new):
+        return VCase(self.tag, t_new if self.typ == t_old else self.typ)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -124,11 +147,20 @@ class UCase(UTypeHead):
             cases = AssocItem(k, v, cases)
         return UCase(cases)
 
+    def substitute(self, t_old, t_new):
+        return UCase(self.cases.substitute(t_old, t_new))
+
 
 @dataclasses.dataclass(frozen=True)
 class VFunc(VTypeHead):
     arg: Use
     ret: Value
+
+    def substitute(self, t_old, t_new):
+        return VFunc(
+            t_new if self.arg == t_old else self.arg,
+            t_new if self.ret == t_old else self.ret,
+        )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -140,3 +172,9 @@ class UFunc(UTypeHead):
         if not isinstance(val, VFunc):
             raise TypeError(self, val)
         return [(val.ret, self.ret), (self.arg, val.arg)]
+
+    def substitute(self, t_old, t_new):
+        return UFunc(
+            t_new if self.arg == t_old else self.arg,
+            t_new if self.ret == t_old else self.ret,
+        )

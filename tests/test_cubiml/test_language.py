@@ -10,6 +10,7 @@ def eval_in_rust(src: str) -> str:
     runner = gen_rust.Runner(typemap, tck.engine)
     return runner.run_script(ast)
 
+
 def eval_in_rust2(src: str) -> str:
     ast = parser.parse_script(src)
     tck = type_checker.TypeChecker()
@@ -94,7 +95,7 @@ class TestLanguage:
         assert res == "{}"
 
     def test_letrec_expression(self, evaluator):
-        src = "(let rec foo = fun x -> if x then foo false else true in foo true)"
+        src = "(let r = true in (let rec foo = fun x -> if x then foo false else r in foo true))"
         res = evaluator(src)
         assert res == "true"
 

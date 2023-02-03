@@ -12,6 +12,9 @@ class VTypeHead(abc.ABC):
         for field in dataclasses.fields(self):
             yield field.name, getattr(self, field.name)
 
+    def substitute(self, t_old, t_new) -> VTypeHead:
+        return self
+
 
 class UTypeHead(abc.ABC):
     @abc.abstractmethod
@@ -22,6 +25,9 @@ class UTypeHead(abc.ABC):
         # the default impl assumes dataclasses
         for field in dataclasses.fields(self):
             yield field.name, getattr(self, field.name)
+
+    def substitute(self, t_old, t_new) -> UTypeHead:
+        return self
 
 
 TypeNode: typing.TypeAlias = typing.Literal["Var"] | VTypeHead | UTypeHead
@@ -137,6 +143,62 @@ class TypeCheckerCore:
             vts |= self.all_upvtypes(v, seen)
 
         return vts
+
+    def collapse_cycles(self):
+        while True:
+            cycle = self._find_cycle()
+            if not cycle:
+                return
+
+            if not all(self.types[t] == "Var" for t in cycle):
+                raise NotImplementedError(
+                    "Non-var part of cycle -- don't know what to do..."
+                )
+
+            t0 = min(cycle)  # keep lowest type nr
+            cycle = [t for t in cycle if t != t0]
+
+            for t in cycle:
+                self.types[t] = "erased"
+                self.r.remove_node(t)
+                self.types = [
+                    th if isinstance(th, str) else th.substitute(t, t0)
+                    for th in self.types
+                ]
+
+    def _find_cycle(self):
+        not_part_of_cycle = [False] * len(self.types)
+        visited = [False] * len(self.types)
+
+        cycle = []
+
+        class CycleDetected(Exception):
+            pass
+
+        def dfs(t):
+            nonlocal cycle
+            if not_part_of_cycle[t]:
+                return
+            if visited[t]:
+                raise CycleDetected(cycle)
+            visited[t] = True
+            for u in self.r.downsets[t]:
+                try:
+                    dfs(u)
+                except CycleDetected:
+                    if len(cycle) < 2 or cycle[0] != cycle[-1]:
+                        cycle.append(u)
+                    raise
+            not_part_of_cycle[t] = True
+
+        try:
+            for t in range(len(self.types)):
+                dfs(t)
+        except CycleDetected:
+            if len(cycle) < 2 or cycle[0] != cycle[-1]:
+                cycle.append(t)
+            return cycle
+        return None
 
 
 def check_heads(lhs: VTypeHead, rhs: UTypeHead) -> list[tuple[Value, Use]]:

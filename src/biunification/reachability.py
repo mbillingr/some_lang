@@ -16,6 +16,9 @@ class Reachability:
         return i
 
     def add_edge(self, lhs: Node, rhs: Node) -> list[tuple[Node, Node]]:
+        if lhs == rhs:
+            return []
+
         if rhs in self.downsets[lhs]:
             return []
 
@@ -30,3 +33,22 @@ class Reachability:
             out += self.add_edge(lhs, rhs2)
 
         return out
+
+    def remove_node(self, n: Node):
+        self.downsets[n] = set()
+        self.upsets[n] = set()
+
+        for ds in self.downsets:
+            try:
+                ds.remove(n)
+            except KeyError:
+                pass
+
+        for us in self.upsets:
+            try:
+                us.remove(n)
+            except KeyError:
+                pass
+
+    def __eq__(self, other):
+        return self.upsets == other.upsets and self.downsets == other.downsets

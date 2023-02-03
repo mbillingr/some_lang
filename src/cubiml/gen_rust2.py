@@ -3,6 +3,7 @@ from __future__ import annotations
 import abc
 import dataclasses
 import functools
+import itertools
 import subprocess
 import tempfile
 import uuid
@@ -112,6 +113,7 @@ class Compiler:
         self.script: list[RsStatement] = []
         self.script_type = None
         self.common_trait_defs: set[RsAst] = set()
+        self.toplevel_defs: list[RsAst] = []
 
     def finalize(self) -> RsAst:
         script = self.script.copy()
@@ -125,6 +127,7 @@ class Compiler:
                 RsInline(STD_HEADER),
                 RsFun("main", [], None, [RsInline('println!("{:?}", script());')]),
                 RsFun("script", [], self.script_type, self.script),
+                RsToplevelGroup(self.toplevel_defs),
                 RsToplevelGroup(self.gen_type_defs()),
                 RsToplevelGroup(list(self.common_trait_defs)),
                 RsInline(STD_DEFS),
@@ -154,7 +157,7 @@ class Compiler:
             case ast.Literal(False):
                 return RsNewObj(RsLiteral("false"))
             case ast.Reference(var):
-                return RsInline(f"{var}.clone()")
+                return RsReference(var)
             case ast.Conditional(condition, consequence, alternative):
                 a = self.compile_expr(condition, bindings)
                 b = self.compile_expr(consequence, bindings)
@@ -181,8 +184,65 @@ class Compiler:
                 v = self.compile_expr(val, bindings)
                 b = self.compile_expr(body, bindings)
                 return RsBlock([RsInline(f"let {var} = {v};")], b)
+            case ast.LetRec(_, _):
+                return self.compile_letrec(expr, bindings)
             case _:
                 raise NotImplementedError(expr)
+
+    def compile_letrec(self, expr, bindings):
+        bind, body = expr.bind, expr.body
+        name = f"letrec{id(expr)}"
+        bound_names = set(fdef.name for fdef in bind)
+        fvs = itertools.chain(
+            *(free_vars(fdef.fun, self.type_mapping) for fdef in bind)
+        )
+        fvs = {v: RsLiteral(self.v_name(ty)) for v, ty in fvs if v not in bound_names}
+
+        arg_types = [
+            self.v_name(self.engine.types[self.type_of(fdef.fun)].arg) for fdef in bind
+        ]
+
+        ret_types = [
+            self.v_name(self.engine.types[self.type_of(fdef.fun)].ret) for fdef in bind
+        ]
+
+        fndefs = [
+            (
+                fdef.name,
+                fdef.fun.var,
+                argt,
+                rett,
+                replace_calls(bound_names, self.compile_expr(fdef.fun.body, bindings)),
+            )
+            for fdef, argt, rett in zip(bind, arg_types, ret_types)
+        ]
+        self.toplevel_defs.append(RsMutualClosure(name, fvs, fndefs))
+
+        b = self.compile_expr(body, bindings)
+        capture = ", ".join(f"{v}:{v}.clone()" for v in fvs)
+
+        return RsBlock(
+            [
+                RsLetStatement(
+                    "cls",
+                    RsNewObj(RsInline(f"{name}::Closure {{ {capture} }}")),
+                ),
+                *(
+                    RsLetStatement(
+                        fdef.name,
+                        RsNewObj(
+                            RsClosure(
+                                fdef.fun.var,
+                                RsInline(aty),
+                                RsInline(f"{name}::{fdef.name}({fdef.fun.var}, &*cls)"),
+                            )
+                        ),
+                    )
+                    for fdef, aty in zip(bind, arg_types)
+                ),
+            ],
+            b,
+        )
 
     @functools.lru_cache
     def get_type(self, t: int) -> RsType:
@@ -199,6 +259,8 @@ class Compiler:
         defs = []
         for t, ty in enumerate(self.engine.types):
             match ty:
+                case "erased":
+                    continue
                 case "Var":
                     bounds = [RsInline("base::Top")]
                 case type_heads.VBool() | type_heads.UBool():
@@ -283,7 +345,7 @@ class RsObjTypeDef(RsAst):
         bounds = "+".join(map(str, self.bounds))
         return (
             f"type {self.type_name} = base::Ref<dyn {self.trait_name}>;\n"
-            f"trait {self.trait_name}: {bounds} {{}}\n"
+            f"pub trait {self.trait_name}: {bounds} {{}}\n"
             f"impl<T: {bounds}> {self.trait_name} for T {{}}\n\n"
         )
 
@@ -319,7 +381,7 @@ class RsHasFieldDefinition(RsAst):
 
     def __str__(self) -> str:
         f = self.field
-        return f"trait Has{f}<T> {{ fn get_{f}(&self) -> T; }}"
+        return f"pub trait Has{f}<T> {{ fn get_{f}(&self) -> T; }}"
 
 
 @dataclasses.dataclass
@@ -348,6 +410,27 @@ class RsRecordDefinition(RsAst):
             f'     write!(f, "{{{{{output_template}}}}}", {output_values}) }} }}'
             + "\n".join(getters)
         )
+
+
+@dataclasses.dataclass
+class RsMutualClosure(RsAst):
+    name: str
+    free: dict[str, RsType]
+    bind: [(str, str, RsType, RsType, RsExpression)]
+
+    def __str__(self) -> str:
+        fvs = ", ".join(f"pub {v}: {t}" for v, t in self.free.items())
+        cls = f"pub struct Closure {{ {fvs} }}"
+
+        unclose = "".join(f"let {v} = cls.{v}.clone();" for v in self.free)
+
+        defs = []
+        for name, var, argt, rett, body in self.bind:
+            defs.append(
+                f"pub fn {name}({var}: {argt}, cls: &Closure) -> {rett} {{ {unclose} {body} }}"
+            )
+        defs = "\n".join(defs)
+        return f"mod {self.name} {{ use super::*; {cls} {defs} }}"
 
 
 @dataclasses.dataclass
@@ -391,6 +474,14 @@ class RsLiteral(RsExpression):
 
     def __str__(self) -> str:
         return self.value
+
+
+@dataclasses.dataclass
+class RsReference(RsExpression):
+    var: str
+
+    def __str__(self) -> str:
+        return f"{self.var}.clone()"
 
 
 @dataclasses.dataclass
@@ -465,3 +556,50 @@ class RsFun(RsAst):
         body = "\n".join(f"{stmt}" for stmt in self.body)
         rtype = f"-> {self.rtype}" if self.rtype else ""
         return f"fn {self.name}({args}) {rtype} {{ {body} }}"
+
+
+def free_vars(expr: ast.Expression, type_map) -> typing.Iterator[tuple[str, int]]:
+    ty = type_map[id(expr)]
+    match expr:
+        case ast.Literal(_):
+            return
+        case ast.Reference(var):
+            yield var, ty
+        case ast.Function(var, body):
+            for fv, t in free_vars(body, type_map):
+                if fv != var:
+                    yield fv, t
+        case ast.Application(fun, arg):
+            yield from free_vars(fun, type_map)
+            yield from free_vars(arg, type_map)
+        case ast.Conditional(a, b, c):
+            yield from free_vars(a, type_map)
+            yield from free_vars(b, type_map)
+            yield from free_vars(c, type_map)
+        case ast.Record(fields):
+            yield from (free_vars(f[1], type_map) for f in fields)
+        case ast.FieldAccess(_, rec):
+            yield from free_vars(rec, type_map)
+        case _:
+            raise NotImplementedError(expr)
+
+
+def replace_calls(fns: set[str], rx: RsExpression) -> RsExpression:
+    match rx:
+        case RsReference(ref) if ref in fns:
+            raise NotImplementedError("TODO: escaping mutual recursive function")
+        case RsApply(RsReference(ref), arg) if ref in fns:
+            arg = replace_calls(fns, arg)
+            return RsInline(f"{ref}({arg}, cls)")
+        case RsApply(fun, arg):
+            return RsApply(replace_calls(fns, fun), replace_calls(fns, arg))
+        case RsInline() | RsLiteral() | RsReference():
+            return rx
+        case RsNewObj(x):
+            return RsNewObj(replace_calls(fns, x))
+        case RsIfExpr(a, b, c):
+            return RsIfExpr(
+                replace_calls(fns, a), replace_calls(fns, b), replace_calls(fns, c)
+            )
+        case _:
+            raise NotImplementedError(type(rx))
