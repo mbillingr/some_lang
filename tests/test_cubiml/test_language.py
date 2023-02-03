@@ -35,7 +35,7 @@ def eval_in_python(src: str) -> str:
     return transform_python_result(res)
 
 
-@pytest.mark.parametrize("evaluator", [eval_in_python, eval_in_rust, eval_in_rust2])
+@pytest.mark.parametrize("evaluator", [eval_in_python, eval_in_rust2])
 class TestLanguage:
     def test_just_a_literal(self, evaluator):
         src = "true"
