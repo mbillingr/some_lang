@@ -123,8 +123,13 @@ class Compiler:
         return RsToplevel(
             [
                 RsInline(STD_HEADER),
-                RsFun("main", [], None, [RsInline('println!("{:?}", script());')]),
-                RsFun("script", [], self.script_type, self.script),
+                RsFun("main", [], None, RsInline('println!("{:?}", script());')),
+                RsFun(
+                    "script",
+                    [],
+                    self.script_type,
+                    RsBlock(self.script[:-1], self.script[-1]),
+                ),
                 RsToplevelGroup(self.toplevel_defs),
                 RsToplevelGroup(self.gen_type_defs()),
                 RsToplevelGroup(list(self.common_trait_defs)),
@@ -188,7 +193,7 @@ class Compiler:
             case ast.Let(var, val, body):
                 v = self.compile_expr(val)
                 b = self.compile_expr(body)
-                return RsBlock([RsInline(f"let {var} = {v};")], b)
+                return RsBlock([RsLetStatement(var, v)], b)
             case ast.LetRec():
                 return RsBlock(
                     self.compile_letrec(expr),
@@ -566,13 +571,12 @@ class RsFun(RsAst):
     name: str
     args: list[tuple[RsType, str]]
     rtype: typing.Optional[RsType]
-    body: list[RsExpression]
+    body: RsExpression
 
     def __str__(self) -> str:
         args = ", ".join(f"{t} {a}" for t, a in self.args)
-        body = "\n".join(f"{stmt}" for stmt in self.body)
         rtype = f"-> {self.rtype}" if self.rtype else ""
-        return f"fn {self.name}({args}) {rtype} {{ {body} }}"
+        return f"fn {self.name}({args}) {rtype} {{ {self.body} }}"
 
 
 def free_vars(expr: ast.Expression, type_map) -> typing.Iterator[tuple[str, int]]:
@@ -602,6 +606,8 @@ def free_vars(expr: ast.Expression, type_map) -> typing.Iterator[tuple[str, int]
 
 
 def replace_calls(fns: set[str], rx: RsExpression) -> RsExpression:
+    if not fns:
+        return rx
     match rx:
         case RsReference(ref) if ref in fns:
             raise NotImplementedError("TODO: escaping mutual recursive function")
@@ -618,5 +624,23 @@ def replace_calls(fns: set[str], rx: RsExpression) -> RsExpression:
             return RsIfExpr(
                 replace_calls(fns, a), replace_calls(fns, b), replace_calls(fns, c)
             )
+        case RsNewRecord(ty, fields):
+            return RsNewRecord(
+                ty, {f: replace_calls(fns, v) for f, v in fields.items()}
+            )
+        case RsGetField(field, rec):
+            return RsGetField(field, replace_calls(fns, rec))
+        case RsClosure(var, vty, rty, body):
+            return RsClosure(var, vty, rty, replace_calls(fns - {var}, body))
+        case RsBlock(stmts, body):
+            st_out = []
+            for st in stmts:
+                match st:
+                    case RsLetStatement(var, val):
+                        st_out.append(RsLetStatement(var, replace_calls(fns, val)))
+                        fns = fns - {var}
+                    case _:
+                        raise NotImplementedError(type(st))
+            return RsBlock(st_out, replace_calls(fns, body))
         case _:
             raise NotImplementedError(type(rx))
