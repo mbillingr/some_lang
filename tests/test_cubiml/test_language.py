@@ -52,6 +52,11 @@ class TestLanguage:
         res = evaluator(src)
         assert res == "{}"
 
+    def test_bound_function_application(self, evaluator):
+        src = "let foo = fun x -> x; (foo {})"
+        res = evaluator(src)
+        assert res == "{}"
+
     def test_let_over_lambda(self, evaluator):
         src = "(let x = {} in fun y -> x) true"
         res = evaluator(src)

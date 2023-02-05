@@ -148,7 +148,11 @@ class Compiler:
             case ast.Expression() as expr:
                 return [self.compile_expr(expr)]
             case ast.DefineLet(var, val):
-                return [RsLetStatement(var, self.compile_expr(val))]
+                if isinstance(val, ast.Function):
+                    v = self.compile_function(val, name=f"{var}")
+                else:
+                    v = self.compile_expr(val)
+                return [RsLetStatement(var, v)]
             case ast.DefineLetRec():
                 return self.compile_letrec(stmt)
             case _:
@@ -161,25 +165,17 @@ class Compiler:
             case ast.Literal(False):
                 return RsNewObj(RsLiteral("false"))
             case ast.Reference(var):
-                print(f"Dereferencing {var} @ {id(expr)} of {self.type_of(expr)} -- {self.engine.types[self.type_of(expr)]}")
+                print(
+                    f"Dereferencing {var} @ {id(expr)} of {self.type_of(expr)} -- {self.engine.types[self.type_of(expr)]}"
+                )
                 return RsReference(var)
             case ast.Conditional(condition, consequence, alternative):
                 a = self.compile_expr(condition)
                 b = self.compile_expr(consequence)
                 c = self.compile_expr(alternative)
                 return RsIfExpr(a, b, c)
-            case ast.Function(var, body):
-                vty = self.engine.types[self.type_of(expr)].arg
-                rty = self.engine.types[self.type_of(expr)].ret
-                body = self.compile_expr(body)
-                return RsNewObj(
-                    RsClosure(
-                        var,
-                        RsInline(self.v_name(vty)),
-                        RsInline(self.v_name(rty)),
-                        body,
-                    )
-                )
+            case ast.Function():
+                return self.compile_function(expr, name=f"fun{id(expr)}")
             case ast.Application(fun, arg):
                 f = self.compile_expr(fun)
                 a = self.compile_expr(arg)
@@ -192,7 +188,10 @@ class Compiler:
             case ast.FieldAccess(field, obj):
                 return RsGetField(field, self.compile_expr(obj))
             case ast.Let(var, val, body):
-                v = self.compile_expr(val)
+                if isinstance(val, ast.Function):
+                    v = self.compile_function(val, name=f"{var}{id(expr)}")
+                else:
+                    v = self.compile_expr(val)
                 b = self.compile_expr(body)
                 return RsBlock([RsLetStatement(var, v)], b)
             case ast.LetRec():
@@ -202,6 +201,33 @@ class Compiler:
                 )
             case _:
                 raise NotImplementedError(expr)
+
+    def compile_function(self, fun: ast.Function, name: str) -> RsExpression:
+        argt = self.v_name(self.engine.types[self.type_of(fun)].arg)
+        rett = self.v_name(self.engine.types[self.type_of(fun)].ret)
+        fvs = {
+            v: RsLiteral(self.v_name(ty)) for v, ty in free_vars(fun, self.type_mapping)
+        }
+        fndefs = [(name, fun.var, argt, rett, self.compile_expr(fun.body))]
+        self.toplevel_defs.append(RsMutualClosure(name, fvs, fndefs))
+
+        capture = ", ".join(f"{v}:{v}.clone()" for v in fvs)
+        return RsBlock(
+            [
+                RsLetStatement(
+                    "cls",
+                    RsNewObj(RsInline(f"{name}::Closure {{ {capture} }}")),
+                ),
+            ],
+            RsNewObj(
+                RsClosure(
+                    fun.var,
+                    RsInline(argt),
+                    RsInline(rett),
+                    RsInline(f"{name}::{name}({fun.var}, &*cls)"),
+                )
+            ),
+        )
 
     def compile_letrec(self, expr: ast.LetRec) -> list[RsStatement]:
         bind = expr.bind
