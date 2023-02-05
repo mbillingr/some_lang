@@ -194,15 +194,15 @@ def check_let(
     saved_bindings.m = bindings.m.copy()
     saved_expr = expr
 
-    # disable polymorphism for now
-
-    #f = lambda eng: check_expr(saved_expr, saved_bindings, eng, callback)
-    checked = check_expr(saved_expr, saved_bindings, engine, callback)
-    f = lambda _: checked
-
-    # check at least once, even if the var is never referenced
-    callback(expr, f(engine))
-    return f
+    match expr:
+        case ast.Function():
+            # function definitions can be polymorphic - create a type scheme
+            f = lambda eng: check_expr(saved_expr, saved_bindings, eng, callback)
+            callback(expr, f(engine))  # check once, in case the var is never referenced
+            return f
+        case _:
+            var_type = callback(expr, check_expr(expr, bindings, engine, callback))
+            return lambda _: var_type
 
 
 def check_letrec(defs, bindings, engine, callback):
