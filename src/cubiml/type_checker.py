@@ -190,13 +190,14 @@ def check_expr(
 def check_let(
     expr: ast.Expression, bindings: Bindings, engine: TypeCheckerCore, callback
 ) -> Scheme:
-    saved_bindings = Bindings()
-    saved_bindings.m = bindings.m.copy()
-    saved_expr = expr
 
     match expr:
         case ast.Function():
             # function definitions can be polymorphic - create a type scheme
+            saved_bindings = Bindings()
+            saved_bindings.m = bindings.m.copy()
+            saved_expr = expr
+
             f = lambda eng: check_expr(saved_expr, saved_bindings, eng, callback)
             callback(expr, f(engine))  # check once, in case the var is never referenced
             return f
@@ -205,15 +206,28 @@ def check_let(
             return lambda _: var_type
 
 
-def check_letrec(defs, bindings, engine, callback):
-    temp_us = []
-    for d in defs:
-        temp_t, temp_u = engine.var()
-        bindings.insert(d.name, temp_t)
-        temp_us.append(temp_u)
-    for d, use in zip(defs, temp_us):
-        var_t = check_expr(d.fun, bindings, engine, callback)
-        engine.flow(var_t, use)
+def check_letrec(defs: list[ast.FuncDef], bindings, engine, callback):
+    saved_bindings = Bindings()
+    saved_bindings.m = bindings.m.copy()
+    saved_defs = defs
+
+    def f(eng, i):
+        temp_vars = []
+        for d in saved_defs:
+            temp_t, temp_u = eng.var()
+            saved_bindings.insert(d.name, temp_t)
+            temp_vars.append((temp_t, temp_u))
+
+        for d, (_, use) in zip(defs, temp_vars):
+            var_t = check_expr(d.fun, saved_bindings, eng, callback)
+            engine.flow(var_t, use)
+
+        return temp_vars[i][0]
+
+    f(engine, 0)  # check once, in case the var is never referenced
+
+    for i, d in enumerate(defs):
+        bindings.insert_scheme(d.name, lambda eng: f(eng, i))
 
 
 def check_toplevel(

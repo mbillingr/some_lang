@@ -104,12 +104,24 @@ class TestLanguage:
             let id = fun x -> x;
             
             let a = (id {a={}}).a;
-            let b = (id {b={}}).b;
+            let b = (id {b=true}).b;
             
-            {a={}; b={}}
+            {a=a; b=b}
         """
         res = evaluator(src)
-        assert res == "{a={}; b={}}"
+        assert res == "{a={}; b=true}"
+
+    def test_letrec_polymorphism(self, evaluator):
+        src = """
+            let rec id = fun x -> if true then x else (id x);
+            
+            let a = (id {a={}}).a;
+            let b = (id {b=true}).b;
+            
+            {a=a; b=b}
+        """
+        res = evaluator(src)
+        assert res == "{a={}; b=true}"
 
 
 def transform_python_result(res) -> str:
