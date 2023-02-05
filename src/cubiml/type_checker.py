@@ -18,7 +18,8 @@ class TypeChecker:
         type_map = {}
 
         def map_type(expr: ast.Expression, ty: Value) -> Value:
-            type_map[id(expr)] = ty
+            if id(expr) not in type_map:
+                type_map[id(expr)] = ty
             return ty
 
         try:
@@ -193,7 +194,11 @@ def check_let(
     saved_bindings.m = bindings.m.copy()
     saved_expr = expr
 
-    f = lambda eng: check_expr(saved_expr, saved_bindings, eng, callback)
+    # disable polymorphism for now
+
+    #f = lambda eng: check_expr(saved_expr, saved_bindings, eng, callback)
+    checked = check_expr(saved_expr, saved_bindings, engine, callback)
+    f = lambda _: checked
 
     # check at least once, even if the var is never referenced
     callback(expr, f(engine))

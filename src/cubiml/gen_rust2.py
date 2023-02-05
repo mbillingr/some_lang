@@ -161,6 +161,7 @@ class Compiler:
             case ast.Literal(False):
                 return RsNewObj(RsLiteral("false"))
             case ast.Reference(var):
+                print(f"Dereferencing {var} @ {id(expr)} of {self.type_of(expr)} -- {self.engine.types[self.type_of(expr)]}")
                 return RsReference(var)
             case ast.Conditional(condition, consequence, alternative):
                 a = self.compile_expr(condition)
