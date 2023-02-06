@@ -571,6 +571,8 @@ class RsBlock(RsExpression):
     final_expr: RsExpression
 
     def __str__(self) -> str:
+        if not self.stmts:
+            return str(self.final_expr)
         stmts = "\n".join(map(str, self.stmts))
         return f"{{ {stmts} \n {self.final_expr} }}"
 
@@ -624,7 +626,7 @@ class RsClosure(RsExpression):
     bdy: RsExpression
 
     def __str__(self) -> str:
-        return f"{{ base::fun(move |{self.var}| {{ {self.bdy} }}) }}"
+        return f"base::fun(move |{self.var}| {{ {self.bdy} }})"
 
 
 @dataclasses.dataclass
