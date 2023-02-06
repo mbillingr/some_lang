@@ -14,14 +14,83 @@ from biunification.type_checker import TypeCheckerCore
 from cubiml import abstract_syntax as ast, type_heads
 
 STD_HEADER = """
-#![feature(trait_upcasting)]
 """
 
 STD_DEFS = """
-use base::{Bool, Func, Record};
+use base::Func;
 
-mod base {
+mod base {    
     pub type Ref<T> = std::rc::Rc<T>;
+    
+    #[derive(Clone)]
+    pub enum Value {
+        Bool(bool),
+        Record(std::collections::HashMap<&'static str, Value>),
+        Function(Ref<dyn Func>),
+    }
+    
+    impl std::fmt::Debug for Value {
+        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            match self {
+                Value::Bool(b) => b.fmt(f),
+                Value::Record(r) => {
+                    write!(f, "{{")?;
+                    let mut keys: Vec<_> = r.keys().collect();
+                    keys.sort();
+                    let fields: Vec<_> = keys
+                        .into_iter()
+                        .map(|k| format!("{}={:?}", k, r[k]))
+                        .collect();
+                    write!(f, "{}", fields.join("; "))?;
+                    write!(f, "}}")
+                }
+                Value::Function(fun) => write!(f, "<fun {:p}>", fun)
+            }
+        }
+    }
+    
+    impl From<bool> for Value {
+        fn from(b: bool) -> Self {
+            Value::Bool(b)
+        }
+    }
+    
+    impl From<Value> for bool {
+        fn from(v: Value) -> Self {
+            match v {
+                Value::Bool(b) => b,
+                _ => panic!("Not a boolean: {:?}", v),
+            }
+        }
+    }
+    
+    impl From<std::collections::HashMap<&'static str, Value>> for Value {
+        fn from(r: std::collections::HashMap<&'static str, Value>) -> Self {
+            Value::Record(r)
+        }
+    }
+    
+    impl<F: 'static + Func> From<F> for Value {
+        fn from(f: F) -> Self {
+            Value::Function(Ref::new(f))
+        }
+    }
+    
+    impl Value {
+        pub fn apply(&self, a: impl Into<Value>) -> Value {
+            match self {
+                Value::Function(f) => f.apply(a.into()),
+                _ => panic!("Not a function: {:?}", self),
+            }
+        }
+        
+        pub fn get(&self, field: &'static str) -> Value {
+            match self {
+                Value::Record(r) => r[field].clone(),
+                _ => panic!("Not a record: {:?}", self),
+            }
+        }
+    }
 
     /// The supertype of all types.
     pub trait Top: 'static + std::fmt::Debug {}
@@ -35,29 +104,27 @@ mod base {
         fn is_true(&self) -> bool { *self }
     }
     
-    pub trait Func<A,R>: Top {
-        fn apply(&self, a: A) -> R;
+    pub trait Func {
+        fn apply(&self, a: Value) -> Value;
     }
 
-    pub fn fun<A, R, F>(f: F) -> Function<A, R, F> {
-        Function(f, std::marker::PhantomData)
+    pub fn fun<F>(f: F) -> Function<F> {
+        Function(f)
     }
     
-    pub struct Function<A, R, F>(F, std::marker::PhantomData<(A,R)>);
+    pub struct Function<F>(F);
 
-    impl<A: Top, R: Top, F> Func<A, R> for Function<A, R, F>
-    where F: 'static + Fn(A)->R
+    impl<F> Func for Function<F>
+    where F: 'static + Fn(Value)->Value
     {
-        fn apply(&self, a: A) -> R {
+        fn apply(&self, a: Value) -> Value {
             (self.0)(a)
         }
     }
     
-    impl<A, R, F> std::fmt::Debug for Function<A, R, F> {
+    impl<F> std::fmt::Debug for Function<F> {
         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-            write!(f, "<fun {} -> {}>", 
-                   std::any::type_name::<A>(), 
-                   std::any::type_name::<R>())
+            write!(f, "<fun>")
         }
     }
     
@@ -109,7 +176,6 @@ class Compiler:
         self.type_mapping = type_mapping
         self.engine = engine
         self.script: list[RsStatement] = []
-        self.script_type = None
         self.common_trait_defs: set[RsAst] = set()
         self.toplevel_defs: list[RsAst] = []
 
@@ -127,12 +193,12 @@ class Compiler:
                 RsFun(
                     "script",
                     [],
-                    self.script_type,
-                    RsBlock(self.script[:-1], self.script[-1]),
+                    RsValue(),
+                    RsIntoValue(RsBlock(self.script[:-1], self.script[-1])),
                 ),
                 RsToplevelGroup(self.toplevel_defs),
-                RsToplevelGroup(self.gen_type_defs()),
-                RsToplevelGroup(list(self.common_trait_defs)),
+                # RsToplevelGroup(self.gen_type_defs()),
+                # RsToplevelGroup(list(self.common_trait_defs)),
                 RsInline(STD_DEFS),
             ]
         )
@@ -140,8 +206,6 @@ class Compiler:
     def compile_script(self, script: ast.Script):
         for stmt in script.statements:
             self.script.extend(self.compile_toplevel(stmt))
-            if isinstance(stmt, ast.Expression):
-                self.script_type = self.v_name(self.type_of(stmt))
 
     def compile_toplevel(self, stmt: ast.ToplevelItem) -> list[RsStatement]:
         match stmt:
@@ -161,9 +225,9 @@ class Compiler:
     def compile_expr(self, expr: ast.Expression) -> RsExpression:
         match expr:
             case ast.Literal(True):
-                return RsNewObj(RsLiteral("true"))
+                return RsLiteral("true")
             case ast.Literal(False):
-                return RsNewObj(RsLiteral("false"))
+                return RsLiteral("false")
             case ast.Reference(var):
                 print(
                     f"Dereferencing {var} @ {id(expr)} of {self.type_of(expr)} -- {self.engine.types[self.type_of(expr)]}"
@@ -184,7 +248,7 @@ class Compiler:
                 field_initializers = {f: self.compile_expr(v) for f, v in fields}
                 tname = self.get_type(self.type_of(expr))
                 assert isinstance(tname, RsRecordType)
-                return RsNewObj(RsNewRecord(tname, field_initializers))
+                return RsNewRecord(tname, field_initializers)
             case ast.FieldAccess(field, obj):
                 return RsGetField(field, self.compile_expr(obj))
             case ast.Let(var, val, body):
@@ -215,17 +279,14 @@ class Compiler:
         return RsBlock(
             [
                 RsLetStatement(
-                    "cls",
-                    RsNewObj(RsInline(f"{name}::Closure {{ {capture} }}")),
+                    "cls", RsNewObj(RsInline(f"{name}::Closure {{ {capture} }}")), None
                 ),
             ],
-            RsNewObj(
-                RsClosure(
-                    fun.var,
-                    RsInline(argt),
-                    RsInline(rett),
-                    RsInline(f"{name}::{name}({fun.var}, &*cls)"),
-                )
+            RsClosure(
+                fun.var,
+                RsInline(argt),
+                RsInline(rett),
+                RsInline(f"{name}::{name}({fun.var}, &*cls)"),
             ),
         )
 
@@ -257,21 +318,18 @@ class Compiler:
         capture = ", ".join(f"{v}:{v}.clone()" for v in fvs)
         statements = [
             RsLetStatement(
-                "cls",
-                RsNewObj(RsInline(f"{name}::Closure {{ {capture} }}")),
+                "cls", RsNewObj(RsInline(f"{name}::Closure {{ {capture} }}")), None
             ),
             *(
                 RsLetStatement(
                     fdef.name,
                     RsBlock(
                         [RsInline("let cls = cls.clone();")],
-                        RsNewObj(
-                            RsClosure(
-                                fdef.fun.var,
-                                RsInline(aty),
-                                RsInline(rty),
-                                RsInline(f"{name}::{fdef.name}({fdef.fun.var}, &*cls)"),
-                            )
+                        RsClosure(
+                            fdef.fun.var,
+                            RsInline(aty),
+                            RsInline(rty),
+                            RsInline(f"{name}::{fdef.name}({fdef.fun.var}, &*cls)"),
                         ),
                     ),
                 )
@@ -281,7 +339,10 @@ class Compiler:
         return statements
 
     @functools.lru_cache
-    def get_type(self, t: int) -> RsType:
+    def get_type(self, t: int | ast.Expression) -> RsType:
+        if not isinstance(t, int):
+            return self.get_type(self.type_of(t))
+
         match self.engine.types[t]:
             case type_heads.VObj(fields):
                 field_types = {
@@ -402,6 +463,12 @@ class RsExpression(RsAst):
     pass
 
 
+@dataclasses.dataclass(frozen=True)
+class RsValue(RsType):
+    def __str__(self) -> str:
+        return "base::Value"
+
+
 @dataclasses.dataclass
 class RsRecordType(RsType):
     name: str
@@ -451,11 +518,11 @@ class RsRecordDefinition(RsAst):
 @dataclasses.dataclass
 class RsMutualClosure(RsAst):
     name: str
-    free: dict[str, RsType]
+    free: set(str)
     bind: [(str, str, RsType, RsType, RsExpression)]
 
     def __str__(self) -> str:
-        fvs = ", ".join(f"pub {v}: {t}" for v, t in self.free.items())
+        fvs = ", ".join(f"pub {v}: base::Value" for v in self.free)
         cls = f"pub struct Closure {{ {fvs} }}"
 
         unclose = "".join(f"let {v} = cls.{v}.clone();" for v in self.free)
@@ -463,7 +530,7 @@ class RsMutualClosure(RsAst):
         defs = []
         for name, var, argt, rett, body in self.bind:
             defs.append(
-                f"pub fn {name}({var}: {argt}, cls: &Closure) -> {rett} {{ {unclose} {body} }}"
+                f"pub fn {name}({var}: base::Value, cls: &Closure) -> base::Value {{ {unclose} {body} }}"
             )
         defs = "\n".join(defs)
         return f"mod {self.name} {{ use super::*; {cls} {defs} }}"
@@ -473,18 +540,13 @@ class RsMutualClosure(RsAst):
 class RsLetStatement(RsStatement):
     var: str
     val: RsExpression
+    typ: typing.Optional[RsType] = RsValue()
 
     def __str__(self):
-        return f"let {self.var} = {self.val};"
-
-
-@dataclasses.dataclass
-class RsLetStatement(RsStatement):
-    var: str
-    val: RsExpression
-
-    def __str__(self):
-        return f"let {self.var} = {self.val};"
+        if self.typ is None:
+            return f"let {self.var} = {self.val};"
+        else:
+            return f"let {self.var} = {self.typ}::from({self.val});"
 
 
 @dataclasses.dataclass
@@ -522,6 +584,14 @@ class RsLiteral(RsExpression):
 
 
 @dataclasses.dataclass
+class RsIntoValue(RsExpression):
+    value: RsExpression
+
+    def __str__(self) -> str:
+        return f"base::Value::from({self.value})"
+
+
+@dataclasses.dataclass
 class RsReference(RsExpression):
     var: str
 
@@ -543,7 +613,7 @@ class RsGetField(RsExpression):
     record: RsExpression
 
     def __str__(self) -> str:
-        return f"{self.record}.get_{self.field}()"
+        return f'{self.record}.get("{self.field}")'
 
 
 @dataclasses.dataclass
@@ -554,10 +624,7 @@ class RsClosure(RsExpression):
     bdy: RsExpression
 
     def __str__(self) -> str:
-        return (
-            f"{{ base::fun::<{self.vty}, {self.rty}, _>"
-            f"(move |{self.var}: {self.vty}| -> {self.rty} {{ {self.bdy} }}) }}"
-        )
+        return f"{{ base::fun(move |{self.var}| {{ {self.bdy} }}) }}"
 
 
 @dataclasses.dataclass
@@ -566,7 +633,7 @@ class RsApply(RsExpression):
     arg: RsExpression
 
     def __str__(self) -> str:
-        return f"{self.fun}.apply({self.arg})"
+        return f"{self.fun}.apply({RsIntoValue(self.arg)})"
 
 
 @dataclasses.dataclass
@@ -577,7 +644,7 @@ class RsIfExpr(RsExpression):
 
     def __str__(self) -> str:
         return (
-            f"if {self.condition}.is_true() "
+            f"if bool::from({self.condition}) "
             f"{{ {self.consequence} }} else "
             f"{{ {self.alternative} }}"
         )
@@ -589,8 +656,20 @@ class RsNewRecord(RsExpression):
     fields: dict[str, RsExpression]
 
     def __str__(self) -> str:
-        init_str = ", ".join(f"{f}: {x}" for f, x in self.fields.items())
-        return f"{self.type.name}{{ {init_str} }}"
+
+        return "\n".join(
+            [
+                "{",
+                "let mut record = std::collections::HashMap::with_capacity"
+                f"({len(self.fields)});",
+                *(
+                    f'record.insert("{f}", {RsIntoValue(x)});'
+                    for f, x in self.fields.items()
+                ),
+                "record",
+                "}",
+            ]
+        )
 
 
 @dataclasses.dataclass
@@ -639,7 +718,7 @@ def replace_calls(fns: set[str], rx: RsExpression) -> RsExpression:
         case RsReference(ref) if ref in fns:
             raise NotImplementedError("TODO: escaping mutual recursive function")
         case RsApply(RsReference(ref), arg) if ref in fns:
-            arg = replace_calls(fns, arg)
+            arg = RsIntoValue(replace_calls(fns, arg))
             return RsInline(f"{ref}({arg}, cls)")
         case RsApply(fun, arg):
             return RsApply(replace_calls(fns, fun), replace_calls(fns, arg))
