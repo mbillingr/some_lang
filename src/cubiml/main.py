@@ -29,4 +29,4 @@ while True:
     except EOFError:
         break
     except Exception as e:
-        print(e)
+        print(f"{type(e).__name__}: {e}")

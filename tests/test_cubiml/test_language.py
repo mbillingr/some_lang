@@ -38,9 +38,9 @@ def eval_in_python(src: str) -> str:
 @pytest.mark.parametrize("evaluator", [eval_in_python, eval_in_rust2])
 class TestLanguage:
     def test_just_a_literal(self, evaluator):
-        src = "true"
+        src = "42"
         res = evaluator(src)
-        assert res == "true"
+        assert res == "42"
 
     def test_toplevel_binding(self, evaluator):
         src = "let x = false; x"
@@ -133,6 +133,8 @@ def transform_python_result(res) -> str:
     match res:
         case bool():
             return str(res).lower()
+        case int():
+            return str(res)
         case dict():
             return (
                 "{"

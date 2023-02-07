@@ -44,6 +44,10 @@ boolean = pp.MatchFirst(["false", "true"]).set_parse_action(
     lambda t: ast.Literal(t[0] == "true")
 )
 
+integer = pp.Word("+-" + pp.nums, pp.nums).set_parse_action(
+    lambda t: ast.Literal(int(t[0]))
+)
+
 varref = ident.copy().set_parse_action(lambda t: ast.Reference(t[0]))
 
 conditional = ("if" + expr + "then" + expr + "else" + expr).set_parse_action(
@@ -85,7 +89,9 @@ letrec = (pp.Literal("let") + "rec" + funcdefs + "in" + expr).add_parse_action(
     lambda t: ast.LetRec(list(t[2]), t[4])
 )
 
-simple_expr <<= record | boolean | varref | (pp.Suppress("(") + expr + pp.Suppress(")"))
+simple_expr <<= (
+    record | boolean | integer | varref | (pp.Suppress("(") + expr + pp.Suppress(")"))
+)
 
 call_expr <<= pp.OneOrMore(simple_expr).add_parse_action(
     lambda t: functools.reduce(ast.Application, t[1:], t[0])

@@ -21,10 +21,12 @@ use base::Func;
 
 mod base {    
     pub type Ref<T> = std::rc::Rc<T>;
+    pub type Int = i64;
     
     #[derive(Clone)]
     pub enum Value {
         Bool(bool),
+        Int(Int),
         Record(std::collections::HashMap<&'static str, Value>),
         Case(&'static str, Box<Value>),
         Function(Ref<dyn Func>),
@@ -34,6 +36,7 @@ mod base {
         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             match self {
                 Value::Bool(b) => b.fmt(f),
+                Value::Int(i) => i.fmt(f),
                 Value::Record(r) => {
                     write!(f, "{{")?;
                     let mut keys: Vec<_> = r.keys().collect();
@@ -62,6 +65,21 @@ mod base {
             match v {
                 Value::Bool(b) => b,
                 _ => panic!("Not a boolean: {:?}", v),
+            }
+        }
+    }
+    
+    impl From<Int> for Value {
+        fn from(i: Int) -> Self {
+            Value::Int(i)
+        }
+    }
+    
+    impl From<Value> for Int {
+        fn from(v: Value) -> Self {
+            match v {
+                Value::Int(i) => i,
+                _ => panic!("Not an integer: {:?}", v),
             }
         }
     }
@@ -230,6 +248,8 @@ class Compiler:
                 return RsLiteral("true")
             case ast.Literal(False):
                 return RsLiteral("false")
+            case ast.Literal(int(i)):
+                return RsLiteral(str(i))
             case ast.Reference(var):
                 print(
                     f"Dereferencing {var} @ {id(expr)} of {self.type_of(expr)} -- {self.engine.types[self.type_of(expr)]}"

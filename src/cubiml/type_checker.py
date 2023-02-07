@@ -101,6 +101,8 @@ def check_expr(
     match expr:
         case ast.Literal(bool()):
             return callback(expr, engine.new_val(type_heads.VBool()))
+        case ast.Literal(int()):
+            return callback(expr, engine.new_val(type_heads.VInt()))
         case ast.Reference(var):
             scheme = bindings.get(var)
             return callback(expr, scheme(engine))
