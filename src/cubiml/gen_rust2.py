@@ -111,18 +111,6 @@ mod base {
             }
         }
     }
-
-    /// The supertype of all types.
-    pub trait Top: 'static + std::fmt::Debug {}
-    impl<T: 'static + std::fmt::Debug> Top for T {}
-    
-    pub trait Bool: std::fmt::Debug {
-        fn is_true(&self) -> bool;
-    }
-    
-    impl Bool for bool {
-        fn is_true(&self) -> bool { *self }
-    }
     
     pub trait Func {
         fn apply(&self, a: Value) -> Value;
@@ -147,8 +135,6 @@ mod base {
             write!(f, "<fun>")
         }
     }
-    
-    pub trait Record: Top {}
 }
 """
 
@@ -217,8 +203,6 @@ class Compiler:
                     RsIntoValue(RsBlock(self.script[:-1], self.script[-1])),
                 ),
                 RsToplevelGroup(self.toplevel_defs),
-                # RsToplevelGroup(self.gen_type_defs()),
-                # RsToplevelGroup(list(self.common_trait_defs)),
                 RsInline(STD_DEFS),
             ]
         )
@@ -251,9 +235,6 @@ class Compiler:
             case ast.Literal(int(i)):
                 return RsLiteral(str(i))
             case ast.Reference(var):
-                print(
-                    f"Dereferencing {var} @ {id(expr)} of {self.type_of(expr)} -- {self.engine.types[self.type_of(expr)]}"
-                )
                 return RsReference(var)
             case ast.Conditional(condition, consequence, alternative):
                 a = self.compile_expr(condition)
@@ -268,9 +249,7 @@ class Compiler:
                 return RsApply(f, a)
             case ast.Record(fields):
                 field_initializers = {f: self.compile_expr(v) for f, v in fields}
-                tname = self.get_type(self.type_of(expr))
-                assert isinstance(tname, RsRecordType)
-                return RsNewRecord(tname, field_initializers)
+                return RsNewRecord(field_initializers)
             case ast.FieldAccess(field, obj):
                 return RsGetField(field, self.compile_expr(obj))
             case ast.Let(var, val, body):
@@ -295,12 +274,8 @@ class Compiler:
                 raise NotImplementedError(expr)
 
     def compile_function(self, fun: ast.Function, name: str) -> RsExpression:
-        argt = self.v_name(self.engine.types[self.type_of(fun)].arg)
-        rett = self.v_name(self.engine.types[self.type_of(fun)].ret)
-        fvs = {
-            v: RsLiteral(self.v_name(ty)) for v, ty in free_vars(fun, self.type_mapping)
-        }
-        fndefs = [(name, fun.var, argt, rett, self.compile_expr(fun.body))]
+        fvs = set(ast.free_vars(fun))
+        fndefs = [(name, fun.var, self.compile_expr(fun.body))]
         self.toplevel_defs.append(RsMutualClosure(name, fvs, fndefs))
 
         capture = ", ".join(f"{v}:{v}.clone()" for v in fvs)
@@ -312,8 +287,6 @@ class Compiler:
             ],
             RsClosure(
                 fun.var,
-                RsInline(argt),
-                RsInline(rett),
                 RsInline(f"{name}::{name}({fun.var}, &*cls)"),
             ),
         )
@@ -322,25 +295,15 @@ class Compiler:
         bind = expr.bind
         name = f"letrec{id(expr)}"
         bound_names = set(fdef.name for fdef in bind)
-        fvs = itertools.chain(
-            *(free_vars(fdef.fun, self.type_mapping) for fdef in bind)
-        )
-        fvs = {v: RsLiteral(self.v_name(ty)) for v, ty in fvs if v not in bound_names}
-        arg_types = [
-            self.v_name(self.engine.types[self.type_of(fdef.fun)].arg) for fdef in bind
-        ]
-        ret_types = [
-            self.v_name(self.engine.types[self.type_of(fdef.fun)].ret) for fdef in bind
-        ]
+        fvs = set(itertools.chain(*(ast.free_vars(fdef.fun) for fdef in bind)))
+        fvs -= bound_names
         fndefs = [
             (
                 fdef.name,
                 fdef.fun.var,
-                argt,
-                rett,
                 replace_calls(bound_names, self.compile_expr(fdef.fun.body)),
             )
-            for fdef, argt, rett in zip(bind, arg_types, ret_types)
+            for fdef in bind
         ]
         self.toplevel_defs.append(RsMutualClosure(name, fvs, fndefs))
         capture = ", ".join(f"{v}:{v}.clone()" for v in fvs)
@@ -355,85 +318,14 @@ class Compiler:
                         [RsInline("let cls = cls.clone();")],
                         RsClosure(
                             fdef.fun.var,
-                            RsInline(aty),
-                            RsInline(rty),
                             RsInline(f"{name}::{fdef.name}({fdef.fun.var}, &*cls)"),
                         ),
                     ),
                 )
-                for fdef, aty, rty in zip(bind, arg_types, ret_types)
+                for fdef in bind
             ),
         ]
         return statements
-
-    @functools.lru_cache
-    def get_type(self, t: int | ast.Expression) -> RsType:
-        if not isinstance(t, int):
-            return self.get_type(self.type_of(t))
-
-        match self.engine.types[t]:
-            case type_heads.VObj(fields):
-                field_types = {
-                    fn: RsLiteral(self.v_name(ft)) for fn, ft in fields.items()
-                }
-                return RsRecordType(self.r_name(t), field_types)
-            case ty:
-                raise NotImplementedError(ty)
-
-    def gen_type_defs(self) -> list[RsAst]:
-        defs = []
-        for t, ty in enumerate(self.engine.types):
-            match ty:
-                case "erased":
-                    continue
-                case "Var":
-                    bounds = [RsInline("base::Top")]
-                case type_heads.VBool() | type_heads.UBool():
-                    bounds = [RsInline("base::Top"), RsInline("base::Bool")]
-                case type_heads.VFunc(arg, ret) | type_heads.UFunc(arg, ret):
-                    a = self.v_name(arg)
-                    r = self.v_name(ret)
-                    bounds = [RsInline("base::Top"), RsInline(f"base::Func<{a},{r}>")]
-                case type_heads.VObj(fields):
-                    bounds = [RsInline("base::Top"), RsInline("base::Record")]
-                    defs.append(
-                        RsRecordDefinition(
-                            RsRecordType(
-                                self.r_name(t),
-                                {f: self.v_name(ft) for f, ft in fields.items()},
-                            )
-                        )
-                    )
-                    for f, _ in fields.items():
-                        self.common_trait_defs.add(RsHasFieldDefinition(f))
-                case type_heads.UObj(field, ft):
-                    f = self.v_name(ft)
-                    bounds = [RsInline("base::Top"), RsInline(f"Has{field}<{f}>")]
-                    self.common_trait_defs.add(RsHasFieldDefinition(field))
-                case _:
-                    raise NotImplementedError(ty)
-
-            inferred_bounds = map(self.u_name, self.engine.r.downsets[t])
-            defs.append(
-                RsObjTypeDef(
-                    self.v_name(t),
-                    self.u_name(t),
-                    {*bounds, *inferred_bounds},
-                )
-            )
-        return defs
-
-    def v_name(self, t: int) -> str:
-        return f"V{t}"
-
-    def u_name(self, t: int) -> str:
-        return f"U{t}"
-
-    def r_name(self, t: int) -> str:
-        return f"R{t}"
-
-    def type_of(self, expr: ast.Expression) -> int:
-        return self.type_mapping[id(expr)]
 
 
 class RsAst(abc.ABC):
@@ -498,56 +390,10 @@ class RsValue(RsType):
 
 
 @dataclasses.dataclass
-class RsRecordType(RsType):
-    name: str
-    fields: dict[str, RsType]
-
-    def __str__(self) -> str:
-        raise NotImplementedError()
-
-
-@dataclasses.dataclass(frozen=True)
-class RsHasFieldDefinition(RsAst):
-    field: str
-
-    def __str__(self) -> str:
-        f = self.field
-        return f"pub trait Has{f}<T> {{ fn get_{f}(&self) -> T; }}"
-
-
-@dataclasses.dataclass
-class RsRecordDefinition(RsAst):
-    rtype: RsRecordType
-
-    def __str__(self) -> str:
-        ordered_fields = list(reversed(self.rtype.fields.keys()))
-        fields = "\n".join(f"{fn}: {ft}," for fn, ft in self.rtype.fields.items())
-
-        getters = []
-        for fn, ft in self.rtype.fields.items():
-            getters.append(
-                f"impl Has{fn}<{ft}> for {self.rtype.name} "
-                f"{{ fn get_{fn}(&self) -> {ft} {{ self.{fn}.clone() }} }}"
-            )
-
-        output_template = "; ".join(f"{fn}={{:?}}" for fn in ordered_fields)
-        output_values = ", ".join(f"self.{fn}" for fn in ordered_fields)
-
-        return (
-            f"struct {self.rtype.name} {{ {fields} }}\n"
-            f"impl base::Record for {self.rtype.name} {{}}\n"
-            f"impl std::fmt::Debug for {self.rtype.name} {{"
-            f"  fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {{"
-            f'     write!(f, "{{{{{output_template}}}}}", {output_values}) }} }}'
-            + "\n".join(getters)
-        )
-
-
-@dataclasses.dataclass
 class RsMutualClosure(RsAst):
     name: str
-    free: set(str)
-    bind: [(str, str, RsType, RsType, RsExpression)]
+    free: set[str]
+    bind: [(str, str, RsExpression)]
 
     def __str__(self) -> str:
         fvs = ", ".join(f"pub {v}: base::Value" for v in self.free)
@@ -556,7 +402,7 @@ class RsMutualClosure(RsAst):
         unclose = "".join(f"let {v} = cls.{v}.clone();" for v in self.free)
 
         defs = []
-        for name, var, argt, rett, body in self.bind:
+        for name, var, body in self.bind:
             defs.append(
                 f"pub fn {name}({var}: base::Value, cls: &Closure) -> base::Value {{ {unclose} {body} }}"
             )
@@ -649,8 +495,6 @@ class RsGetField(RsExpression):
 @dataclasses.dataclass
 class RsClosure(RsExpression):
     var: str
-    vty: RsType
-    rty: RsType
     bdy: RsExpression
 
     def __str__(self) -> str:
@@ -709,7 +553,6 @@ class RsNewCase(RsExpression):
 
 @dataclasses.dataclass
 class RsNewRecord(RsExpression):
-    type: RsRecordType
     fields: dict[str, RsExpression]
 
     def __str__(self) -> str:
@@ -742,32 +585,6 @@ class RsFun(RsAst):
         return f"fn {self.name}({args}) {rtype} {{ {self.body} }}"
 
 
-def free_vars(expr: ast.Expression, type_map) -> typing.Iterator[tuple[str, int]]:
-    ty = type_map[id(expr)]
-    match expr:
-        case ast.Literal(_):
-            return
-        case ast.Reference(var):
-            yield var, ty
-        case ast.Function(var, body):
-            for fv, t in free_vars(body, type_map):
-                if fv != var:
-                    yield fv, t
-        case ast.Application(fun, arg):
-            yield from free_vars(fun, type_map)
-            yield from free_vars(arg, type_map)
-        case ast.Conditional(a, b, c):
-            yield from free_vars(a, type_map)
-            yield from free_vars(b, type_map)
-            yield from free_vars(c, type_map)
-        case ast.Record(fields):
-            yield from (free_vars(f[1], type_map) for f in fields)
-        case ast.FieldAccess(_, rec):
-            yield from free_vars(rec, type_map)
-        case _:
-            raise NotImplementedError(expr)
-
-
 def replace_calls(fns: set[str], rx: RsExpression) -> RsExpression:
     if not fns:
         return rx
@@ -787,14 +604,12 @@ def replace_calls(fns: set[str], rx: RsExpression) -> RsExpression:
             return RsIfExpr(
                 replace_calls(fns, a), replace_calls(fns, b), replace_calls(fns, c)
             )
-        case RsNewRecord(ty, fields):
-            return RsNewRecord(
-                ty, {f: replace_calls(fns, v) for f, v in fields.items()}
-            )
+        case RsNewRecord(fields):
+            return RsNewRecord({f: replace_calls(fns, v) for f, v in fields.items()})
         case RsGetField(field, rec):
             return RsGetField(field, replace_calls(fns, rec))
-        case RsClosure(var, vty, rty, body):
-            return RsClosure(var, vty, rty, replace_calls(fns - {var}, body))
+        case RsClosure(var, body):
+            return RsClosure(var, replace_calls(fns - {var}, body))
         case RsBlock(stmts, body):
             st_out = []
             for st in stmts:
