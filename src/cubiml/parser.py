@@ -38,13 +38,11 @@ tag = pp.Word("`", pp.alphas + pp.nums).add_parse_action(lambda t: t[0][1:])
 
 expr = pp.Forward()
 simple_expr = pp.Forward()
-call_expr = pp.Forward()
 
 boolean = pp.MatchFirst(["false", "true"]).set_parse_action(
     lambda t: ast.Literal(t[0] == "true")
 )
-
-integer = pp.Word("+-" + pp.nums, pp.nums).set_parse_action(
+integer = pp.Combine(pp.Opt(pp.one_of("+ -")) + pp.Word(pp.nums)).set_parse_action(
     lambda t: ast.Literal(int(t[0]))
 )
 
@@ -89,15 +87,46 @@ letrec = (pp.Literal("let") + "rec" + funcdefs + "in" + expr).add_parse_action(
     lambda t: ast.LetRec(list(t[2]), t[4])
 )
 
+
+def left_associative(t, mkast, ty):
+    items = t[::-1]
+    expr = items.pop()
+    while items:
+        op = items.pop()
+        rhs = items.pop()
+        expr = mkast(expr, rhs, (ty, ty, ty), op)
+    return expr
+
+
+call_expr = pp.OneOrMore(simple_expr).add_parse_action(
+    lambda t: functools.reduce(ast.Application, t[1:], t[0])
+)
+
+mult_expr = (call_expr + pp.ZeroOrMore(pp.one_of("* /") + call_expr)).add_parse_action(
+    lambda t: left_associative(t, ast.BinOp, "int")
+)
+
+add_expr = (mult_expr + pp.ZeroOrMore(pp.one_of("+ -") + mult_expr)).add_parse_action(
+    lambda t: left_associative(t, ast.BinOp, "int")
+)
+
+cmp_expr = (add_expr + pp.Opt(pp.one_of("< <= >= >") + add_expr)).add_parse_action(
+    lambda t: ast.BinOp(t[0], t[2], ("int", "int", "bool"), t[1])
+    if len(t) > 1
+    else t[0]
+)
+
+eq_expr = (cmp_expr + pp.Opt(pp.one_of("== !=") + cmp_expr)).add_parse_action(
+    lambda t: ast.BinOp(t[0], t[2], ("any", "any", "bool"), t[1])
+    if len(t) > 1
+    else t[0]
+)
+
 simple_expr <<= (
     record | boolean | integer | varref | (pp.Suppress("(") + expr + pp.Suppress(")"))
 )
 
-call_expr <<= pp.OneOrMore(simple_expr).add_parse_action(
-    lambda t: functools.reduce(ast.Application, t[1:], t[0])
-)
-
-expr <<= conditional | function | letrec | let | match | case | field_access | call_expr
+expr <<= conditional | function | letrec | let | match | case | field_access | eq_expr
 
 
 deflet = ("let" + ident + "=" + expr).add_parse_action(

@@ -27,6 +27,18 @@ class Reference(Expression):
     var: str
 
 
+Op = typing.Literal["+", "-", "*", "/", "<", "<=", ">=", ">", "==", "!=", "::"]
+OpType = typing.Literal["any", "int", "bool"]
+
+
+@dataclasses.dataclass(frozen=True)
+class BinOp(Expression):
+    lval: Expression
+    rval: Expression
+    opty: tuple[OpType, OpType, OpType]
+    rtor: Op
+
+
 @dataclasses.dataclass(frozen=True)
 class Conditional(Expression):
     condition: Expression

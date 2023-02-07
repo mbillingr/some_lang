@@ -23,7 +23,9 @@ class Interpreter:
         return result
 
 
-def eval_toplevel(stmt: ast.ToplevelItem, env: Mapping[str, Any]) -> (Any, Mapping[str, Any]):
+def eval_toplevel(
+    stmt: ast.ToplevelItem, env: Mapping[str, Any]
+) -> (Any, Mapping[str, Any]):
     match stmt:
         case ast.DefineLet(var, val):
             return None, extend_env(var, evaluate(val, env), env)
@@ -43,6 +45,32 @@ def evaluate(expr: ast.Expression, env: Mapping[str, Any]) -> Any:
                 return val
             case ast.Reference(var):
                 return env[var]
+            case ast.BinOp(lhs, rhs, _, op):
+                a = evaluate(lhs, env)
+                b = evaluate(rhs, env)
+                match op:
+                    case "+":
+                        return a + b
+                    case "-":
+                        return a - b
+                    case "*":
+                        return a * b
+                    case "/":
+                        return a // b
+                    case "<":
+                        return a < b
+                    case "<=":
+                        return a <= b
+                    case ">":
+                        return a > b
+                    case ">=":
+                        return a >= b
+                    case "==":
+                        return a == b
+                    case "!=":
+                        return a != b
+                    case _:
+                        raise NotImplementedError(op)
             case ast.Conditional(condition, consequence, alternative):
                 if evaluate(condition, env):
                     expr = consequence

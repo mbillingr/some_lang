@@ -106,6 +106,23 @@ def check_expr(
         case ast.Reference(var):
             scheme = bindings.get(var)
             return callback(expr, scheme(engine))
+        case ast.BinOp(lhs, rhs, opty, op):
+            lhs_t = check_expr(lhs, bindings, engine, callback)
+            rhs_t = check_expr(rhs, bindings, engine, callback)
+            match opty:
+                case "any", "any", "bool":
+                    return callback(expr, engine.new_val(type_heads.VBool()))
+                case "int", "int", "bool":
+                    bound = engine.new_use(type_heads.UInt())
+                    engine.flow(lhs_t, bound)
+                    engine.flow(rhs_t, bound)
+                    return callback(expr, engine.new_val(type_heads.VBool()))
+                case "int", "int", "int":
+                    bound = engine.new_use(type_heads.UInt())
+                    engine.flow(lhs_t, bound)
+                    engine.flow(rhs_t, bound)
+                    return callback(expr, engine.new_val(type_heads.VInt()))
+
         case ast.Record(fields):
             field_names = set()
             field_types = type_heads.AssocEmpty()

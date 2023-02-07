@@ -154,7 +154,7 @@ def test_get_expr_location():
     src = " if a then a else a"
     exp = parser.expr.parse_string(src)[0]
 
-    assert parser.get_loc(exp) == 0
-    assert parser.get_loc(exp.condition) == 3
-    assert parser.get_loc(exp.consequence) == 10
-    assert parser.get_loc(exp.alternative) == 17
+    assert parser.get_loc(exp) == 1
+    assert parser.get_loc(exp.condition) == 4
+    assert parser.get_loc(exp.consequence) == 11
+    assert parser.get_loc(exp.alternative) == 18
