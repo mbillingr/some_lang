@@ -26,6 +26,7 @@ mod base {
     pub enum Value {
         Bool(bool),
         Record(std::collections::HashMap<&'static str, Value>),
+        Case(&'static str, Box<Value>),
         Function(Ref<dyn Func>),
     }
     
@@ -44,6 +45,7 @@ mod base {
                     write!(f, "{}", fields.join("; "))?;
                     write!(f, "}}")
                 }
+                Value::Case(t, v) => write!(f, "`{t} {v:?}"),
                 Value::Function(fun) => write!(f, "<fun {:p}>", fun)
             }
         }
@@ -263,6 +265,12 @@ class Compiler:
                     self.compile_letrec(expr),
                     self.compile_expr(expr.body),
                 )
+            case ast.Case(tag, val):
+                return RsNewCase(tag, self.compile_expr(val))
+            case ast.Match(val, arms):
+                v = self.compile_expr(val)
+                cs = [(a.tag, a.var, self.compile_expr(a.bdy)) for a in arms]
+                return RsMatch(v, cs)
             case _:
                 raise NotImplementedError(expr)
 
@@ -647,9 +655,36 @@ class RsIfExpr(RsExpression):
     def __str__(self) -> str:
         return (
             f"if bool::from({self.condition}) "
-            f"{{ {self.consequence} }} else "
-            f"{{ {self.alternative} }}"
+            f"{{ {RsIntoValue(self.consequence)} }} else "
+            f"{{ {RsIntoValue(self.alternative)} }}"
         )
+
+
+@dataclasses.dataclass
+class RsMatch(RsExpression):
+    value: RsExpression
+    arms: list[tuple[str, str, RsExpression]]
+
+    def __str__(self) -> str:
+        return "\n".join(
+            [
+                f"match {self.value} {{",
+                *(
+                    f'base::Value::Case("{tag}", {ident}) => {{ let {ident} = *{ident}; {RsIntoValue(body)} }}'
+                    for tag, ident, body in self.arms
+                ),
+                "_ => unreachable!()," f"}}",
+            ]
+        )
+
+
+@dataclasses.dataclass
+class RsNewCase(RsExpression):
+    tag: str
+    val: RsExpression
+
+    def __str__(self) -> str:
+        return f'base::Value::Case("{self.tag}", Box::new({RsIntoValue(self.val)}))'
 
 
 @dataclasses.dataclass

@@ -68,7 +68,7 @@ class TestLanguage:
         assert res == "false"
 
     def test_conditional_with_different_types(self, evaluator):
-        src = "if false then {a=true;b=true} else {b=true;c=true}"
+        src = "if false then true else {b=true;c=true}"
         res = evaluator(src)
         assert res == "{b=true; c=true}"
 
@@ -90,7 +90,7 @@ class TestLanguage:
         assert res == "false"
 
     def test_case_and_match(self, evaluator):
-        src = "match `Bar {} with | `Foo x -> false | `Bar y -> true"
+        src = "match `Bar true with | `Foo x -> false | `Bar y -> y"
         res = evaluator(src)
         assert res == "true"
 
