@@ -236,6 +236,10 @@ class Compiler:
                 return RsLiteral(str(i))
             case ast.Reference(var):
                 return RsReference(var)
+            case ast.BinOp(left, right, _, op):
+                a = self.compile_expr(left)
+                b = self.compile_expr(right)
+                return RsBinOp(op, a, b)
             case ast.Conditional(condition, consequence, alternative):
                 a = self.compile_expr(condition)
                 b = self.compile_expr(consequence)
@@ -473,6 +477,16 @@ class RsReference(RsExpression):
 
     def __str__(self) -> str:
         return f"{self.var}.clone()"
+
+
+@dataclasses.dataclass
+class RsBinOp(RsExpression):
+    op: str
+    lhs: RsExpression
+    rhs: RsExpression
+
+    def __str__(self) -> str:
+        return f"({self.lhs} {self.op} {self.rhs})"
 
 
 @dataclasses.dataclass

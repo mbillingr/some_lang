@@ -42,6 +42,11 @@ class TestLanguage:
         res = evaluator(src)
         assert res == "42"
 
+    def test_operators(self, evaluator):
+        src = "10 - 2 * (2 + 3) == 0"
+        res = evaluator(src)
+        assert res == "true"
+
     def test_toplevel_binding(self, evaluator):
         src = "let x = false; x"
         res = evaluator(src)
