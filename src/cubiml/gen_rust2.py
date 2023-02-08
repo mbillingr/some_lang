@@ -112,6 +112,69 @@ mod base {
         }
     }
     
+    impl std::cmp::PartialEq for Value {
+        fn eq(&self, other: &Value) -> bool {
+            match(self, other) {
+                (Value::Bool(a), Value::Bool(b)) => a == b,
+                (Value::Int(a), Value::Int(b)) => a == b,
+                (Value::Record(a), Value::Record(b)) => a == b,
+                (Value::Case(ta, va), Value::Case(tb, vb)) => ta == tb && va == vb,
+                (Value::Function(a), Value::Function(b)) => Ref::ptr_eq(a, b),
+                _ => false,
+            }
+        }
+    }
+    
+    impl std::cmp::PartialOrd for Value {
+        fn partial_cmp(&self, other: &Value) -> Option<std::cmp::Ordering> {
+            match(self, other) {
+                (Value::Int(a), Value::Int(b)) => a.partial_cmp(b),
+                (Value::Case(ta, va), Value::Case(tb, vb)) if ta == tb => va.partial_cmp(vb),
+                _ => None,
+            }
+        }
+    }
+    
+    impl std::ops::Add for Value {
+        type Output = Value;
+        fn add(self, rhs: Value) -> Value {
+            match (self, rhs) {
+                (Value::Int(a), Value::Int(b)) => Value::Int(a + b),
+                _ => panic!("invalid arithmetic types")
+            }
+        }
+    }
+    
+    impl std::ops::Sub for Value {
+        type Output = Value;
+        fn sub(self, rhs: Value) -> Value {
+            match (self, rhs) {
+                (Value::Int(a), Value::Int(b)) => Value::Int(a - b),
+                _ => panic!("invalid arithmetic types")
+            }
+        }
+    }
+    
+    impl std::ops::Mul for Value {
+        type Output = Value;
+        fn mul(self, rhs: Value) -> Value {
+            match (self, rhs) {
+                (Value::Int(a), Value::Int(b)) => Value::Int(a * b),
+                _ => panic!("invalid arithmetic types")
+            }
+        }
+    }
+    
+    impl std::ops::Div for Value {
+        type Output = Value;
+        fn div(self, rhs: Value) -> Value {
+            match (self, rhs) {
+                (Value::Int(a), Value::Int(b)) => Value::Int(a / b),
+                _ => panic!("invalid arithmetic types")
+            }
+        }
+    }
+    
     pub trait Func {
         fn apply(&self, a: Value) -> Value;
     }
@@ -486,7 +549,7 @@ class RsBinOp(RsExpression):
     rhs: RsExpression
 
     def __str__(self) -> str:
-        return f"({self.lhs} {self.op} {self.rhs})"
+        return f"({RsIntoValue(self.lhs)} {self.op} {RsIntoValue(self.rhs)})"
 
 
 @dataclasses.dataclass
@@ -614,6 +677,8 @@ def replace_calls(fns: set[str], rx: RsExpression) -> RsExpression:
             return rx
         case RsNewObj(x):
             return RsNewObj(replace_calls(fns, x))
+        case RsBinOp(op, a, b):
+            return RsBinOp(op, replace_calls(fns, a), replace_calls(fns, b))
         case RsIfExpr(a, b, c):
             return RsIfExpr(
                 replace_calls(fns, a), replace_calls(fns, b), replace_calls(fns, c)

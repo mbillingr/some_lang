@@ -133,6 +133,9 @@ def free_vars(expr: Expression) -> typing.Iterator[str]:
             return
         case Reference(var):
             yield var
+        case BinOp(a, b, _, _):
+            yield from free_vars(a)
+            yield from free_vars(b)
         case Function(var, body):
             for fv in free_vars(body):
                 if fv != var:

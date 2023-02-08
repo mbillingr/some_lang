@@ -133,6 +133,17 @@ class TestLanguage:
         res = evaluator(src)
         assert res == "{a={}; b=true}"
 
+    def test_fibonacci(self, evaluator):
+        src = """
+            let rec fib = fun n -> 
+                if n < 2
+                then 1
+                else fib (n - 1) + fib (n - 2);
+            fib(10)
+        """
+        res = evaluator(src)
+        assert res == "89"
+
 
 def transform_python_result(res) -> str:
     match res:
