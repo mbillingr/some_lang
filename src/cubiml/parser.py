@@ -24,6 +24,7 @@ keyword = (
     | "match"
     | "with"
     | "fun"
+    | "proc"
     | "let"
     | "rec"
     | "and"
@@ -76,11 +77,17 @@ function = ("fun" + ident + "->" + expr).add_parse_action(
     lambda t: ast.Function(t[1], t[3])
 )
 
+procedure = ("proc" + ident + "->" + expr).add_parse_action(
+    lambda t: ast.Function(t[1], t[3])
+)
+
 let = ("let" + ident + "=" + expr + "in" + expr).add_parse_action(
     lambda t: ast.Let(t[1], t[3], t[5])
 )
 
-funcdef = (ident + "=" + function).add_parse_action(lambda t: ast.FuncDef(t[0], t[2]))
+funcdef = (ident + "=" + function | procedure).add_parse_action(
+    lambda t: ast.FuncDef(t[0], t[2])
+)
 funcdefs = pp.Group(pp.delimited_list(funcdef, "and"))
 
 letrec = (pp.Literal("let") + "rec" + funcdefs + "in" + expr).add_parse_action(
@@ -126,7 +133,17 @@ simple_expr <<= (
     record | boolean | integer | varref | (pp.Suppress("(") + expr + pp.Suppress(")"))
 )
 
-expr <<= conditional | function | letrec | let | match | case | field_access | eq_expr
+expr <<= (
+    conditional
+    | function
+    | procedure
+    | letrec
+    | let
+    | match
+    | case
+    | field_access
+    | eq_expr
+)
 
 
 deflet = ("let" + ident + "=" + expr).add_parse_action(

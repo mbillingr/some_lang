@@ -144,6 +144,11 @@ class TestLanguage:
         res = evaluator(src)
         assert res == "89"
 
+    def test_procedures(self, evaluator):
+        src = "(proc x -> x + 2) 5"
+        res = evaluator(src)
+        assert res == "7"
+
 
 def transform_python_result(res) -> str:
     match res:
