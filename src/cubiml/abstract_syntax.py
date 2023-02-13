@@ -83,6 +83,12 @@ class Function(Expression):
 
 
 @dataclasses.dataclass(frozen=True)
+class Procedure(Expression):
+    var: str
+    body: list[Expression]
+
+
+@dataclasses.dataclass(frozen=True)
 class Application(Expression):
     fun: Expression
     arg: Expression

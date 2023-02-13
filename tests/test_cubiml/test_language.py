@@ -145,7 +145,7 @@ class TestLanguage:
         assert res == "89"
 
     def test_procedures(self, evaluator):
-        src = "(proc x -> x + 2) 5"
+        src = "(proc x -> do x + 10; x + 2 end) 5"
         res = evaluator(src)
         assert res == "7"
 

@@ -90,11 +90,21 @@ def evaluate(expr: ast.Expression, env: Mapping[str, Any]) -> Any:
                 raise RuntimeError("No arm matched")
             case ast.Function(var, body):
                 return Function(env, var, body)
+            case ast.Procedure(var, body):
+                return Procedure(env, var, body)
             case ast.Application(fun, arg):
                 fval = evaluate(fun, env)
                 aval = evaluate(arg, env)
                 env = extend_env(fval.var, aval, fval.captured_env)
-                expr = fval.body
+                match fval:
+                    case Procedure(_, _, body):
+                        for stmt in body[:-1]:
+                            _ = evaluate(stmt, env)
+                        expr = body[-1]
+                    case Function(_, _, body):
+                        expr = body
+                    case _:
+                        raise RuntimeError("Invalid callable")
             case ast.Let(var, val, body):
                 env = extend_env(var, evaluate(val, env), env)
                 expr = body
@@ -120,6 +130,13 @@ class Function:
     captured_env: Mapping[str, Any]
     var: str
     body: ast.Expression
+
+
+@dataclasses.dataclass
+class Procedure:
+    captured_env: Mapping[str, Any]
+    var: str
+    body: list[ast.Expression]
 
 
 def extend_env(var: str, val: Any, env: Mapping[str, Any]) -> Mapping[str, Any]:

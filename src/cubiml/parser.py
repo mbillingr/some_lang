@@ -29,6 +29,9 @@ keyword = (
     | "rec"
     | "and"
     | "in"
+    | "do"
+    | "end"
+    | "return"
 )
 _ident_init_chars = string.ascii_lowercase + "_"
 _ident_body_chars = _ident_init_chars + pp.nums + string.ascii_uppercase
@@ -73,11 +76,15 @@ match = ("match" + expr + "with" + pp.OneOrMore(match_arm)).add_parse_action(
     lambda t: ast.Match(t[1], list(t[3:]))
 )
 
-function = ("fun" + ident + "->" + expr).add_parse_action(
-    lambda t: ast.Function(t[1], t[3])
+block = ("do" + pp.Group(pp.delimited_list(expr, ";")) + "end").add_parse_action(
+    lambda t: [t[1]]
 )
 
-procedure = ("proc" + ident + "->" + expr).add_parse_action(
+procedure = ("proc" + ident + "->" + block).add_parse_action(
+    lambda t: ast.Procedure(t[1], t[3])
+)
+
+function = ("fun" + ident + "->" + expr).add_parse_action(
     lambda t: ast.Function(t[1], t[3])
 )
 

@@ -184,6 +184,14 @@ def check_expr(
                 bindings_.insert(var, arg_t)
                 body_t = check_expr(body, bindings_, engine, callback)
             return callback(expr, engine.new_val(type_heads.VFunc(arg_u, body_t)))
+        case ast.Procedure(var, body):
+            arg_t, arg_u = engine.var()
+            with bindings.child_scope() as bindings_:
+                bindings_.insert(var, arg_t)
+                body_t = None
+                for bexp in body:
+                    body_t = check_expr(bexp, bindings_, engine, callback)
+            return callback(expr, engine.new_val(type_heads.VFunc(arg_u, body_t)))
         case ast.Application(fun, arg):
             fun_t = check_expr(fun, bindings, engine, callback)
             arg_t = check_expr(arg, bindings, engine, callback)
