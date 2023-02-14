@@ -310,6 +310,8 @@ class Compiler:
                 return RsIfExpr(a, b, c)
             case ast.Function():
                 return self.compile_function(expr, name=f"fun{id(expr)}")
+            case ast.Procedure():
+                return self.compile_function(expr, name=f"proc{id(expr)}")
             case ast.Application(fun, arg):
                 f = self.compile_expr(fun)
                 a = self.compile_expr(arg)
@@ -340,9 +342,19 @@ class Compiler:
             case _:
                 raise NotImplementedError(expr)
 
-    def compile_function(self, fun: ast.Function, name: str) -> RsExpression:
+    def compile_function(self, fun: ast.Expression, name: str) -> RsExpression:
+        match fun:
+            case ast.Function():
+                body = self.compile_expr(fun.body)
+            case ast.Procedure():
+                parts = list(map(self.compile_expr, fun.body))
+                stmts = list(map(RsExprStatement, parts[:-1]))
+                body = RsBlock(stmts, parts[-1])
+            case _:
+                raise TypeError("invalid functino")
+
+        fndefs = [(name, fun.var, body)]
         fvs = set(ast.free_vars(fun))
-        fndefs = [(name, fun.var, self.compile_expr(fun.body))]
         self.toplevel_defs.append(RsMutualClosure(name, fvs, fndefs))
 
         capture = ", ".join(f"{v}:{v}.clone()" for v in fvs)

@@ -146,6 +146,11 @@ def free_vars(expr: Expression) -> typing.Iterator[str]:
             for fv in free_vars(body):
                 if fv != var:
                     yield fv
+        case Procedure(var, body):
+            for bexp in body:
+                for fv in free_vars(bexp):
+                    if fv != var:
+                        yield fv
         case Application(fun, arg):
             yield from free_vars(fun)
             yield from free_vars(arg)
