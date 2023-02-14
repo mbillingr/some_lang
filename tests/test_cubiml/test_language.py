@@ -163,6 +163,16 @@ class TestLanguage:
         with pytest.raises(TypeError, match="Unusable"):
             evaluator(src)
 
+    def test_procedure_in_functional_context(self, evaluator):
+        src = "let foo = proc x -> x; let bar = fun x -> (foo x); bar"
+        with pytest.raises(TypeError, match="TODO"):
+            res = evaluator(src)
+
+    def test_mutation_in_functional_context(self, evaluator):
+        src = "let foo = fun x -> x := 0; foo"
+        with pytest.raises(TypeError, match="TODO"):
+            res = evaluator(src)
+
 
 def transform_python_result(res) -> str:
     match res:
