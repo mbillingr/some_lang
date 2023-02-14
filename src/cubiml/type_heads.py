@@ -178,3 +178,43 @@ class UFunc(UTypeHead):
             t_new if self.arg == t_old else self.arg,
             t_new if self.ret == t_old else self.ret,
         )
+
+
+@dataclasses.dataclass(frozen=True)
+class VRef(VTypeHead):
+    write: Optional[Use]
+    read: Optional[Value]
+
+    def substitute(self, t_old, t_new) -> VTypeHead:
+        return VRef(
+            t_new if self.write == t_old else self.write,
+            t_new if self.read == t_old else self.read,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
+class URef(UTypeHead):
+    write: Optional[Value]
+    read: Optional[Use]
+
+    def check(self, val: VTypeHead) -> list[tuple[Value, Use]]:
+        out = []
+        if not isinstance(val, VRef):
+            raise TypeError(self, val)
+        if self.read is not None:
+            if val.read is not None:
+                out.append((val.read, self.read))
+            else:
+                raise TypeError("Reference is not readable")
+        if self.write is not None:
+            if val.write is not None:
+                out.append((self.write, val.write))
+            else:
+                raise TypeError("Reference is not writable")
+        return out
+
+    def substitute(self, t_old, t_new) -> UTypeHead:
+        return URef(
+            t_new if self.write == t_old else self.write,
+            t_new if self.read == t_old else self.read,
+        )

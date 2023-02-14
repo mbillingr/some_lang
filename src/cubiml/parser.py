@@ -29,6 +29,7 @@ keyword = (
     | "rec"
     | "and"
     | "in"
+    | "ref"
     | "do"
     | "end"
     | "return"
@@ -62,9 +63,6 @@ record = (
     + pp.Suppress("}")
 ).add_parse_action(lambda tok: ast.Record(list(map(tuple, tok))))
 
-field_access = (simple_expr + pp.OneOrMore("." + ident)).add_parse_action(
-    lambda t: functools.reduce(lambda x, f: ast.FieldAccess(f, x), t[2::2], t[0])
-)
 
 case = (tag + expr).add_parse_action(lambda t: ast.Case(t[0], t[1]))
 
@@ -112,7 +110,17 @@ def left_associative(t, mkast, ty):
     return expr
 
 
-call_expr = pp.OneOrMore(simple_expr).add_parse_action(
+field_access = (simple_expr + pp.ZeroOrMore("." + ident)).add_parse_action(
+    lambda t: functools.reduce(lambda x, f: ast.FieldAccess(f, x), t[2::2], t[0])
+)
+
+ref_get = ("!" + field_access).add_parse_action(lambda t: ast.RefGet(t[1]))
+refget_expr = ref_get | field_access
+
+newref = ("ref" + expr).add_parse_action(lambda t: ast.NewRef(t[1]))
+newref_expr = newref | refget_expr
+
+call_expr = pp.OneOrMore(newref_expr).add_parse_action(
     lambda t: functools.reduce(ast.Application, t[1:], t[0])
 )
 
@@ -140,17 +148,7 @@ simple_expr <<= (
     record | boolean | integer | varref | (pp.Suppress("(") + expr + pp.Suppress(")"))
 )
 
-expr <<= (
-    conditional
-    | function
-    | procedure
-    | letrec
-    | let
-    | match
-    | case
-    | field_access
-    | eq_expr
-)
+expr <<= conditional | function | procedure | letrec | let | match | case | eq_expr
 
 
 deflet = ("let" + ident + "=" + expr).add_parse_action(

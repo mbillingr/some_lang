@@ -149,6 +149,11 @@ class TestLanguage:
         res = evaluator(src)
         assert res == "7"
 
+    def test_references(self, evaluator):
+        src = "let x = {y=ref 5}; !x.y + !x.y"
+        res = evaluator(src)
+        assert res == "10"
+
 
 def transform_python_result(res) -> str:
     match res:
@@ -164,5 +169,7 @@ def transform_python_result(res) -> str:
             )
         case interpreter.Function():
             return f"<fun>"
+        case interpreter.Cell(val):
+            return f"(ref {transform_python_result(val)})"
         case _:
             raise NotImplementedError(res)

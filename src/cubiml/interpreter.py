@@ -111,6 +111,10 @@ def evaluate(expr: ast.Expression, env: Mapping[str, Any]) -> Any:
             case ast.LetRec(bind, body):
                 env = make_letrec_env(bind, env)
                 expr = body
+            case ast.NewRef(init):
+                return Cell(evaluate(init, env))
+            case ast.RefGet(ref):
+                return evaluate(ref, env).val
             case _:
                 raise NotImplementedError(expr)
 
@@ -123,6 +127,11 @@ def make_letrec_env(
     for b in bind:
         recenv[b.name] = Function(env, b.fun.var, b.fun.body)
     return env
+
+
+@dataclasses.dataclass
+class Cell:
+    val: Any
 
 
 @dataclasses.dataclass

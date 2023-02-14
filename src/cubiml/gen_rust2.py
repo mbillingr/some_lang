@@ -30,6 +30,7 @@ mod base {
         Record(std::collections::HashMap<&'static str, Value>),
         Case(&'static str, Box<Value>),
         Function(Ref<dyn Func>),
+        Ref(Ref<std::cell::RefCell<Value>>),
     }
     
     impl std::fmt::Debug for Value {
@@ -49,7 +50,8 @@ mod base {
                     write!(f, "}}")
                 }
                 Value::Case(t, v) => write!(f, "`{t} {v:?}"),
-                Value::Function(fun) => write!(f, "<fun {:p}>", fun)
+                Value::Function(fun) => write!(f, "<fun {:p}>", fun),
+                Value::Ref(cell) => write!(f, "(ref {:?})", cell.borrow_mut()),
             }
         }
     }
@@ -108,6 +110,13 @@ mod base {
             match self {
                 Value::Record(r) => r[field].clone(),
                 _ => panic!("Not a record: {:?}", self),
+            }
+        }
+        
+        pub fn inner(self) -> Value {
+            match self {
+                Value::Ref(cell) => cell.borrow().clone(),
+                _ => self
             }
         }
     }
@@ -339,6 +348,10 @@ class Compiler:
                 v = self.compile_expr(val)
                 cs = [(a.tag, a.var, self.compile_expr(a.bdy)) for a in arms]
                 return RsMatch(v, cs)
+            case ast.NewRef(init):
+                return RsNewCell(self.compile_expr(init))
+            case ast.RefGet(ref):
+                return RsCellGet(self.compile_expr(ref))
             case _:
                 raise NotImplementedError(expr)
 
@@ -672,6 +685,22 @@ class RsFun(RsAst):
         args = ", ".join(f"{t} {a}" for t, a in self.args)
         rtype = f"-> {self.rtype}" if self.rtype else ""
         return f"fn {self.name}({args}) {rtype} {{ {self.body} }}"
+
+
+@dataclasses.dataclass
+class RsNewCell(RsExpression):
+    init: RsExpression
+
+    def __str__(self):
+        return f"base::Value::Ref(base::Ref::new(std::cell::RefCell::new({RsIntoValue(self.init)})))"
+
+
+@dataclasses.dataclass
+class RsCellGet(RsExpression):
+    ref: RsExpression
+
+    def __str__(self):
+        return f"{self.ref}.inner()"
 
 
 def replace_calls(fns: set[str], rx: RsExpression) -> RsExpression:

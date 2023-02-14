@@ -210,6 +210,17 @@ def check_expr(
             with bindings.child_scope() as bindings_:
                 check_letrec(defs, bindings_, engine, callback)
                 return callback(expr, check_expr(body, bindings_, engine, callback))
+        case ast.NewRef(init):
+            val_t = check_expr(init, bindings, engine, callback)
+            read, write = engine.var()
+            engine.flow(val_t, write)
+            return callback(expr, engine.new_val(type_heads.VRef(write, read)))
+        case ast.RefGet(ref):
+            ref_t = check_expr(ref, bindings, engine, callback)
+            cell_type, cell_use = engine.var()
+            use = engine.new_use(type_heads.URef(None, cell_use))
+            engine.flow(ref_t, use)
+            return callback(expr, cell_type)
         case _:
             raise NotImplementedError(expr)
 

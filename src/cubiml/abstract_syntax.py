@@ -129,6 +129,22 @@ class Script(AstNode):
     statements: list[ToplevelItem]
 
 
+@dataclasses.dataclass(frozen=True)
+class NewRef(Expression):
+    init: Expression
+
+
+@dataclasses.dataclass(frozen=True)
+class RefGet(Expression):
+    ref: Expression
+
+
+@dataclasses.dataclass(frozen=True)
+class RefSet(Expression):
+    ref: Expression
+    val: Expression
+
+
 TRUE = Literal(True)
 FALSE = Literal(False)
 
