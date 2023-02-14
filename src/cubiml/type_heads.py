@@ -64,6 +64,7 @@ class AssocItem(Assoc[T]):
 @dataclasses.dataclass(frozen=True)
 class VNever(VTypeHead):
     """A type that cannot be used. Maybe it has no value?"""
+
     def check(self, _):
         raise TypeError("Unusable type")
 
@@ -159,15 +160,20 @@ class UCase(UTypeHead):
 
 
 @dataclasses.dataclass(frozen=True)
-class VFunc(VTypeHead):
+class VProc(VTypeHead):
     arg: Use
     ret: Value
 
     def substitute(self, t_old, t_new):
-        return VFunc(
+        return self.__class__(
             t_new if self.arg == t_old else self.arg,
             t_new if self.ret == t_old else self.ret,
         )
+
+
+@dataclasses.dataclass(frozen=True)
+class VFunc(VProc):
+    pass
 
 
 @dataclasses.dataclass(frozen=True)
@@ -182,6 +188,23 @@ class UFunc(UTypeHead):
 
     def substitute(self, t_old, t_new):
         return UFunc(
+            t_new if self.arg == t_old else self.arg,
+            t_new if self.ret == t_old else self.ret,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
+class UProc(UTypeHead):
+    arg: Value
+    ret: Use
+
+    def check(self, val: VTypeHead) -> list[tuple[Value, Use]]:
+        if not isinstance(val, VProc):  # note that this also accepts VFuncs
+            raise TypeError(self, val)
+        return [(val.ret, self.ret), (self.arg, val.arg)]
+
+    def substitute(self, t_old, t_new):
+        return UProc(
             t_new if self.arg == t_old else self.arg,
             t_new if self.ret == t_old else self.ret,
         )

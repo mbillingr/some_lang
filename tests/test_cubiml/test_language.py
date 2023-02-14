@@ -164,7 +164,7 @@ class TestLanguage:
             evaluator(src)
 
     def test_procedure_in_functional_context(self, evaluator):
-        src = "let foo = proc x -> x; let bar = fun x -> (foo x); bar"
+        src = "let foo = proc x -> do x end; let bar = fun x -> foo x; bar"
         with pytest.raises(TypeError, match="TODO"):
             res = evaluator(src)
 

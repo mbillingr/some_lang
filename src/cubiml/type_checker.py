@@ -191,13 +191,13 @@ def check_expr(
                 body_t = None
                 for bexp in body:
                     body_t = check_expr(bexp, bindings_, engine, callback)
-            return callback(expr, engine.new_val(type_heads.VFunc(arg_u, body_t)))
+            return callback(expr, engine.new_val(type_heads.VProc(arg_u, body_t)))
         case ast.Application(fun, arg):
             fun_t = check_expr(fun, bindings, engine, callback)
             arg_t = check_expr(arg, bindings, engine, callback)
 
             ret_t, ret_u = engine.var()
-            use = engine.new_use(type_heads.UFunc(arg_t, ret_u))
+            use = engine.new_use(type_heads.UProc(arg_t, ret_u))
             engine.flow(fun_t, use)
             return callback(expr, ret_t)
         case ast.Let(var, val, body):
