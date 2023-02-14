@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import enum
 from copy import deepcopy
 from typing import Optional, TypeAlias, Callable
 
@@ -10,8 +11,8 @@ from cubiml import abstract_syntax as ast, type_heads
 
 
 class TypeChecker:
-    def __init__(self, callback=lambda _, x: x):
-        self.ctx = Context(Bindings(), TypeCheckerCore(), callback)
+    def __init__(self):
+        self.ctx = Context.default()
 
     def check_script(self, script: ast.Script):
         backup = deepcopy(self.ctx.engine)
@@ -93,24 +94,34 @@ class Bindings:
                 self.m[k] = old
 
 
+class Level(enum.Enum):
+    TOP = "toplevel"
+    FUNC = "function"
+    PROC = "procedure"
+
+
 @dataclasses.dataclass
 class Context:
     bindings: Bindings
     engine: TypeCheckerCore
     callback: Callable
+    level: Level
 
     @staticmethod
     def default() -> Context:
-        return Context(Bindings(), TypeCheckerCore(), lambda _, x: x)
+        return Context(Bindings(), TypeCheckerCore(), lambda _, x: x, Level.TOP)
 
     def with_bindings(self, bindings: Bindings) -> Context:
-        return Context(bindings, self.engine, self.callback)
+        return Context(bindings, self.engine, self.callback, self.level)
 
     def with_engine(self, engine: TypeCheckerCore) -> Context:
-        return Context(self.bindings, engine, self.callback)
+        return Context(self.bindings, engine, self.callback, self.level)
 
     def with_callback(self, callback: Callable) -> Context:
-        return Context(self.bindings, self.engine, callback)
+        return Context(self.bindings, self.engine, callback, self.level)
+
+    def with_level(self, level: Level) -> Context:
+        return Context(self.bindings, self.engine, self.callback, level)
 
 
 def check_expr(expr: ast.Expression, ctx: Context) -> Value:
@@ -198,7 +209,9 @@ def check_expr(expr: ast.Expression, ctx: Context) -> Value:
             arg_t, arg_u = ctx.engine.var()
             with ctx.bindings.child_scope() as bindings_:
                 bindings_.insert(var, arg_t)
-                body_t = check_expr(body, ctx.with_bindings(bindings_))
+                body_t = check_expr(
+                    body, ctx.with_bindings(bindings_).with_level(Level.FUNC)
+                )
             return ctx.callback(
                 expr, ctx.engine.new_val(type_heads.VFunc(arg_u, body_t))
             )
@@ -208,7 +221,9 @@ def check_expr(expr: ast.Expression, ctx: Context) -> Value:
                 bindings_.insert(var, arg_t)
                 body_t = None
                 for bexp in body:
-                    body_t = check_expr(bexp, ctx.with_bindings(bindings_))
+                    body_t = check_expr(
+                        bexp, ctx.with_bindings(bindings_).with_level(Level.PROC)
+                    )
             return ctx.callback(
                 expr, ctx.engine.new_val(type_heads.VProc(arg_u, body_t))
             )
@@ -217,7 +232,14 @@ def check_expr(expr: ast.Expression, ctx: Context) -> Value:
             arg_t = check_expr(arg, ctx)
 
             ret_t, ret_u = ctx.engine.var()
-            use = ctx.engine.new_use(type_heads.UProc(arg_t, ret_u))
+            match ctx.level:
+                case Level.FUNC:
+                    uty = type_heads.UFunc(arg_t, ret_u)
+                case Level.PROC | Level.TOP:
+                    uty = type_heads.UProc(arg_t, ret_u)
+                case _:
+                    raise NotImplementedError(ctx.level)
+            use = ctx.engine.new_use(uty)
             ctx.engine.flow(fun_t, use)
             return ctx.callback(expr, ret_t)
         case ast.Let(var, val, body):
@@ -263,7 +285,9 @@ def check_let(expr: ast.Expression, ctx: Context) -> Scheme:
             saved_ctx = ctx.with_bindings(saved_bindings)
             saved_expr = expr
 
-            f = lambda eng: check_expr(saved_expr, saved_ctx.with_engine(eng))
+            f = lambda eng: check_expr(
+                saved_expr, saved_ctx.with_engine(eng).with_level(Level.FUNC)
+            )
             ctx.callback(
                 expr, f(ctx.engine)
             )  # check once, in case the var is never referenced

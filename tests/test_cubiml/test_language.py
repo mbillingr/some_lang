@@ -165,13 +165,13 @@ class TestLanguage:
 
     def test_procedure_in_functional_context(self, evaluator):
         src = "let foo = proc x -> do x end; let bar = fun x -> foo x; bar"
-        with pytest.raises(TypeError, match="TODO"):
-            res = evaluator(src)
+        with pytest.raises(TypeError, match="VProc"):
+            evaluator(src)
 
     def test_mutation_in_functional_context(self, evaluator):
         src = "let foo = fun x -> x := 0; foo"
         with pytest.raises(TypeError, match="TODO"):
-            res = evaluator(src)
+            evaluator(src)
 
 
 def transform_python_result(res) -> str:
