@@ -117,6 +117,8 @@ field_access = (simple_expr + pp.ZeroOrMore("." + ident)).add_parse_action(
 ref_get = ("!" + field_access).add_parse_action(lambda t: ast.RefGet(t[1]))
 refget_expr = ref_get | field_access
 
+ref_set = (refget_expr + ":=" + expr).add_parse_action(lambda t: ast.RefSet(t[0], t[2]))
+
 newref = ("ref" + expr).add_parse_action(lambda t: ast.NewRef(t[1]))
 newref_expr = newref | refget_expr
 
@@ -148,7 +150,9 @@ simple_expr <<= (
     record | boolean | integer | varref | (pp.Suppress("(") + expr + pp.Suppress(")"))
 )
 
-expr <<= conditional | function | procedure | letrec | let | match | case | eq_expr
+expr <<= (
+    conditional | function | procedure | letrec | let | match | case | ref_set | eq_expr
+)
 
 
 deflet = ("let" + ident + "=" + expr).add_parse_action(

@@ -5,6 +5,9 @@ from typing import Mapping, Any, Iterator
 from cubiml import abstract_syntax as ast
 
 
+NEVER = None  # representation of the unusable type
+
+
 class Interpreter:
     def __init__(self):
         self.env = {}
@@ -115,6 +118,10 @@ def evaluate(expr: ast.Expression, env: Mapping[str, Any]) -> Any:
                 return Cell(evaluate(init, env))
             case ast.RefGet(ref):
                 return evaluate(ref, env).val
+            case ast.RefSet(ref, val):
+                r = evaluate(ref, env)
+                r.val = evaluate(val, env)
+                return NEVER
             case _:
                 raise NotImplementedError(expr)
 

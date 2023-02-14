@@ -62,6 +62,13 @@ class AssocItem(Assoc[T]):
 
 
 @dataclasses.dataclass(frozen=True)
+class VNever(VTypeHead):
+    """A type that cannot be used. Maybe it has no value?"""
+    def check(self, _):
+        raise TypeError("Unusable type")
+
+
+@dataclasses.dataclass(frozen=True)
 class VBool(VTypeHead):
     pass
 

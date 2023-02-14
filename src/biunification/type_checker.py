@@ -15,6 +15,10 @@ class VTypeHead(abc.ABC):
     def substitute(self, t_old, t_new) -> VTypeHead:
         return self
 
+    def check(self, rhs: UTypeHead) -> list[tuple[Value, Use]]:
+        """Override on types that can't be checked by usage"""
+        return []
+
 
 class UTypeHead(abc.ABC):
     @abc.abstractmethod
@@ -70,8 +74,10 @@ class TypeCheckerCore:
                 lhs, rhs = type_pairs_to_check.pop()
                 lhs_head = self.types[lhs]
                 rhs_head = self.types[rhs]
-                if isinstance(lhs_head, VTypeHead) and isinstance(rhs_head, UTypeHead):
-                    pending_edges += check_heads(lhs_head, rhs_head)
+                if isinstance(lhs_head, VTypeHead):
+                    pending_edges += lhs_head.check(rhs_head)
+                    if isinstance(rhs_head, UTypeHead):
+                        pending_edges += check_heads(lhs_head, rhs_head)
 
     def __str__(self):
         out = []

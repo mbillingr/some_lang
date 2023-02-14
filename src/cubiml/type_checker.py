@@ -221,6 +221,12 @@ def check_expr(
             use = engine.new_use(type_heads.URef(None, cell_use))
             engine.flow(ref_t, use)
             return callback(expr, cell_type)
+        case ast.RefSet(ref, val):
+            lhs_t = check_expr(ref, bindings, engine, callback)
+            rhs_t = check_expr(val, bindings, engine, callback)
+            bound = engine.new_use(type_heads.URef(rhs_t, None))
+            engine.flow(lhs_t, bound)
+            return callback(expr, engine.new_val(type_heads.VNever()))
         case _:
             raise NotImplementedError(expr)
 
@@ -241,6 +247,9 @@ def check_let(
             return f
         case _:
             var_type = callback(expr, check_expr(expr, bindings, engine, callback))
+            var_val = engine.types[var_type]
+            if isinstance(var_val, type_heads.VNever):
+                var_val.check(None)  # raises an error
             return lambda _: var_type
 
 

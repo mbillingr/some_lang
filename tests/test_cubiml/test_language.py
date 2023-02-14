@@ -150,13 +150,24 @@ class TestLanguage:
         assert res == "7"
 
     def test_references(self, evaluator):
-        src = "let x = {y=ref 5}; !x.y + !x.y"
+        src = "let x = {y=ref 3}; x.y := 5; !x.y + !x.y"
         res = evaluator(src)
         assert res == "10"
+
+    def test_reference_not_allowed(self, evaluator):
+        src = "let id = fun x -> x; let x = ref 0; id(x:=1)"
+        with pytest.raises(TypeError, match="Unusable"):
+            evaluator(src)
+
+        src = "let x = ref 0; let y = x := 1; 2"
+        with pytest.raises(TypeError, match="Unusable"):
+            evaluator(src)
 
 
 def transform_python_result(res) -> str:
     match res:
+        case None:
+            return str(res)
         case bool():
             return str(res).lower()
         case int():

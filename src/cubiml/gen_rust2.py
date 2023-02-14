@@ -119,6 +119,13 @@ mod base {
                 _ => self
             }
         }
+        
+        pub fn set_inner(&self, val: Value) {
+            match self {
+                Value::Ref(cell) => *cell.borrow_mut() = val,
+                _ => panic!("Not a cell {:?}", self),
+            }
+        }
     }
     
     impl std::cmp::PartialEq for Value {
@@ -281,6 +288,9 @@ class Compiler:
 
     def compile_script(self, script: ast.Script):
         for stmt in script.statements:
+            if len(self.script) > 0:
+                if isinstance(self.script[-1], RsExpression):
+                    self.script[-1] = RsExprStatement(self.script[-1])
             self.script.extend(self.compile_toplevel(stmt))
 
     def compile_toplevel(self, stmt: ast.ToplevelItem) -> list[RsStatement]:
@@ -352,6 +362,8 @@ class Compiler:
                 return RsNewCell(self.compile_expr(init))
             case ast.RefGet(ref):
                 return RsCellGet(self.compile_expr(ref))
+            case ast.RefSet(ref, val):
+                return RsCellSet(self.compile_expr(ref), self.compile_expr(val))
             case _:
                 raise NotImplementedError(expr)
 
@@ -701,6 +713,15 @@ class RsCellGet(RsExpression):
 
     def __str__(self):
         return f"{self.ref}.inner()"
+
+
+@dataclasses.dataclass
+class RsCellSet(RsExpression):
+    ref: RsExpression
+    val: RsExpression
+
+    def __str__(self):
+        return f"{self.ref}.set_inner({RsIntoValue(self.val)})"
 
 
 def replace_calls(fns: set[str], rx: RsExpression) -> RsExpression:
