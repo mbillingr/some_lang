@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import contextlib
 import dataclasses
 from copy import deepcopy
@@ -8,12 +10,11 @@ from cubiml import abstract_syntax as ast, type_heads
 
 
 class TypeChecker:
-    def __init__(self):
-        self.engine = TypeCheckerCore()
-        self.bindings = Bindings()
+    def __init__(self, callback=lambda _, x: x):
+        self.ctx = Context(Bindings(), TypeCheckerCore(), callback)
 
     def check_script(self, script: ast.Script):
-        backup = deepcopy(self.engine)
+        backup = deepcopy(self.ctx.engine)
 
         type_map = {}
 
@@ -24,17 +25,17 @@ class TypeChecker:
 
         try:
             for statement in script.statements:
-                check_toplevel(statement, self.bindings, self.engine, map_type)
+                check_toplevel(statement, self.ctx.with_callback(map_type))
         except Exception:
             # roll back changes
-            self.engine = backup
-            self.bindings.unwind(0)
+            self.ctx.engine = backup
+            self.ctx.bindings.unwind(0)
             raise
 
-        self.engine.collapse_cycles()
+        self.ctx.engine.collapse_cycles()
 
         # persist changes
-        self.bindings.changes.clear()
+        self.ctx.bindings.changes.clear()
         return type_map
 
 
@@ -92,36 +93,51 @@ class Bindings:
                 self.m[k] = old
 
 
-def check_expr(
-    expr: ast.Expression,
-    bindings: Bindings,
-    engine: TypeCheckerCore,
-    callback=lambda _, t: t,
-) -> Value:
+@dataclasses.dataclass
+class Context:
+    bindings: Bindings
+    engine: TypeCheckerCore
+    callback: Callable
+
+    @staticmethod
+    def default() -> Context:
+        return Context(Bindings(), TypeCheckerCore(), lambda _, x: x)
+
+    def with_bindings(self, bindings: Bindings) -> Context:
+        return Context(bindings, self.engine, self.callback)
+
+    def with_engine(self, engine: TypeCheckerCore) -> Context:
+        return Context(self.bindings, engine, self.callback)
+
+    def with_callback(self, callback: Callable) -> Context:
+        return Context(self.bindings, self.engine, callback)
+
+
+def check_expr(expr: ast.Expression, ctx: Context) -> Value:
     match expr:
         case ast.Literal(bool()):
-            return callback(expr, engine.new_val(type_heads.VBool()))
+            return ctx.callback(expr, ctx.engine.new_val(type_heads.VBool()))
         case ast.Literal(int()):
-            return callback(expr, engine.new_val(type_heads.VInt()))
+            return ctx.callback(expr, ctx.engine.new_val(type_heads.VInt()))
         case ast.Reference(var):
-            scheme = bindings.get(var)
-            return callback(expr, scheme(engine))
+            scheme = ctx.bindings.get(var)
+            return ctx.callback(expr, scheme(ctx.engine))
         case ast.BinOp(lhs, rhs, opty, op):
-            lhs_t = check_expr(lhs, bindings, engine, callback)
-            rhs_t = check_expr(rhs, bindings, engine, callback)
+            lhs_t = check_expr(lhs, ctx)
+            rhs_t = check_expr(rhs, ctx)
             match opty:
                 case "any", "any", "bool":
-                    return callback(expr, engine.new_val(type_heads.VBool()))
+                    return ctx.callback(expr, ctx.engine.new_val(type_heads.VBool()))
                 case "int", "int", "bool":
-                    bound = engine.new_use(type_heads.UInt())
-                    engine.flow(lhs_t, bound)
-                    engine.flow(rhs_t, bound)
-                    return callback(expr, engine.new_val(type_heads.VBool()))
+                    bound = ctx.engine.new_use(type_heads.UInt())
+                    ctx.engine.flow(lhs_t, bound)
+                    ctx.engine.flow(rhs_t, bound)
+                    return ctx.callback(expr, ctx.engine.new_val(type_heads.VBool()))
                 case "int", "int", "int":
-                    bound = engine.new_use(type_heads.UInt())
-                    engine.flow(lhs_t, bound)
-                    engine.flow(rhs_t, bound)
-                    return callback(expr, engine.new_val(type_heads.VInt()))
+                    bound = ctx.engine.new_use(type_heads.UInt())
+                    ctx.engine.flow(lhs_t, bound)
+                    ctx.engine.flow(rhs_t, bound)
+                    return ctx.callback(expr, ctx.engine.new_val(type_heads.VInt()))
 
         case ast.Record(fields):
             field_names = set()
@@ -131,33 +147,33 @@ def check_expr(
                     raise RepeatedFieldNameError(name)
                 field_names.add(name)
 
-                t = check_expr(exp, bindings, engine, callback)
+                t = check_expr(exp, ctx)
                 field_types = type_heads.AssocItem(name, t, field_types)
-            return callback(expr, engine.new_val(type_heads.VObj(field_types)))
+            return ctx.callback(expr, ctx.engine.new_val(type_heads.VObj(field_types)))
         case ast.Case(tag, val):
-            typ = check_expr(val, bindings, engine, callback)
-            return callback(expr, engine.new_val(type_heads.VCase(tag, typ)))
+            typ = check_expr(val, ctx)
+            return ctx.callback(expr, ctx.engine.new_val(type_heads.VCase(tag, typ)))
         case ast.Conditional(a, b, c):
-            cond_t = check_expr(a, bindings, engine, callback)
-            engine.flow(cond_t, engine.new_use(type_heads.UBool()))
+            cond_t = check_expr(a, ctx)
+            ctx.engine.flow(cond_t, ctx.engine.new_use(type_heads.UBool()))
 
-            then_t = check_expr(b, bindings, engine, callback)
-            else_t = check_expr(c, bindings, engine, callback)
+            then_t = check_expr(b, ctx)
+            else_t = check_expr(c, ctx)
 
-            merged, merge_use = engine.var()
-            engine.flow(then_t, merge_use)
-            engine.flow(else_t, merge_use)
-            return callback(expr, merged)
+            merged, merge_use = ctx.engine.var()
+            ctx.engine.flow(then_t, merge_use)
+            ctx.engine.flow(else_t, merge_use)
+            return ctx.callback(expr, merged)
         case ast.FieldAccess(field, lhs_expr):
-            lhs_t = check_expr(lhs_expr, bindings, engine, callback)
+            lhs_t = check_expr(lhs_expr, ctx)
 
-            field_t, field_use = engine.var()
-            use = engine.new_use(type_heads.UObj(field, field_use))
-            engine.flow(lhs_t, use)
-            return callback(expr, field_t)
+            field_t, field_use = ctx.engine.var()
+            use = ctx.engine.new_use(type_heads.UObj(field, field_use))
+            ctx.engine.flow(lhs_t, use)
+            return ctx.callback(expr, field_t)
         case ast.Match(match_exp, arms):
-            match_t = check_expr(match_exp, bindings, engine, callback)
-            result_t, result_u = engine.var()
+            match_t = check_expr(match_exp, ctx)
+            result_t, result_u = ctx.engine.var()
 
             case_names = set()
             case_types = type_heads.AssocEmpty()
@@ -166,130 +182,136 @@ def check_expr(
                     raise RepeatedCaseError(arm.tag)
                 case_names.add(arm.tag)
 
-                wrapped_t, wrapped_u = engine.var()
+                wrapped_t, wrapped_u = ctx.engine.var()
                 case_types = type_heads.AssocItem(arm.tag, wrapped_u, case_types)
 
-                with bindings.child_scope() as bindings_:
+                with ctx.bindings.child_scope() as bindings_:
                     bindings_.insert(arm.var, wrapped_t)
-                    rhs_t = check_expr(arm.bdy, bindings_, engine, callback)
-                engine.flow(rhs_t, result_u)
+                    rhs_t = check_expr(arm.bdy, ctx.with_bindings(bindings_))
+                ctx.engine.flow(rhs_t, result_u)
 
-            use = engine.new_use(type_heads.UCase(case_types))
-            engine.flow(match_t, use)
+            use = ctx.engine.new_use(type_heads.UCase(case_types))
+            ctx.engine.flow(match_t, use)
 
-            return callback(expr, result_t)
+            return ctx.callback(expr, result_t)
         case ast.Function(var, body):
-            arg_t, arg_u = engine.var()
-            with bindings.child_scope() as bindings_:
+            arg_t, arg_u = ctx.engine.var()
+            with ctx.bindings.child_scope() as bindings_:
                 bindings_.insert(var, arg_t)
-                body_t = check_expr(body, bindings_, engine, callback)
-            return callback(expr, engine.new_val(type_heads.VFunc(arg_u, body_t)))
+                body_t = check_expr(body, ctx.with_bindings(bindings_))
+            return ctx.callback(
+                expr, ctx.engine.new_val(type_heads.VFunc(arg_u, body_t))
+            )
         case ast.Procedure(var, body):
-            arg_t, arg_u = engine.var()
-            with bindings.child_scope() as bindings_:
+            arg_t, arg_u = ctx.engine.var()
+            with ctx.bindings.child_scope() as bindings_:
                 bindings_.insert(var, arg_t)
                 body_t = None
                 for bexp in body:
-                    body_t = check_expr(bexp, bindings_, engine, callback)
-            return callback(expr, engine.new_val(type_heads.VProc(arg_u, body_t)))
+                    body_t = check_expr(bexp, ctx.with_bindings(bindings_))
+            return ctx.callback(
+                expr, ctx.engine.new_val(type_heads.VProc(arg_u, body_t))
+            )
         case ast.Application(fun, arg):
-            fun_t = check_expr(fun, bindings, engine, callback)
-            arg_t = check_expr(arg, bindings, engine, callback)
+            fun_t = check_expr(fun, ctx)
+            arg_t = check_expr(arg, ctx)
 
-            ret_t, ret_u = engine.var()
-            use = engine.new_use(type_heads.UProc(arg_t, ret_u))
-            engine.flow(fun_t, use)
-            return callback(expr, ret_t)
+            ret_t, ret_u = ctx.engine.var()
+            use = ctx.engine.new_use(type_heads.UProc(arg_t, ret_u))
+            ctx.engine.flow(fun_t, use)
+            return ctx.callback(expr, ret_t)
         case ast.Let(var, val, body):
-            val_scheme = check_let(val, bindings, engine, callback)
-            with bindings.child_scope() as bindings_:
+            val_scheme = check_let(val, ctx)
+            with ctx.bindings.child_scope() as bindings_:
                 bindings_.insert_scheme(var, val_scheme)
-                body_t = check_expr(body, bindings_, engine, callback)
-            return callback(expr, body_t)
+                body_t = check_expr(body, ctx.with_bindings(bindings_))
+            return ctx.callback(expr, body_t)
         case ast.LetRec(defs, body):
-            with bindings.child_scope() as bindings_:
-                check_letrec(defs, bindings_, engine, callback)
-                return callback(expr, check_expr(body, bindings_, engine, callback))
+            with ctx.bindings.child_scope() as bindings_:
+                check_letrec(defs, ctx.with_bindings(bindings_))
+                return ctx.callback(
+                    expr, check_expr(body, ctx.with_bindings(bindings_))
+                )
         case ast.NewRef(init):
-            val_t = check_expr(init, bindings, engine, callback)
-            read, write = engine.var()
-            engine.flow(val_t, write)
-            return callback(expr, engine.new_val(type_heads.VRef(write, read)))
+            val_t = check_expr(init, ctx)
+            read, write = ctx.engine.var()
+            ctx.engine.flow(val_t, write)
+            return ctx.callback(expr, ctx.engine.new_val(type_heads.VRef(write, read)))
         case ast.RefGet(ref):
-            ref_t = check_expr(ref, bindings, engine, callback)
-            cell_type, cell_use = engine.var()
-            use = engine.new_use(type_heads.URef(None, cell_use))
-            engine.flow(ref_t, use)
-            return callback(expr, cell_type)
+            ref_t = check_expr(ref, ctx)
+            cell_type, cell_use = ctx.engine.var()
+            use = ctx.engine.new_use(type_heads.URef(None, cell_use))
+            ctx.engine.flow(ref_t, use)
+            return ctx.callback(expr, cell_type)
         case ast.RefSet(ref, val):
-            lhs_t = check_expr(ref, bindings, engine, callback)
-            rhs_t = check_expr(val, bindings, engine, callback)
-            bound = engine.new_use(type_heads.URef(rhs_t, None))
-            engine.flow(lhs_t, bound)
-            return callback(expr, engine.new_val(type_heads.VNever()))
+            lhs_t = check_expr(ref, ctx)
+            rhs_t = check_expr(val, ctx)
+            bound = ctx.engine.new_use(type_heads.URef(rhs_t, None))
+            ctx.engine.flow(lhs_t, bound)
+            return ctx.callback(expr, ctx.engine.new_val(type_heads.VNever()))
         case _:
             raise NotImplementedError(expr)
 
 
-def check_let(
-    expr: ast.Expression, bindings: Bindings, engine: TypeCheckerCore, callback
-) -> Scheme:
+def check_let(expr: ast.Expression, ctx: Context) -> Scheme:
 
     match expr:
         case ast.Function():
             # function definitions can be polymorphic - create a type scheme
             saved_bindings = Bindings()
-            saved_bindings.m = bindings.m.copy()
+            saved_bindings.m = ctx.bindings.m.copy()
+            saved_ctx = ctx.with_bindings(saved_bindings)
             saved_expr = expr
 
-            f = lambda eng: check_expr(saved_expr, saved_bindings, eng, callback)
-            callback(expr, f(engine))  # check once, in case the var is never referenced
+            f = lambda eng: check_expr(saved_expr, saved_ctx.with_engine(eng))
+            ctx.callback(
+                expr, f(ctx.engine)
+            )  # check once, in case the var is never referenced
             return f
         case _:
-            var_type = callback(expr, check_expr(expr, bindings, engine, callback))
-            var_val = engine.types[var_type]
+            var_type = ctx.callback(expr, check_expr(expr, ctx))
+            var_val = ctx.engine.types[var_type]
             if isinstance(var_val, type_heads.VNever):
                 var_val.check(None)  # raises an error
             return lambda _: var_type
 
 
-def check_letrec(defs: list[ast.FuncDef], bindings, engine, callback):
+def check_letrec(defs: list[ast.FuncDef], ctx: Context):
     saved_bindings = Bindings()
-    saved_bindings.m = bindings.m.copy()
+    saved_bindings.m = ctx.bindings.m.copy()
+    saved_ctx = ctx.with_bindings(saved_bindings)
     saved_defs = defs
 
     def f(eng, i):
         temp_vars = []
         for d in saved_defs:
             temp_t, temp_u = eng.var()
-            saved_bindings.insert(d.name, temp_t)
+            saved_ctx.bindings.insert(d.name, temp_t)
             temp_vars.append((temp_t, temp_u))
 
         for d, (_, use) in zip(defs, temp_vars):
-            var_t = check_expr(d.fun, saved_bindings, eng, callback)
-            engine.flow(var_t, use)
+            var_t = check_expr(d.fun, saved_ctx.with_engine(eng))
+            ctx.engine.flow(var_t, use)
 
         return temp_vars[i][0]
 
-    f(engine, 0)  # check once, in case the var is never referenced
+    f(ctx.engine, 0)  # check once, in case the var is never referenced
 
     for i, d in enumerate(defs):
-        bindings.insert_scheme(d.name, lambda eng: f(eng, i))
+        ctx.bindings.insert_scheme(d.name, lambda eng: f(eng, i))
 
 
 def check_toplevel(
     stmt: ast.ToplevelItem,
-    bindings: Bindings,
-    engine: TypeCheckerCore,
-    callback=lambda _, t: t,
+    ctx: Context,
 ):
     match stmt:
         case ast.Expression() as expr:
-            check_expr(expr, bindings, engine, callback)
+            check_expr(expr, ctx)
         case ast.DefineLet(var, val):
-            val_scheme = check_let(val, bindings, engine, callback)
-            bindings.insert_scheme(var, val_scheme)
+            val_scheme = check_let(val, ctx)
+            ctx.bindings.insert_scheme(var, val_scheme)
         case ast.DefineLetRec(defs):
-            check_letrec(defs, bindings, engine, callback)
+            check_letrec(defs, ctx)
         case _:
             raise NotImplementedError(stmt)

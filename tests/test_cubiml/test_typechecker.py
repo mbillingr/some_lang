@@ -4,61 +4,53 @@ from cubiml import type_checker, abstract_syntax as ast, type_heads, parser
 
 
 def test_literal():
-    engine = type_checker.TypeCheckerCore()
-    env = type_checker.Bindings()
-
+    ctx = type_checker.Context.default()
     assert (
-        engine.types[type_checker.check_expr(ast.Literal(False), env, engine)]
+        ctx.engine.types[type_checker.check_expr(ast.Literal(False), ctx)]
         == type_heads.VBool()
     )
 
 
 def test_variable():
-    engine = type_checker.TypeCheckerCore()
-    env = type_checker.Bindings()
-    env.insert("x", type_checker.Value(123))
+    ctx = type_checker.Context.default()
+    ctx.bindings.insert("x", type_checker.Value(123))
 
-    assert type_checker.check_expr(ast.Reference("x"), env, engine) == 123
+    assert type_checker.check_expr(ast.Reference("x"), ctx) == 123
 
     with pytest.raises(type_checker.UnboundError):
-        type_checker.check_expr(ast.Reference("y"), env, engine)
+        type_checker.check_expr(ast.Reference("y"), ctx)
 
 
 def test_records():
-    engine = type_checker.TypeCheckerCore()
-    env = type_checker.Bindings()
+    ctx = type_checker.Context.default()
 
-    assert engine.types[
-        type_checker.check_expr(ast.Record([]), env, engine)
+    assert ctx.engine.types[
+        type_checker.check_expr(ast.Record([]), ctx)
     ] == type_heads.VObj.from_dict({})
 
-    assert engine.types[
-        type_checker.check_expr(ast.Record([("x", ast.TRUE)]), env, engine)
+    assert ctx.engine.types[
+        type_checker.check_expr(ast.Record([("x", ast.TRUE)]), ctx)
     ] == type_heads.VObj.from_dict({"x": type_checker.Value(1)})
 
     with pytest.raises(type_checker.RepeatedFieldNameError):
-        type_checker.check_expr(
-            ast.Record([("x", ast.TRUE), ("x", ast.TRUE)]), env, engine
-        )
+        type_checker.check_expr(ast.Record([("x", ast.TRUE), ("x", ast.TRUE)]), ctx)
 
 
 def test_cases():
-    engine = type_checker.TypeCheckerCore()
-    env = type_checker.Bindings()
+    ctx = type_checker.Context.default()
 
-    assert engine.types[
-        type_checker.check_expr(ast.Case("Foo", ast.FALSE), env, engine)
+    assert ctx.engine.types[
+        type_checker.check_expr(ast.Case("Foo", ast.FALSE), ctx)
     ] == type_heads.VCase("Foo", type_checker.Value(0))
 
 
 def test_conditional():
-    engine = type_checker.TypeCheckerCore()
-    env = type_checker.Bindings()
+    ctx = type_checker.Context.default()
 
     assert (
-        engine.types[
+        ctx.engine.types[
             type_checker.check_expr(
-                ast.Conditional(ast.TRUE, ast.Record([]), ast.Record([])), env, engine
+                ast.Conditional(ast.TRUE, ast.Record([]), ast.Record([])), ctx
             )
         ]
         == "Var"
@@ -66,18 +58,17 @@ def test_conditional():
 
     with pytest.raises(TypeError):
         type_checker.check_expr(
-            ast.Conditional(ast.Record([]), ast.Record([]), ast.Record([])), env, engine
+            ast.Conditional(ast.Record([]), ast.Record([]), ast.Record([])), ctx
         )
 
 
 def test_field_access():
-    engine = type_checker.TypeCheckerCore()
-    env = type_checker.Bindings()
+    ctx = type_checker.Context.default()
 
     assert (
-        engine.types[
+        ctx.engine.types[
             type_checker.check_expr(
-                ast.FieldAccess("x", ast.Record([("x", ast.TRUE)])), env, engine
+                ast.FieldAccess("x", ast.Record([("x", ast.TRUE)])), ctx
             )
         ]
         == "Var"
@@ -85,30 +76,28 @@ def test_field_access():
 
     with pytest.raises(TypeError):
         type_checker.check_expr(
-            ast.FieldAccess("x", ast.Record([("y", ast.TRUE)])), env, engine
+            ast.FieldAccess("x", ast.Record([("y", ast.TRUE)])), ctx
         )
 
 
 def test_match():
-    engine = type_checker.TypeCheckerCore()
-    env = type_checker.Bindings()
+    ctx = type_checker.Context.default()
 
     assert (
-        engine.types[
+        ctx.engine.types[
             type_checker.check_expr(
                 ast.Match(
                     ast.Case("A", ast.TRUE),
                     [ast.MatchArm("A", "x", ast.Reference("x"))],
                 ),
-                env,
-                engine,
+                ctx,
             )
         ]
         == "Var"
     )
 
     with pytest.raises(TypeError, match="Unhandled Case"):
-        type_checker.check_expr(ast.Match(ast.Case("A", ast.TRUE), []), env, engine)
+        type_checker.check_expr(ast.Match(ast.Case("A", ast.TRUE), []), ctx)
 
     with pytest.raises(type_checker.RepeatedCaseError):
         type_checker.check_expr(
@@ -119,60 +108,53 @@ def test_match():
                     ast.MatchArm("A", "x", ast.Reference("x")),
                 ],
             ),
-            env,
-            engine,
+            ctx,
         )
 
     with pytest.raises(TypeError, match="Bool"):
-        type_checker.check_expr(ast.Match(ast.TRUE, []), env, engine)
+        type_checker.check_expr(ast.Match(ast.TRUE, []), ctx)
 
 
 def test_funcdef():
-    engine = type_checker.TypeCheckerCore()
-    env = type_checker.Bindings()
+    ctx = type_checker.Context.default()
 
-    assert engine.types[
-        type_checker.check_expr(ast.Function("x", ast.TRUE), env, engine)
+    assert ctx.engine.types[
+        type_checker.check_expr(ast.Function("x", ast.TRUE), ctx)
     ] == type_heads.VFunc(type_checker.Use(0), type_checker.Value(1))
 
 
 def test_funcall():
-    engine = type_checker.TypeCheckerCore()
-    env = type_checker.Bindings()
+    ctx = type_checker.Context.default()
 
     assert (
-        engine.types[
+        ctx.engine.types[
             type_checker.check_expr(
-                ast.Application(ast.Function("x", ast.TRUE), ast.FALSE), env, engine
+                ast.Application(ast.Function("x", ast.TRUE), ast.FALSE), ctx
             )
         ]
         == "Var"
     )
 
     with pytest.raises(TypeError, match="Bool"):
-        type_checker.check_expr(ast.Application(ast.TRUE, ast.FALSE), env, engine)
+        type_checker.check_expr(ast.Application(ast.TRUE, ast.FALSE), ctx)
 
 
 def test_let():
-    engine = type_checker.TypeCheckerCore()
-    env = type_checker.Bindings()
+    ctx = type_checker.Context.default()
 
     assert (
-        engine.types[
-            type_checker.check_expr(
-                ast.Let("x", ast.TRUE, ast.Reference("x")), env, engine
-            )
+        ctx.engine.types[
+            type_checker.check_expr(ast.Let("x", ast.TRUE, ast.Reference("x")), ctx)
         ]
         == type_heads.VBool()
     )
 
 
 def test_letrec():
-    engine = type_checker.TypeCheckerCore()
-    env = type_checker.Bindings()
+    ctx = type_checker.Context.default()
 
     assert (
-        engine.types[
+        ctx.engine.types[
             type_checker.check_expr(
                 ast.LetRec(
                     [
@@ -188,8 +170,7 @@ def test_letrec():
                     ],
                     ast.Application(ast.Reference("foo"), ast.TRUE),
                 ),
-                env,
-                engine,
+                ctx,
             )
         ]
         == "Var"
@@ -197,39 +178,36 @@ def test_letrec():
 
 
 def test_toplevel_expr():
-    engine = type_checker.TypeCheckerCore()
-    env = type_checker.Bindings()
+    ctx = type_checker.Context.default()
 
-    type_checker.check_toplevel(ast.FALSE, env, engine)  # should not raise
+    type_checker.check_toplevel(ast.FALSE, ctx)  # should not raise
 
     with pytest.raises(TypeError):
-        type_checker.check_toplevel(ast.Application(ast.FALSE, ast.FALSE), env, engine)
+        type_checker.check_toplevel(ast.Application(ast.FALSE, ast.FALSE), ctx)
 
 
 def test_toplevel_let():
-    engine = type_checker.TypeCheckerCore()
-    env = type_checker.Bindings()
+    ctx = type_checker.Context.default()
 
-    type_checker.check_toplevel(ast.DefineLet("x", ast.TRUE), env, engine)
+    type_checker.check_toplevel(ast.DefineLet("x", ast.TRUE), ctx)
 
     assert (
-        engine.types[type_checker.check_expr(ast.Reference("x"), env, engine)]
+        ctx.engine.types[type_checker.check_expr(ast.Reference("x"), ctx)]
         == type_heads.VBool()
     )
 
 
 def test_toplevel_letrec():
-    engine = type_checker.TypeCheckerCore()
-    env = type_checker.Bindings()
+    ctx = type_checker.Context.default()
 
     type_checker.check_toplevel(
-        ast.DefineLetRec([ast.FuncDef("foo", ast.Function("x", ast.TRUE))]), env, engine
+        ast.DefineLetRec([ast.FuncDef("foo", ast.Function("x", ast.TRUE))]), ctx
     )
 
     assert (
-        engine.types[
+        ctx.engine.types[
             type_checker.check_expr(
-                ast.Application(ast.Reference("foo"), ast.Reference("foo")), env, engine
+                ast.Application(ast.Reference("foo"), ast.Reference("foo")), ctx
             )
         ]
         == "Var"

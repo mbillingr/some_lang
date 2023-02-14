@@ -7,7 +7,7 @@ def eval_in_rust(src: str) -> str:
     ast = parser.parse_script(src)
     tck = type_checker.TypeChecker()
     typemap = tck.check_script(ast)
-    runner = gen_rust.Runner(typemap, tck.engine)
+    runner = gen_rust.Runner(typemap, tck.ctx.engine)
     return runner.run_script(ast)
 
 
@@ -15,7 +15,7 @@ def eval_in_rust2(src: str) -> str:
     ast = parser.parse_script(src)
     tck = type_checker.TypeChecker()
     typemap = tck.check_script(ast)
-    runner = gen_rust2.Runner(typemap, tck.engine)
+    runner = gen_rust2.Runner(typemap, tck.ctx.engine)
     return runner.run_script(ast)
 
 
@@ -23,7 +23,7 @@ def eval_in_cpp(src: str) -> str:
     ast = parser.parse_script(src)
     tck = type_checker.TypeChecker()
     typemap = tck.check_script(ast)
-    runner = gen_cpp.Runner(typemap, tck.engine)
+    runner = gen_cpp.Runner(typemap, tck.ctx.engine)
     return runner.run_script(ast)
 
 
