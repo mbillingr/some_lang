@@ -178,6 +178,13 @@ def free_vars(expr: Expression) -> typing.Iterator[str]:
             yield from (free_vars(f[1]) for f in fields)
         case FieldAccess(_, rec):
             yield from free_vars(rec)
+        case NewRef(a):
+            yield from free_vars(a)
+        case RefGet(a):
+            yield from free_vars(a)
+        case RefSet(a, b):
+            yield from free_vars(a)
+            yield from free_vars(b)
         case _:
             raise NotImplementedError(expr)
 

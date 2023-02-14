@@ -266,6 +266,8 @@ def check_expr(expr: ast.Expression, ctx: Context) -> Value:
             ctx.engine.flow(ref_t, use)
             return ctx.callback(expr, cell_type)
         case ast.RefSet(ref, val):
+            if ctx.level == Level.FUNC:
+                raise TypeError("Side effect in functional context")
             lhs_t = check_expr(ref, ctx)
             rhs_t = check_expr(val, ctx)
             bound = ctx.engine.new_use(type_heads.URef(rhs_t, None))

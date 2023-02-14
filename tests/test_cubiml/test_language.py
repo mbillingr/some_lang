@@ -170,7 +170,7 @@ class TestLanguage:
 
     def test_mutation_in_functional_context(self, evaluator):
         src = "let foo = fun x -> x := 0; foo"
-        with pytest.raises(TypeError, match="TODO"):
+        with pytest.raises(TypeError, match="functional"):
             evaluator(src)
 
 
@@ -190,6 +190,8 @@ def transform_python_result(res) -> str:
             )
         case interpreter.Function():
             return f"<fun>"
+        case interpreter.Procedure():
+            return f"<proc>"
         case interpreter.Cell(val):
             return f"(ref {transform_python_result(val)})"
         case _:
