@@ -4,7 +4,7 @@ import abc
 import dataclasses
 import functools
 from enum import Enum
-from typing import Iterator, Iterable
+from typing import Iterator, Iterable, TypeVar
 
 
 class TokenKind(Enum):
@@ -141,8 +141,8 @@ def show(nfa):
             print(id(a))
 
 
-nfa = seq(char("A"), rep(alt(char("B"), char("C"))))
-show(nfa)
+# nfa = seq(char("A"), rep(alt(char("B"), char("C"))))
+# show(nfa)
 
 
 # NFA to DFA
@@ -202,8 +202,8 @@ def show_transitions(tra):
         print(hash(a), f"--{ch}-->", hash(b))
 
 
-print("-----")
-show_transitions(subset_construction(nfa))
+# print("-----")
+# show_transitions(subset_construction(nfa))
 
 
 def open_alt(a, b):
@@ -214,11 +214,11 @@ def open_alt(a, b):
     return [s, *a, *b]
 
 
-nfa = open_alt(seq(char("A"), char("B")), seq(char("A"), char("C")))
-print("======")
-show(nfa)
-print("-----")
-show_transitions(subset_construction(nfa))
+# nfa = open_alt(seq(char("A"), char("B")), seq(char("A"), char("C")))
+# print("======")
+# show(nfa)
+# print("-----")
+# show_transitions(subset_construction(nfa))
 
 
 class Regex(abc.ABC):
@@ -281,3 +281,57 @@ class Repeat(Regex):
         self.nfa_start = s
         self.nfa_end = e
         self.alphabet = x.alphabet
+
+
+T = TypeVar("T")
+
+
+class ScannerGenerator:
+    def __init__(self):
+        self.alphabet: set[str] = set()
+        self.nfas: list[Node] = []
+        self.accept: dict[Node, T] = {}
+
+    def add_rule(self, token: T, regex: Regex) -> ScannerGenerator:
+        self.alphabet |= regex.alphabet
+        self.nfas.append(regex.nfa_start)
+        self.accept[regex.nfa_end] = token
+        return self
+
+    def build(self):
+        start = Node()
+        for n in self.nfas:
+            start.epsilon.add(n)
+
+        transitions = self._subset_construction(start)
+        show_transitions(transitions)
+
+        states = set()
+        for (a, _), b in transitions.items():
+            states.add(a)
+            states.add(b)
+        for state in states:
+            token = set(self.accept[node] for node in state if node in self.accept)
+            print(token, hash(state), state)
+
+    def _subset_construction(self, start_node: Node):
+        transitions = {}
+        q0 = epsilon_closure({start_node})
+        Q = {tuple(q0)}
+        worklist = [q0]
+        while worklist:
+            q = worklist.pop()
+            for c in self.alphabet:
+                t = epsilon_closure(delta(q, c))
+                if not t:
+                    continue
+                transitions[tuple(q), c] = tuple(t)
+                if tuple(t) not in Q:
+                    Q.add(tuple(t))
+                    worklist.append(t)
+        return transitions
+
+
+scg = ScannerGenerator().add_rule("FOOBAR", Alternative(Literal("foo"), Literal("bar")))
+
+scg.build()
