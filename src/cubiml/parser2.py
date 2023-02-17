@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import abc
 import dataclasses
+import functools
 from enum import Enum
 from typing import Iterator, Iterable
 
@@ -200,5 +202,82 @@ def show_transitions(tra):
         print(hash(a), f"--{ch}-->", hash(b))
 
 
-print("======")
+print("-----")
 show_transitions(subset_construction(nfa))
+
+
+def open_alt(a, b):
+    s = Node()
+    s.epsilon.add(a[0])
+    s.epsilon.add(b[0])
+
+    return [s, *a, *b]
+
+
+nfa = open_alt(seq(char("A"), char("B")), seq(char("A"), char("C")))
+print("======")
+show(nfa)
+print("-----")
+show_transitions(subset_construction(nfa))
+
+
+class Regex(abc.ABC):
+    nfa_start: Node
+    nfa_end: Node
+    alphabet: set[str]
+
+
+class Literal(Regex):
+    def __init__(self, text: str):
+        self.nfa_start = Node()
+        current = self.nfa_start
+
+        for ch in text:
+            end = Node()
+            current.ch_edges[ch] = end
+            current = end
+        self.nfa_end = end
+
+        self.alphabet = set(text)
+
+
+class Sequence(Regex):
+    def __init__(self, a: Regex, b: Regex):
+        a.nfa_end.epsilon.add(b.nfa_start)
+        self.nfa_start = a.nfa_start
+        self.nfa_end = b.nfa_end
+        self.alphabet = a.alphabet | b.alphabet
+
+
+class Alternative(Regex):
+    def __init__(self, *alts: Regex):
+        s = Node()
+        for a in alts:
+            s.epsilon.add(a.nfa_start)
+
+        e = Node()
+        for a in alts:
+            a.nfa_end.epsilon.add(e)
+
+        self.nfa_start = s
+        self.nfa_end = e
+        self.alphabet = set()
+        for a in alts:
+            self.alphabet |= a.alphabet
+
+
+class Repeat(Regex):
+    def __init__(self, x: Regex, accept_empty=True):
+        s = Node()
+        e = Node()
+
+        if accept_empty:
+            s.epsilon.add(e)
+
+        s.epsilon.add(x.nfa_start)
+        x.nfa_end.epsilon.add(e)
+        x.nfa_end.epsilon.add(x.nfa_start)
+
+        self.nfa_start = s
+        self.nfa_end = e
+        self.alphabet = x.alphabet
