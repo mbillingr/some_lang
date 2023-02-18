@@ -3,7 +3,11 @@ from __future__ import annotations
 import abc
 import dataclasses
 from enum import Enum
-from typing import Iterator, TypeVar
+from typing import Iterator, TypeVar, Iterable, Any, Optional
+
+
+class ScannerError(Exception):
+    pass
 
 
 class TokenKind(Enum):
@@ -22,27 +26,42 @@ class Span:
     end: int
 
 
-class Node:
-    def __init__(self, ch_edges: dict[str, Node] = None, epsilon: set[Node] = None):
-        self.ch_edges = ch_edges or {}
-        self.epsilon = epsilon or set()
-
-    def __hash__(self):
-        return hash(id(self))
-
-    def __eq__(self, other):
-        return self is other
-
-
 class Regex(abc.ABC):
+    """A regular expression, used for constructing scanners"""
+
     nfa_start: Node
     nfa_end: Node
     alphabet: set[str]
 
+    def __add__(self, other):
+        return Sequence(self, to_regex(other))
+
+    def __radd__(self, other):
+        return Sequence(to_regex(other), self)
+
+    def __or__(self, other):
+        return Alternative(self, to_regex(other))
+
+    def __ror__(self, other):
+        return Alternative(to_regex(other), self)
+
+
+def to_regex(r: Any) -> Regex:
+    match r:
+        case Regex():
+            return r
+        case str():
+            return Literal(r)
+        case _:
+            raise TypeError("Invalid Regex", r)
+
 
 class Literal(Regex):
+    """Matches a literal string"""
+
     def __init__(self, text: str):
         self.nfa_start = Node()
+        end = self.nfa_start
         current = self.nfa_start
 
         for ch in text:
@@ -55,15 +74,28 @@ class Literal(Regex):
 
 
 class Sequence(Regex):
-    def __init__(self, a: Regex, b: Regex):
-        a.nfa_end.epsilon.add(b.nfa_start)
-        self.nfa_start = a.nfa_start
-        self.nfa_end = b.nfa_end
-        self.alphabet = a.alphabet | b.alphabet
+    """Matches other regular expressions in sequence"""
+
+    def __init__(self, first, *rest):
+        first = to_regex(first)
+        rest = tuple(map(to_regex, rest))
+
+        self.nfa_start = first.nfa_start
+        self.nfa_end = first.nfa_end
+        self.alphabet = first.alphabet
+
+        for x in rest:
+            self.nfa_end.epsilon.add(x.nfa_start)
+            self.nfa_end = x.nfa_end
+            self.alphabet |= x.alphabet
 
 
 class Alternative(Regex):
-    def __init__(self, *alts: Regex):
+    """Matches any one of the given regular expressions"""
+
+    def __init__(self, *alts):
+        alts = tuple(map(to_regex, alts))
+
         s = Node()
         for a in alts:
             s.epsilon.add(a.nfa_start)
@@ -79,8 +111,19 @@ class Alternative(Regex):
             self.alphabet |= a.alphabet
 
 
+class OneOf(Alternative):
+    """Matches any one of the given strings/chars"""
+
+    def __init__(self, alts: Iterable[str]):
+        super().__init__(*map(Literal, alts))
+
+
 class Repeat(Regex):
-    def __init__(self, x: Regex, accept_empty=True):
+    """Matches repetitions of a regular expression"""
+
+    def __init__(self, x, accept_empty=True):
+        x = to_regex(x)
+
         s = Node()
         e = Node()
 
@@ -96,16 +139,38 @@ class Repeat(Regex):
         self.alphabet = x.alphabet
 
 
+class Opt(Regex):
+    """Optionally matches the given regular expressions"""
+
+    def __init__(self, x):
+        x = to_regex(x)
+
+        s = Node()
+        e = Node()
+
+        s.epsilon.add(e)
+
+        s.epsilon.add(x.nfa_start)
+        x.nfa_end.epsilon.add(e)
+
+        self.nfa_start = s
+        self.nfa_end = e
+        self.alphabet = x.alphabet
+
+
 T = TypeVar("T")
 
 
 class ScannerGenerator:
+    """Generate a scanner from pairs of tokens and regexes"""
+
     def __init__(self):
         self.alphabet: set[str] = set()
         self.nfas: list[Node] = []
         self.accept: dict[Node, T] = {}
 
-    def add_rule(self, token: T, regex: Regex) -> ScannerGenerator:
+    def add_rule(self, token: T, regex: Any) -> ScannerGenerator:
+        regex = to_regex(regex)
         self.alphabet |= regex.alphabet
         self.nfas.append(regex.nfa_start)
         self.accept[regex.nfa_end] = token
@@ -122,6 +187,8 @@ class ScannerGenerator:
         states = {}
         while unvisited:
             subset = unvisited.pop()
+            if subset in states:
+                continue
             states[subset] = len(states)
             for ch in self.alphabet:
                 try:
@@ -165,7 +232,20 @@ class ScannerGenerator:
         return tuple(q0), subsets, transitions
 
 
+class Node:
+    def __init__(self, ch_edges: dict[str, Node] = None, epsilon: set[Node] = None):
+        self.ch_edges = ch_edges or {}
+        self.epsilon = epsilon or set()
+
+    def __hash__(self):
+        return hash(id(self))
+
+    def __eq__(self, other):
+        return self is other
+
+
 def epsilon_closure(nodes: set[Node]) -> set[Node]:
+    """extend a set of nodes with all nodes reachable through epsilon edges"""
     ec = set()
     while nodes:
         node = nodes.pop()
@@ -176,6 +256,7 @@ def epsilon_closure(nodes: set[Node]) -> set[Node]:
 
 
 def delta(nodes: set[Node], ch: str) -> set[Node]:
+    """compute the transition between two sets of nodes"""
     out = set()
     for node in nodes:
         try:
@@ -186,6 +267,8 @@ def delta(nodes: set[Node], ch: str) -> set[Node]:
 
 
 class Scanner:
+    """A lexical scanner."""
+
     BAD = object()
 
     def __init__(self, accept, transitions):
@@ -193,6 +276,7 @@ class Scanner:
         self._transitions = transitions
 
     def tokenize(self, src: str) -> Iterator[tuple[str, TokenKind, Span]]:
+        """Split an input string into tokens and iterate over them."""
         start, end = 0, 0
         while start < len(src):
             state = 0
@@ -212,12 +296,16 @@ class Scanner:
                 except KeyError:
                     break
 
+            furthest = end
+
             while not self.accept(state) and state is not self.BAD:
                 state = stack.pop()
                 end -= 1
 
             if state is self.BAD:
-                raise Exception()
+                raise ScannerError(
+                    f"`{src[start:furthest]}` followed by `{src[furthest:furthest+1]}`"
+                )
             else:
                 yield src[start:end], self._accept[state], Span(src, start, end)
 
@@ -232,11 +320,21 @@ class Scanner:
         return ch
 
 
+def num():
+    return OneOf("0123456789")
+
+
 scg = (
     ScannerGenerator()
-    .add_rule("FOOBAR", Alternative(Literal("foo"), Literal("bar")))
-    .add_rule("FUZZ", Literal("fuzz"))
+    .add_rule("FOOBAR", Alternative("foo", "bar"))
+    .add_rule("FUZZ", "fuzz")
+    .add_rule(
+        "NUM",
+        Repeat(num(), accept_empty=False)
+        + Opt("." + Repeat(num(), accept_empty=False)),
+    )
+    .add_rule("WHITESPACE", Repeat(OneOf(" \t"), accept_empty=False))
 )
 
 sc = scg.build()
-print(list(sc.tokenize("foobarfuzzfoo")))
+print(list(sc.tokenize("12   3.45 foobar")))
