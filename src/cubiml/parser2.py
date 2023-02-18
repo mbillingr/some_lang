@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import abc
 import dataclasses
-import functools
 from enum import Enum
-from typing import Iterator, Iterable, TypeVar
+from typing import Iterator, TypeVar
 
 
 class TokenKind(Enum):
@@ -303,21 +302,49 @@ class ScannerGenerator:
         for n in self.nfas:
             start.epsilon.add(n)
 
-        transitions = self._subset_construction(start)
+        q0, subsets, transitions = self._subset_construction(start)
         show_transitions(transitions)
 
-        states = set()
-        for (a, _), b in transitions.items():
-            states.add(a)
-            states.add(b)
-        for state in states:
-            token = set(self.accept[node] for node in state if node in self.accept)
-            print(token, hash(state), state)
+        unvisited = [q0]
+        states = {}
+        while unvisited:
+            subset = unvisited.pop()
+            states[subset] = len(states)
+            for ch in self.alphabet:
+                try:
+                    unvisited.append(transitions[subset, ch])
+                except KeyError:
+                    pass
+
+        state_transitions = {
+            (states[a], ch): states[b] for (a, ch), b in transitions.items()
+        }
+
+        state_accept = {}
+        for subset, st in states.items():
+            for node in subset:
+                if node not in self.accept:
+                    continue
+                token = self.accept[node]
+                if st in state_accept and state_accept[st] != token:
+                    raise RuntimeError(
+                        f"Conflicting tokens: {state_accept[st]} and {token}"
+                    )
+                state_accept[st] = token
+
+        print(state_accept)
+
+        print(states[q0])
+
+        for (a, ch), b in state_transitions.items():
+            print(f"{a} --{ch}-> {b}")
+
+        return Scanner(state_accept, state_transitions)
 
     def _subset_construction(self, start_node: Node):
         transitions = {}
         q0 = epsilon_closure({start_node})
-        Q = {tuple(q0)}
+        subsets = {tuple(q0)}
         worklist = [q0]
         while worklist:
             q = worklist.pop()
@@ -326,12 +353,64 @@ class ScannerGenerator:
                 if not t:
                     continue
                 transitions[tuple(q), c] = tuple(t)
-                if tuple(t) not in Q:
-                    Q.add(tuple(t))
+                if tuple(t) not in subsets:
+                    subsets.add(tuple(t))
                     worklist.append(t)
-        return transitions
+        return tuple(q0), subsets, transitions
 
 
-scg = ScannerGenerator().add_rule("FOOBAR", Alternative(Literal("foo"), Literal("bar")))
+class Scanner:
+    BAD = object()
 
-scg.build()
+    def __init__(self, accept, transitions):
+        self._accept = accept
+        self._transitions = transitions
+
+    def tokenize(self, src: str) -> Iterator[tuple[str, TokenKind, Span]]:
+        start, end = 0, 0
+        while start < len(src):
+            state = 0
+            stack = [self.BAD]
+            while True:
+                try:
+                    ch = src[end]
+                except IndexError:
+                    break
+                if self.accept(state):
+                    stack = []
+                stack.append(state)
+                cat = self.char_cat(ch)
+                try:
+                    state = self._transitions[state, cat]
+                    end += 1
+                except KeyError:
+                    break
+
+            while not self.accept(state) and state is not self.BAD:
+                state = stack.pop()
+                end -= 1
+
+            if state is self.BAD:
+                raise Exception()
+            else:
+                yield src[start:end], self._accept[state], Span(src, start, end)
+
+            start = end
+
+    def accept(self, state) -> bool:
+        return state in self._accept
+
+    def char_cat(self, ch: str) -> str:
+        # could be used to compress the transition table by
+        # grouping equal columns into character categories
+        return ch
+
+
+scg = (
+    ScannerGenerator()
+    .add_rule("FOOBAR", Alternative(Literal("foo"), Literal("bar")))
+    .add_rule("FUZZ", Literal("fuzz"))
+)
+
+sc = scg.build()
+print(list(sc.tokenize("foobarfuzzfoo")))
