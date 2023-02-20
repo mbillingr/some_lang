@@ -2,21 +2,11 @@ from __future__ import annotations
 
 import abc
 import dataclasses
-from enum import Enum
-from typing import Iterator, TypeVar, Iterable, Any, Optional
+from typing import Iterator, TypeVar, Iterable, Any, Generic
 
 
 class ScannerError(Exception):
     pass
-
-
-class TokenKind(Enum):
-    WHITESPACE = 0
-    KEYWORD = 1
-    IDENTIFIER = 2
-    OPERATOR = 3
-    LITERAL = 4
-    COMMENT = 5
 
 
 @dataclasses.dataclass(frozen=True)
@@ -161,13 +151,19 @@ class Opt(Regex):
 T = TypeVar("T")
 
 
-class ScannerGenerator:
+class ScannerGenerator(Generic[T]):
     """Generate a scanner from pairs of tokens and regexes"""
 
     def __init__(self):
         self.alphabet: set[str] = set()
         self.nfas: list[Node] = []
         self.accept: dict[Node, T] = {}
+        self.token_preference: dict[tuple[T, T], T] = {}
+
+    def set_token_priority(self, select: T, discard: T) -> ScannerGenerator:
+        self.token_preference[(select, discard)] = select
+        self.token_preference[(discard, select)] = select
+        return self
 
     def add_rule(self, token: T, regex: Any) -> ScannerGenerator:
         regex = to_regex(regex)
@@ -207,6 +203,8 @@ class ScannerGenerator:
                     continue
                 token = self.accept[node]
                 if st in state_accept and state_accept[st] != token:
+                    token = self.token_preference.get((token, state_accept[st]))
+                if not token:
                     raise RuntimeError(
                         f"Conflicting tokens: {state_accept[st]} and {token}"
                     )
@@ -266,37 +264,45 @@ def delta(nodes: set[Node], ch: str) -> set[Node]:
     return out
 
 
-class Scanner:
+class Scanner(Generic[T]):
     """A lexical scanner."""
 
     BAD = object()
+    ERR = object()
 
     def __init__(self, accept, transitions):
         self._accept = accept
         self._transitions = transitions
 
-    def tokenize(self, src: str) -> Iterator[tuple[str, TokenKind, Span]]:
+    def tokenize(self, src: str) -> Iterator[tuple[str, T, Span]]:
         """Split an input string into tokens and iterate over them."""
         start, end = 0, 0
         while start < len(src):
             state = 0
             stack = [self.BAD]
             while True:
+                if self.accept(state):
+                    stack = []
+                stack.append(state)
+
                 try:
                     ch = src[end]
                 except IndexError:
                     break
-                if self.accept(state):
-                    stack = []
-                stack.append(state)
                 cat = self.char_cat(ch)
+
                 try:
                     state = self._transitions[state, cat]
-                    end += 1
                 except KeyError:
+                    state = self.ERR
                     break
 
+                end += 1
+
             furthest = end
+
+            if not self.accept(state):
+                state = stack.pop()
 
             while not self.accept(state) and state is not self.BAD:
                 state = stack.pop()
@@ -334,7 +340,5 @@ scg = (
         + Opt("." + Repeat(num(), accept_empty=False)),
     )
     .add_rule("WHITESPACE", Repeat(OneOf(" \t"), accept_empty=False))
+    .add_rule("RIPRAP", "a" + Repeat("bc"))
 )
-
-sc = scg.build()
-print(list(sc.tokenize("12   3.45 foobar")))
