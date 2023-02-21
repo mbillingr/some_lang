@@ -139,9 +139,14 @@ def test_indentation():
             ("    ", TokenKind.INDENT, Span("", 6, 10)),
             ("bar", TokenKind.IDENTIFIER, Span("", 10, 13)),
             ("", TokenKind.DEDENT, Span("", 16, 16)),
-            ("baz", TokenKind.IDENTIFIER, Span("", 16, 16)),
+            ("baz", TokenKind.IDENTIFIER, Span("", 16, 19)),
+            ("", TokenKind.DEDENT, Span("", 19, 19)),
         ],
     )
+
+    # invalid dedent
+    with pytest.raises(IndentationError):
+        check("    foo\n  bar", [])
 
 
 def assert_token(src, is_token):

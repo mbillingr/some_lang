@@ -44,7 +44,6 @@ def indentify(token_stream: Iterable[Token]) -> Iterator[Token]:
     try:
         while True:
             # start of line
-
             next_token = next(token_stream)
             match next_token:
                 case _, TokenKind.NEWLINE, _:
@@ -55,13 +54,17 @@ def indentify(token_stream: Iterable[Token]) -> Iterator[Token]:
                     elif s.startswith(current_indent[-1]):
                         current_indent.append(s)
                         yield s, TokenKind.INDENT, span
-                    elif current_indent[-1].startswith(s):
-                        raise NotImplementedError()
                     else:
-                        raise NotImplementedError()
+                        while current_indent[-1] != s:
+                            current_indent.pop()
+                            if not current_indent:
+                                raise IndentationError(span)
+                            yield "", TokenKind.DEDENT, Span(
+                                span.src, span.end, span.end
+                            )
                     next_token = next(token_stream)
-                case s, _, span:
-                    while not s.startswith(current_indent[-1]):
+                case _, _, span:
+                    while len(current_indent) > 1:
                         current_indent.pop()
                         yield "", TokenKind.DEDENT, Span(
                             span.src, span.start, span.start
@@ -74,9 +77,9 @@ def indentify(token_stream: Iterable[Token]) -> Iterator[Token]:
     except StopIteration:
         pass
 
+    span = next_token[2]
     while len(current_indent) > 1:
         current_indent.pop()
-        span = next_token[2]
         yield "", TokenKind.DEDENT, Span(span.src, span.end, span.end)
 
 
