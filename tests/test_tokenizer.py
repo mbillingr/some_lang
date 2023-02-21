@@ -1,7 +1,7 @@
 import pytest
 
 from cubiml.scanner import Span
-from cubiml.tokenizer import ignore_whitespace, scanner, TokenKind
+from cubiml.tokenizer import ignore_whitespace, indentify, scanner, TokenKind
 
 
 def test_whitespace():
@@ -44,10 +44,10 @@ def test_operator():
 
 
 def test_integer_literal():
-    assert_token("0", TokenKind.LITERAL)
-    assert_token("012", TokenKind.LITERAL)
-    assert_token("-34", TokenKind.LITERAL)
-    assert_token("+56", TokenKind.LITERAL)
+    assert_token("0", TokenKind.LITERAL_INT)
+    assert_token("012", TokenKind.LITERAL_INT)
+    assert_token("-34", TokenKind.LITERAL_INT)
+    assert_token("+56", TokenKind.LITERAL_INT)
 
 
 def test_comment():
@@ -70,6 +70,78 @@ def test_whitespace_removal():
         ("foo", TokenKind.IDENTIFIER, Span(src, 1, 4)),
         ("bar", TokenKind.IDENTIFIER, Span(src, 9, 12)),
     ]
+
+
+def test_indentation():
+    def check(src, expected):
+        tokenstream = scanner.tokenize(src)
+        res = indentify(tokenstream)
+        expected = [(s, t, Span(src, span.start, span.end)) for s, t, span in expected]
+        assert list(res) == expected
+
+    # no indent
+    check("foo", [("foo", TokenKind.IDENTIFIER, Span("", 0, 3))])
+
+    # standalone indented line
+    check(
+        "  foo",
+        [
+            ("  ", TokenKind.INDENT, Span("", 0, 2)),
+            ("foo", TokenKind.IDENTIFIER, Span("", 2, 5)),
+            ("", TokenKind.DEDENT, Span("", 5, 5)),
+        ],
+    )
+
+    # newline inbetween
+    check(
+        "  foo\n\n  bar",
+        [
+            ("  ", TokenKind.INDENT, Span("", 0, 2)),
+            ("foo", TokenKind.IDENTIFIER, Span("", 2, 5)),
+            ("bar", TokenKind.IDENTIFIER, Span("", 9, 12)),
+            ("", TokenKind.DEDENT, Span("", 12, 12)),
+        ],
+    )
+
+    # nested indents
+    check(
+        "foo\n  bar\n  baz\n    fee",
+        [
+            ("foo", TokenKind.IDENTIFIER, Span("", 0, 3)),
+            ("  ", TokenKind.INDENT, Span("", 4, 6)),
+            ("bar", TokenKind.IDENTIFIER, Span("", 6, 9)),
+            ("baz", TokenKind.IDENTIFIER, Span("", 12, 15)),
+            ("    ", TokenKind.INDENT, Span("", 16, 20)),
+            ("fee", TokenKind.IDENTIFIER, Span("", 20, 23)),
+            ("", TokenKind.DEDENT, Span("", 23, 23)),
+            ("", TokenKind.DEDENT, Span("", 23, 23)),
+        ],
+    )
+
+    # explecit dedent
+    check(
+        "foo\n  bar\nbaz",
+        [
+            ("foo", TokenKind.IDENTIFIER, Span("", 0, 3)),
+            ("  ", TokenKind.INDENT, Span("", 4, 6)),
+            ("bar", TokenKind.IDENTIFIER, Span("", 6, 9)),
+            ("", TokenKind.DEDENT, Span("", 10, 10)),
+            ("baz", TokenKind.IDENTIFIER, Span("", 10, 13)),
+        ],
+    )
+
+    # nested dedent
+    check(
+        "  foo\n    bar\n  baz",
+        [
+            ("  ", TokenKind.INDENT, Span("", 0, 2)),
+            ("foo", TokenKind.IDENTIFIER, Span("", 2, 5)),
+            ("    ", TokenKind.INDENT, Span("", 6, 10)),
+            ("bar", TokenKind.IDENTIFIER, Span("", 10, 13)),
+            ("", TokenKind.DEDENT, Span("", 16, 16)),
+            ("baz", TokenKind.IDENTIFIER, Span("", 16, 16)),
+        ],
+    )
 
 
 def assert_token(src, is_token):

@@ -17,8 +17,10 @@ class TokenKind(Enum):
     KEYWORD = 2
     IDENTIFIER = 3
     OPERATOR = 4
-    LITERAL = 5
+    LITERAL_INT = 5
     COMMENT = 6
+    INDENT = 7
+    DEDENT = 8
 
 
 Token: TypeAlias = tuple[Any, TokenKind, Span]
@@ -33,6 +35,53 @@ def ignore_whitespace(token_stream: Iterable[Token]) -> Iterator[Token]:
                 pass
             case _:
                 yield token
+
+
+def indentify(token_stream: Iterable[Token]) -> Iterator[Token]:
+    token_stream = iter(token_stream)
+    current_indent = [""]
+
+    try:
+        while True:
+            # start of line
+
+            next_token = next(token_stream)
+            match next_token:
+                case _, TokenKind.NEWLINE, _:
+                    continue
+                case s, TokenKind.WHITESPACE, span:
+                    if s == current_indent[-1]:
+                        pass  # no change in indent
+                    elif s.startswith(current_indent[-1]):
+                        current_indent.append(s)
+                        yield s, TokenKind.INDENT, span
+                    elif current_indent[-1].startswith(s):
+                        raise NotImplementedError()
+                    else:
+                        raise NotImplementedError()
+                    next_token = next(token_stream)
+                case s, _, span:
+                    while not s.startswith(current_indent[-1]):
+                        current_indent.pop()
+                        yield "", TokenKind.DEDENT, Span(
+                            span.src, span.start, span.start
+                        )
+
+            while not _is_newline(next_token):
+                yield next_token
+                next_token = next(token_stream)
+
+    except StopIteration:
+        pass
+
+    while len(current_indent) > 1:
+        current_indent.pop()
+        span = next_token[2]
+        yield "", TokenKind.DEDENT, Span(span.src, span.end, span.end)
+
+
+def _is_newline(t: Token) -> bool:
+    return t[1] == TokenKind.NEWLINE
 
 
 # scanner implementation
@@ -62,7 +111,7 @@ scg = (
     .add_rule(TokenKind.KEYWORD, Alternative(*KEYWORDS))
     .add_rule(TokenKind.IDENTIFIER, ident_first() + Repeat(ident_rest()))
     .add_rule(TokenKind.OPERATOR, Repeat(OneOf(OP_SYMBOLS), accept_empty=False))
-    .add_rule(TokenKind.LITERAL, Opt(OneOf("+-")) + num())
+    .add_rule(TokenKind.LITERAL_INT, Opt(OneOf("+-")) + num())
 )
 # this rule needs to know the complete alphabet to implement an "any char" like regex
 scg.add_rule(TokenKind.COMMENT, "#" + Repeat(OneOf(scg.alphabet - {"\n"})) + Opt("\n"))
