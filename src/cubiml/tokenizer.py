@@ -1,7 +1,14 @@
 import time
 from enum import Enum
+from typing import TypeAlias, Any, Iterable, Iterator
 
-from cubiml.scanner import ScannerGenerator, Repeat, OneOf, Alternative, Opt
+from cubiml.scanner import ScannerGenerator, Repeat, OneOf, Alternative, Opt, Span
+
+KEYWORDS = ("if", "else")
+DIGITS = "0123456789"
+LETTERS = "abcdefghijklmnopqrstuvwxyz"
+IDENT_SYMS = "+-*/,<>;@$~&%=!?^\\|'\""
+OP_SYMBOLS = IDENT_SYMS + ".:"
 
 
 class TokenKind(Enum):
@@ -14,11 +21,21 @@ class TokenKind(Enum):
     COMMENT = 6
 
 
-KEYWORDS = ("if", "else")
-DIGITS = "0123456789"
-LETTERS = "abcdefghijklmnopqrstuvwxyz"
-IDENT_SYMS = "+-*/,<>;@$~&%=!?^\\|'\""
-OP_SYMBOLS = IDENT_SYMS + ".:"
+Token: TypeAlias = tuple[Any, TokenKind, Span]
+
+# scanner postprocessors
+
+
+def ignore_whitespace(token_stream: Iterable[Token]) -> Iterator[Token]:
+    for token in token_stream:
+        match token:
+            case _, TokenKind.WHITESPACE | TokenKind.NEWLINE, _:
+                pass
+            case _:
+                yield token
+
+
+# scanner implementation
 
 
 def whitespace(optional=False):
