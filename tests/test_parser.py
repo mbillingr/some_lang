@@ -32,6 +32,15 @@ def test_parse_expr_binding_power():
     )
 
 
+def test_parse_expr_right_associative():
+    assert parse_expr("2 ** 3 ** 4") == ast.BinOp(
+        ast.Literal(2),
+        ast.BinOp(ast.Literal(3), ast.Literal(4), ("int", "int", "int"), "**"),
+        ("int", "int", "int"),
+        "**",
+    )
+
+
 def test_parse_expr_incomplete():
     with pytest.raises(parser2.UnexpectedEnd):
         parse_expr("0 +")

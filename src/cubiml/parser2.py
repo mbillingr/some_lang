@@ -7,6 +7,7 @@ infix_binding_power = {
     "-": (1, 2),
     "*": (3, 4),
     "/": (3, 4),
+    "**": (6, 5),
 }
 
 op_types = {
@@ -14,6 +15,7 @@ op_types = {
     "-": ("int", "int", "int"),
     "*": ("int", "int", "int"),
     "/": ("int", "int", "int"),
+    "**": ("int", "int", "int"),
 }
 
 

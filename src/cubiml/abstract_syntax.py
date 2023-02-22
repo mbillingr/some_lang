@@ -27,7 +27,7 @@ class Reference(Expression):
     var: str
 
 
-Op = typing.Literal["+", "-", "*", "/", "<", "<=", ">=", ">", "==", "!=", "::"]
+Op = typing.Literal["+", "-", "*", "/", "<", "<=", ">=", ">", "==", "!=", "::", "**"]
 OpType = typing.Literal["any", "int", "bool"]
 
 
