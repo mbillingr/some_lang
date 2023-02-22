@@ -41,6 +41,10 @@ def test_parse_expr_right_associative():
     )
 
 
+def test_parse_expr_prefix_operator():
+    assert parse_expr("~1") == ast.UnaryOp(ast.Literal(1), ("bool", "bool"), "~")
+
+
 def test_parse_expr_incomplete():
     with pytest.raises(parser2.UnexpectedEnd):
         parse_expr("0 +")

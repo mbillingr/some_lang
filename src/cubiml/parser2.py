@@ -7,7 +7,11 @@ infix_binding_power = {
     "-": (1, 2),
     "*": (3, 4),
     "/": (3, 4),
-    "**": (6, 5),
+    "**": (8, 7),
+}
+
+prefix_binding_power = {
+    "~": (None, 5),
 }
 
 op_types = {
@@ -15,6 +19,7 @@ op_types = {
     "-": ("int", "int", "int"),
     "*": ("int", "int", "int"),
     "/": ("int", "int", "int"),
+    "~": ("bool", "bool"),
     "**": ("int", "int", "int"),
 }
 
@@ -74,10 +79,13 @@ def parse_expr(ts: PeekableTokenStream, min_bp: int = 0) -> ast.Expression:
 def parse_atom(ts):
     match next(ts):
         case val, TokenKind.LITERAL_INT, span:
-            lhs = spanned(span, ast.Literal(val))
+            return spanned(span, ast.Literal(val))
+        case op, TokenKind.OPERATOR, span:
+            _, rbp = prefix_binding_power[op]
+            rhs = parse_expr(ts, rbp)
+            return ast.UnaryOp(rhs, op_types[op], op)
         case _, tok, _:
             raise NotImplementedError(tok)
-    return lhs
 
 
 def spanned(span, x):
