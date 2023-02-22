@@ -7,11 +7,15 @@ infix_binding_power = {
     "-": (1, 2),
     "*": (3, 4),
     "/": (3, 4),
-    "**": (8, 7),
+    "**": (10, 9),
 }
 
 prefix_binding_power = {
     "~": (None, 5),
+}
+
+postfix_binding_power = {
+    "!": (7, None),
 }
 
 op_types = {
@@ -21,6 +25,7 @@ op_types = {
     "/": ("int", "int", "int"),
     "~": ("bool", "bool"),
     "**": ("int", "int", "int"),
+    "!": ("int", "int"),
 }
 
 
@@ -61,16 +66,24 @@ def parse_expr(ts: PeekableTokenStream, min_bp: int = 0) -> ast.Expression:
             case _, tok, _:
                 raise UnexpectedToken(tok)
 
-        lbp, rbp = infix_binding_power[op]
-        if lbp < min_bp:
-            break
+        if op in postfix_binding_power:
+            lbp, _ = postfix_binding_power[op]
+            if lbp < min_bp:
+                break
+            next(ts)
+            lhs = spanned([span, get_span(lhs)], ast.UnaryOp(lhs, op_types[op], op))
+        else:
+            lbp, rbp = infix_binding_power[op]
+            if lbp < min_bp:
+                break
 
-        next(ts)
-        rhs = parse_expr(ts, rbp)
+            next(ts)
+            rhs = parse_expr(ts, rbp)
 
-        lhs = spanned(
-            [get_span(lhs), span, get_span(rhs)], ast.BinOp(lhs, rhs, op_types[op], op)
-        )
+            lhs = spanned(
+                [get_span(lhs), span, get_span(rhs)],
+                ast.BinOp(lhs, rhs, op_types[op], op),
+            )
 
     return lhs
 
@@ -83,7 +96,7 @@ def parse_atom(ts):
         case op, TokenKind.OPERATOR, span:
             _, rbp = prefix_binding_power[op]
             rhs = parse_expr(ts, rbp)
-            return ast.UnaryOp(rhs, op_types[op], op)
+            return spanned([span, get_span(rhs)], ast.UnaryOp(rhs, op_types[op], op))
         case _, tok, _:
             raise NotImplementedError(tok)
 
