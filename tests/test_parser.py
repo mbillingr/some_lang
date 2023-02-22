@@ -1,3 +1,5 @@
+import pytest
+
 from cubiml import tokenizer, scanner, abstract_syntax as ast, parser2
 
 
@@ -28,6 +30,14 @@ def test_parse_expr_binding_power():
         ("int", "int", "int"),
         "+",
     )
+
+
+def test_parse_expr_incomplete():
+    with pytest.raises(parser2.UnexpectedEnd):
+        parse_expr("0 +")
+
+    with pytest.raises(parser2.UnexpectedToken):
+        parse_expr("0 0")
 
 
 def parse_expr(src):

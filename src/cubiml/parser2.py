@@ -4,21 +4,43 @@ from cubiml.tokenizer import PeekableTokenStream, TokenKind
 
 infix_binding_power = {
     "+": (1, 2),
+    "-": (1, 2),
     "*": (3, 4),
+    "/": (3, 4),
 }
 
 op_types = {
     "+": ("int", "int", "int"),
+    "-": ("int", "int", "int"),
     "*": ("int", "int", "int"),
+    "/": ("int", "int", "int"),
 }
 
 
+class ParseError(Exception):
+    pass
+
+
+class UnexpectedEnd(ParseError):
+    pass
+
+
+class UnexpectedToken(ParseError):
+    pass
+
+
+def transform_errors(func):
+    def wrapped(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except StopIteration:
+            raise UnexpectedEnd()
+
+    return wrapped
+
+
 def parse_expr(ts: PeekableTokenStream, min_bp: int = 0) -> ast.Expression:
-    match next(ts):
-        case val, TokenKind.LITERAL_INT, span:
-            lhs = spanned(span, ast.Literal(val))
-        case _, tok, _:
-            raise NotImplementedError(tok)
+    lhs = parse_atom(ts)
 
     while True:
         try:
@@ -30,7 +52,7 @@ def parse_expr(ts: PeekableTokenStream, min_bp: int = 0) -> ast.Expression:
             case op, TokenKind.OPERATOR, span:
                 pass
             case _, tok, _:
-                raise NotImplementedError(tok)
+                raise UnexpectedToken(tok)
 
         lbp, rbp = infix_binding_power[op]
         if lbp < min_bp:
@@ -43,6 +65,16 @@ def parse_expr(ts: PeekableTokenStream, min_bp: int = 0) -> ast.Expression:
             [get_span(lhs), span, get_span(rhs)], ast.BinOp(lhs, rhs, op_types[op], op)
         )
 
+    return lhs
+
+
+@transform_errors
+def parse_atom(ts):
+    match next(ts):
+        case val, TokenKind.LITERAL_INT, span:
+            lhs = spanned(span, ast.Literal(val))
+        case _, tok, _:
+            raise NotImplementedError(tok)
     return lhs
 
 
