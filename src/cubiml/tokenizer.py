@@ -1,3 +1,4 @@
+import collections
 import time
 from enum import Enum
 from typing import TypeAlias, Any, Iterable, Iterator
@@ -24,8 +25,47 @@ class TokenKind(Enum):
 
 
 Token: TypeAlias = tuple[Any, TokenKind, Span]
+TokenStream: TypeAlias = Iterable[Token]
+
+
+class PeekableTokenStream:
+    def __init__(self, ts: TokenStream):
+        self.ts = ts
+        self.buffer = collections.deque()
+
+    def peek(self, n=0):
+        while n >= len(self.buffer):
+            self.buffer.append(next(self.ts))
+        return self.buffer[n]
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.buffer:
+            return self.buffer.popleft()
+        return next(self.ts)
+
+
+def default_tokenizer(src: str) -> PeekableTokenStream:
+    token_stream = scanner.tokenize(src)
+    token_stream = indentify(token_stream)
+    token_stream = ignore_whitespace(token_stream)
+    token_stream = transform_literals(token_stream)
+    token_stream = PeekableTokenStream(token_stream)
+    return token_stream
+
 
 # scanner postprocessors
+
+
+def transform_literals(token_stream: Iterable[Token]) -> Iterator[Token]:
+    for token in token_stream:
+        match token:
+            case val, TokenKind.LITERAL_INT as tok, span:
+                yield int(val), tok, span
+            case _:
+                yield token
 
 
 def ignore_whitespace(token_stream: Iterable[Token]) -> Iterator[Token]:
