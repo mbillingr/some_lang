@@ -49,6 +49,15 @@ def test_parse_expr_postfix_operator():
     assert parse_expr("1!") == ast.UnaryOp(ast.Literal(1), ("int", "int"), "!")
 
 
+def test_parse_expr_parens():
+    assert parse_expr("(((1) * (2 + 3)))") == ast.BinOp(
+        ast.Literal(1),
+        ast.BinOp(ast.Literal(2), ast.Literal(3), ("int", "int", "int"), "+"),
+        ("int", "int", "int"),
+        "*",
+    )
+
+
 def test_parse_expr_incomplete():
     with pytest.raises(parser2.UnexpectedEnd):
         parse_expr("0 +")

@@ -1,5 +1,5 @@
 from cubiml import abstract_syntax as ast
-from cubiml.tokenizer import PeekableTokenStream, TokenKind
+from cubiml.tokenizer import PeekableTokenStream, TokenKind, Span
 
 
 infix_binding_power = {
@@ -72,7 +72,7 @@ def parse_expr(ts: PeekableTokenStream, min_bp: int = 0) -> ast.Expression:
                 break
             next(ts)
             lhs = spanned([span, get_span(lhs)], ast.UnaryOp(lhs, op_types[op], op))
-        else:
+        elif op in infix_binding_power:
             lbp, rbp = infix_binding_power[op]
             if lbp < min_bp:
                 break
@@ -84,6 +84,8 @@ def parse_expr(ts: PeekableTokenStream, min_bp: int = 0) -> ast.Expression:
                 [get_span(lhs), span, get_span(rhs)],
                 ast.BinOp(lhs, rhs, op_types[op], op),
             )
+        else:
+            break
 
     return lhs
 
@@ -93,6 +95,12 @@ def parse_atom(ts):
     match next(ts):
         case val, TokenKind.LITERAL_INT, span:
             return spanned(span, ast.Literal(val))
+        case "(", _, span:
+            lhs = parse_expr(ts)
+            s, _, sp2 = next(ts)
+            if s != ")":
+                raise UnexpectedToken(s)
+            return spanned(Span(span.src, span.start, sp2.end), lhs)
         case op, TokenKind.OPERATOR, span:
             _, rbp = prefix_binding_power[op]
             rhs = parse_expr(ts, rbp)

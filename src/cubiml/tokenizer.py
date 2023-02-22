@@ -10,6 +10,7 @@ DIGITS = "0123456789"
 LETTERS = "abcdefghijklmnopqrstuvwxyz"
 IDENT_SYMS = "+-*/,<>;@$~&%=!?^\\|'\""
 OP_SYMBOLS = IDENT_SYMS + ".:"
+PARENS = "()[]{}"
 
 
 class TokenKind(Enum):
@@ -154,6 +155,7 @@ scg = (
     .add_rule(TokenKind.KEYWORD, Alternative(*KEYWORDS))
     .add_rule(TokenKind.IDENTIFIER, ident_first() + Repeat(ident_rest()))
     .add_rule(TokenKind.OPERATOR, Repeat(OneOf(OP_SYMBOLS), accept_empty=False))
+    .add_rule(TokenKind.OPERATOR, OneOf(PARENS))
     .add_rule(TokenKind.LITERAL_INT, Opt(OneOf("+-")) + num())
 )
 # this rule needs to know the complete alphabet to implement an "any char" like regex
