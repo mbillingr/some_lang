@@ -15,6 +15,9 @@ class Span:
     start: int
     end: int
 
+    def merge(self, other: Span) -> Span:
+        return Span(self.src, min(self.start, other.start), max(self.end, other.end))
+
 
 class Regex(abc.ABC):
     """A regular expression, used for constructing scanners"""

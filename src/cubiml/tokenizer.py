@@ -30,13 +30,15 @@ TokenStream: TypeAlias = Iterable[Token]
 
 
 class PeekableTokenStream:
+    EOF = object()
+
     def __init__(self, ts: TokenStream):
         self.ts = ts
         self.buffer = collections.deque()
 
     def peek(self, n=0):
         while n >= len(self.buffer):
-            self.buffer.append(next(self.ts))
+            self.buffer.append(self._next_from_stream())
         return self.buffer[n]
 
     def __iter__(self):
@@ -45,7 +47,13 @@ class PeekableTokenStream:
     def __next__(self):
         if self.buffer:
             return self.buffer.popleft()
-        return next(self.ts)
+        return self._next_from_stream()
+
+    def _next_from_stream(self):
+        try:
+            return next(self.ts)
+        except StopIteration:
+            return self.EOF
 
 
 def default_tokenizer(src: str) -> PeekableTokenStream:

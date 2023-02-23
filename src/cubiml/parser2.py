@@ -42,16 +42,6 @@ class UnexpectedToken(ParseError):
     pass
 
 
-def transform_errors(func):
-    def wrapped(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except StopIteration:
-            raise UnexpectedEnd()
-
-    return wrapped
-
-
 def parse_expr(ts: PeekableTokenStream, min_bp: int = 0) -> ast.Expression:
     lhs = parse_atom(ts)
 
@@ -62,7 +52,9 @@ def parse_expr(ts: PeekableTokenStream, min_bp: int = 0) -> ast.Expression:
             break
 
         match token:
-            case op, TokenKind.OPERATOR, span:
+            case ts.EOF:
+                break
+            case op, TokenKind.OPERATOR, _:
                 pass
             case _, tok, _:
                 raise UnexpectedToken(tok)
@@ -76,55 +68,72 @@ def parse_expr(ts: PeekableTokenStream, min_bp: int = 0) -> ast.Expression:
             lbp, rbp = infix_binding_power[op]
             if lbp < min_bp:
                 break
-
-            next(ts)
-            rhs = parse_expr(ts, rbp)
-
-            lhs = spanned(
-                [get_span(lhs), span, get_span(rhs)],
-                ast.BinOp(lhs, rhs, op_types[op], op),
-            )
+            lhs = parse_infix_operator(lhs, rbp, ts)
         else:
             break
 
     return lhs
 
 
-@transform_errors
 def parse_atom(ts):
     match next(ts):
+        case ts.EOF:
+            raise UnexpectedEnd()
         case val, TokenKind.LITERAL_INT, span:
             return spanned(span, ast.Literal(val))
         case name, TokenKind.IDENTIFIER, span:
             return spanned(span, ast.Reference(name))
         case "(", _, span:
-            lhs = parse_expr(ts)
-            s, _, sp2 = next(ts)
-            if s != ")":
-                raise UnexpectedToken(s)
-            return spanned(Span(span.src, span.start, sp2.end), lhs)
+            inner = parse_expr(ts)
+            sp2 = expect_token(")", ts)
+            return spanned(span.merge(sp2), inner)
+        # prefix operator
         case op, TokenKind.OPERATOR, span:
             _, rbp = prefix_binding_power[op]
             rhs = parse_expr(ts, rbp)
-            return spanned([span, get_span(rhs)], ast.UnaryOp(rhs, op_types[op], op))
-        case _, tok, _:
-            raise NotImplementedError(tok)
+            return spanned(
+                make_operator_span(span, get_span(rhs)),
+                ast.UnaryOp(rhs, op_types[op], op),
+            )
+        case _, expect, _:
+            raise NotImplementedError(expect)
+
+
+def parse_infix_operator(lhs, rbp, ts):
+    op, _, span = next(ts)
+
+    rhs = parse_expr(ts, rbp)
+
+    return spanned(
+        make_operator_span(span, get_span(lhs), get_span(rhs)),
+        ast.BinOp(lhs, rhs, op_types[op], op),
+    )
 
 
 def parse_postfix_operator(lhs, ts):
     match next(ts):
         case "(", _, span:
             arg = parse_expr(ts)
-            s, _, sp2 = next(ts)
-            if s != ")":
-                raise UnexpectedToken(s)
-            return spanned(
-                Span(span.src, span.start, sp2.end), ast.Application(lhs, arg)
-            )
+            sp2 = expect_token(")", ts)
+            return spanned(span.merge(sp2), ast.Application(lhs, arg))
         case op, TokenKind.OPERATOR, span:
-            return spanned([span, get_span(lhs)], ast.UnaryOp(lhs, op_types[op], op))
+            return spanned(
+                make_operator_span(span, get_span(lhs)),
+                ast.UnaryOp(lhs, op_types[op], op),
+            )
         case _, tok, _:
             raise NotImplementedError(tok)
+
+
+def expect_token(expect, ts):
+    s, _, span = next(ts)
+    if s != expect:
+        raise UnexpectedToken(s)
+    return span
+
+
+def make_operator_span(rator: Span, *rands: Span):
+    return None
 
 
 def spanned(span, x):
