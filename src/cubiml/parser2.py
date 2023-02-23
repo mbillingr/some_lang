@@ -43,6 +43,16 @@ class UnexpectedToken(ParseError):
     pass
 
 
+def parse_toplevel(ts: PeekableTokenStream) -> ast.Script:
+    expr = parse_expr(ts)
+
+    extra_token = next(ts)
+    if extra_token != ts.EOF:
+        raise UnexpectedToken(extra_token)
+
+    return ast.Script([expr])
+
+
 def parse_block(ts) -> ast.Expression:
     expect_token(ts, TokenKind.INDENT)
     expr = parse_expr(ts)

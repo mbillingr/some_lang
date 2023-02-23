@@ -1,4 +1,4 @@
-from cubiml import type_checker, interpreter, parser
+from cubiml import type_checker, interpreter, parser2, tokenizer
 
 tckr = type_checker.TypeChecker()
 intr = interpreter.Interpreter()
@@ -7,10 +7,10 @@ intr = interpreter.Interpreter()
 def read_more(src):
     while True:
         try:
-            return parser.parse_script(src)
-        except parser.ParseException as e:
-            if e.loc != len(src):
-                raise
+            token_stream = tokenizer.default_tokenizer(src)
+            return parser2.parse_toplevel(token_stream)
+        except parser2.UnexpectedEnd as e:
+            pass
         src += "\n" + input("| ")
 
 
