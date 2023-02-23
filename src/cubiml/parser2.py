@@ -90,7 +90,7 @@ def parse_atom(ts):
     match next(ts):
         case ts.EOF:
             raise UnexpectedEnd()
-        case val, TokenKind.LITERAL_INT, span:
+        case val, TokenKind.LITERAL_BOOL | TokenKind.LITERAL_INT, span:
             return spanned(span, ast.Literal(val))
         case name, TokenKind.IDENTIFIER, span:
             return spanned(span, ast.Reference(name))
@@ -157,15 +157,17 @@ def expect_tokens(ts, *expect):
 
 
 def expect_token(ts, expect):
-    tok, kind, span = next(ts)
+    match next(ts):
+        case ts.EOF:
+            raise UnexpectedEnd()
+        case tok, kind, span:
+            if isinstance(expect, TokenKind):
+                if kind != expect:
+                    raise UnexpectedToken(tok, kind)
+            elif tok != expect:
+                raise UnexpectedToken(tok, kind)
 
-    if isinstance(expect, TokenKind):
-        if kind != expect:
-            raise UnexpectedToken(tok, kind)
-    elif tok != expect:
-        raise UnexpectedToken(tok, kind)
-
-    return span
+            return span
 
 
 def make_operator_span(rator: Span, *rands: Span):

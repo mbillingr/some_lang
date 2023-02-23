@@ -20,7 +20,7 @@ def test_multiple_white_lines_count_as_single_newline():
     assert_token("\n  \n\n  \n", TokenKind.NEWLINE)
 
 
-@pytest.mark.parametrize("kw", ["else", "if"])
+@pytest.mark.parametrize("kw", ["else", "false", "if", "true"])
 def test_keywords(kw):
     assert_token(kw, TokenKind.KEYWORD)
 

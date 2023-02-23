@@ -5,6 +5,8 @@ from cubiml import tokenizer, scanner, abstract_syntax as ast, parser2
 
 def test_parse_expr_atom():
     assert parse_expr("0") == ast.Literal(0)
+    assert parse_expr("true") == ast.Literal(True)
+    assert parse_expr("false") == ast.Literal(False)
     assert parse_expr("foo") == ast.Reference("foo")
 
 

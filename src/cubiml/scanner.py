@@ -164,8 +164,24 @@ class ScannerGenerator(Generic[T]):
         self.token_preference: dict[tuple[T, T], T] = {}
 
     def set_token_priority(self, select: T, discard: T) -> ScannerGenerator:
-        self.token_preference[(select, discard)] = select
-        self.token_preference[(discard, select)] = select
+        worklist = [(select, discard)]
+
+        for (a, b), c in self.token_preference.items():
+            if a == c:
+                if discard == a:
+                    worklist.append((select, b))
+                if select == b:
+                    worklist.append((a, discard))
+            else:
+                if discard == b:
+                    worklist.append((select, a))
+                if select == a:
+                    worklist.append((b, discard))
+
+        for s, d in worklist:
+            self.token_preference[(s, d)] = s
+            self.token_preference[(d, s)] = s
+
         return self
 
     def add_rule(self, token: T, regex: Any) -> ScannerGenerator:
@@ -209,7 +225,7 @@ class ScannerGenerator(Generic[T]):
                     token = self.token_preference.get((token, state_accept[st]))
                 if not token:
                     raise RuntimeError(
-                        f"Conflicting tokens: {state_accept[st]} and {token}"
+                        f"Conflicting tokens: {state_accept[st]} and {self.accept[node]}"
                     )
                 state_accept[st] = token
 
