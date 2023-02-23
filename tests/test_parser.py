@@ -9,36 +9,20 @@ def test_parse_expr_atom():
 
 
 def test_parse_expr_infix():
-    assert parse_expr("0 + 0") == ast.BinOp(
-        ast.Literal(0), ast.Literal(0), ("int", "int", "int"), "+"
-    )
+    assert parse_expr("0 + 0") == binop("+", ast.Literal(0), ast.Literal(0))
 
 
 def test_parse_expr_binding_power():
-    assert parse_expr("1 + 2 * 3 + 4") == ast.BinOp(
-        ast.BinOp(
-            ast.Literal(1),
-            ast.BinOp(
-                ast.Literal(2),
-                ast.Literal(3),
-                ("int", "int", "int"),
-                "*",
-            ),
-            ("int", "int", "int"),
-            "+",
-        ),
-        ast.Literal(4),
-        ("int", "int", "int"),
+    assert parse_expr("1 + 2 * 3 + 4") == binop(
         "+",
+        binop("+", ast.Literal(1), binop("*", ast.Literal(2), ast.Literal(3))),
+        ast.Literal(4),
     )
 
 
 def test_parse_expr_right_associative():
-    assert parse_expr("2 ** 3 ** 4") == ast.BinOp(
-        ast.Literal(2),
-        ast.BinOp(ast.Literal(3), ast.Literal(4), ("int", "int", "int"), "**"),
-        ("int", "int", "int"),
-        "**",
+    assert parse_expr("2 ** 3 ** 4") == binop(
+        "**", ast.Literal(2), binop("**", ast.Literal(3), ast.Literal(4))
     )
 
 
@@ -51,11 +35,8 @@ def test_parse_expr_postfix_operator():
 
 
 def test_parse_expr_parens():
-    assert parse_expr("(((1) * (2 + 3)))") == ast.BinOp(
-        ast.Literal(1),
-        ast.BinOp(ast.Literal(2), ast.Literal(3), ("int", "int", "int"), "+"),
-        ("int", "int", "int"),
-        "*",
+    assert parse_expr("(((1) * (2 + 3)))") == binop(
+        "*", ast.Literal(1), binop("+", ast.Literal(2), ast.Literal(3))
     )
 
 
@@ -63,7 +44,7 @@ def test_parse_expr_call():
     assert parse_expr("foo(0)") == ast.Application(ast.Reference("foo"), ast.Literal(0))
 
 
-def test_parse_ternary():
+def test_parse_expr_ternary():
     assert parse_expr("a if x else b if y else c") == ast.Conditional(
         ast.Reference("x"),
         ast.Reference("a"),
@@ -92,3 +73,7 @@ def parse_expr(src):
 
 def token(txt: str, t: tokenizer.TokenKind) -> tokenizer.Token:
     return txt, t, scanner.Span("", 0, 0)
+
+
+def binop(op, lhs, rhs, ty=("int", "int", "int")):
+    return ast.BinOp(lhs, rhs, ty, op)
