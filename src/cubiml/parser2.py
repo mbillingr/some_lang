@@ -16,6 +16,7 @@ prefix_binding_power = {
 
 postfix_binding_power = {
     "!": (7, None),
+    "(": (11, None),  # function call
 }
 
 op_types = {
@@ -70,8 +71,7 @@ def parse_expr(ts: PeekableTokenStream, min_bp: int = 0) -> ast.Expression:
             lbp, _ = postfix_binding_power[op]
             if lbp < min_bp:
                 break
-            next(ts)
-            lhs = spanned([span, get_span(lhs)], ast.UnaryOp(lhs, op_types[op], op))
+            lhs = parse_postfix_operator(lhs, ts)
         elif op in infix_binding_power:
             lbp, rbp = infix_binding_power[op]
             if lbp < min_bp:
@@ -95,6 +95,8 @@ def parse_atom(ts):
     match next(ts):
         case val, TokenKind.LITERAL_INT, span:
             return spanned(span, ast.Literal(val))
+        case name, TokenKind.IDENTIFIER, span:
+            return spanned(span, ast.Reference(name))
         case "(", _, span:
             lhs = parse_expr(ts)
             s, _, sp2 = next(ts)
@@ -105,6 +107,22 @@ def parse_atom(ts):
             _, rbp = prefix_binding_power[op]
             rhs = parse_expr(ts, rbp)
             return spanned([span, get_span(rhs)], ast.UnaryOp(rhs, op_types[op], op))
+        case _, tok, _:
+            raise NotImplementedError(tok)
+
+
+def parse_postfix_operator(lhs, ts):
+    match next(ts):
+        case "(", _, span:
+            arg = parse_expr(ts)
+            s, _, sp2 = next(ts)
+            if s != ")":
+                raise UnexpectedToken(s)
+            return spanned(
+                Span(span.src, span.start, sp2.end), ast.Application(lhs, arg)
+            )
+        case op, TokenKind.OPERATOR, span:
+            return spanned([span, get_span(lhs)], ast.UnaryOp(lhs, op_types[op], op))
         case _, tok, _:
             raise NotImplementedError(tok)
 

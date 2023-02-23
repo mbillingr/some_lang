@@ -5,6 +5,7 @@ from cubiml import tokenizer, scanner, abstract_syntax as ast, parser2
 
 def test_parse_expr_atom():
     assert parse_expr("0") == ast.Literal(0)
+    assert parse_expr("foo") == ast.Reference("foo")
 
 
 def test_parse_expr_infix():
@@ -56,6 +57,10 @@ def test_parse_expr_parens():
         ("int", "int", "int"),
         "*",
     )
+
+
+def test_parse_expr_call():
+    assert parse_expr("foo(0)") == ast.Application(ast.Reference("foo"), ast.Literal(0))
 
 
 def test_parse_expr_incomplete():
