@@ -3,20 +3,21 @@ from cubiml.tokenizer import PeekableTokenStream, TokenKind, Span
 
 
 infix_binding_power = {
-    "+": (1, 2),
-    "-": (1, 2),
-    "*": (3, 4),
-    "/": (3, 4),
-    "**": (10, 9),
+    "if": (2, 1),
+    "+": (3, 4),
+    "-": (3, 4),
+    "*": (5, 6),
+    "/": (5, 6),
+    "**": (12, 11),
 }
 
 prefix_binding_power = {
-    "~": (None, 5),
+    "~": (None, 7),
 }
 
 postfix_binding_power = {
-    "!": (7, None),
-    "(": (11, None),  # function call
+    "!": (9, None),
+    "(": (13, None),  # function call
 }
 
 op_types = {
@@ -46,18 +47,11 @@ def parse_expr(ts: PeekableTokenStream, min_bp: int = 0) -> ast.Expression:
     lhs = parse_atom(ts)
 
     while True:
-        try:
-            token = ts.peek()
-        except StopIteration:
-            break
-
-        match token:
+        match ts.peek():
             case ts.EOF:
                 break
-            case op, TokenKind.OPERATOR, _:
+            case op, _, _:
                 pass
-            case _, tok, _:
-                raise UnexpectedToken(tok)
 
         if op in postfix_binding_power:
             lbp, _ = postfix_binding_power[op]
@@ -85,7 +79,7 @@ def parse_atom(ts):
             return spanned(span, ast.Reference(name))
         case "(", _, span:
             inner = parse_expr(ts)
-            sp2 = expect_token(")", ts)
+            sp2 = expect_token(ts, ")")
             return spanned(span.merge(sp2), inner)
         # prefix operator
         case op, TokenKind.OPERATOR, span:
@@ -95,40 +89,66 @@ def parse_atom(ts):
                 make_operator_span(span, get_span(rhs)),
                 ast.UnaryOp(rhs, op_types[op], op),
             )
-        case _, expect, _:
-            raise NotImplementedError(expect)
+        case "if", _, span:
+            cond = parse_expr(ts)
+            expect_tokens(ts, ":", TokenKind.INDENT)
+            lhs = parse_expr(ts)
+            expect_tokens(ts, TokenKind.DEDENT, "else", ":", TokenKind.INDENT)
+            rhs = parse_expr(ts)
+            expect_tokens(ts, TokenKind.DEDENT)
+            return spanned(span.merge(get_span(rhs)), ast.Conditional(cond, lhs, rhs))
+        case tok, kind, _:
+            raise UnexpectedToken(kind, tok)
 
 
 def parse_infix_operator(lhs, rbp, ts):
-    op, _, span = next(ts)
+    match next(ts):
+        case "if", _, _:
+            cond = parse_expr(ts)
+            expect_token(ts, "else")
+            rhs = parse_expr(ts, rbp)
+            return spanned(
+                get_span(lhs).merge(get_span(rhs)), ast.Conditional(cond, lhs, rhs)
+            )
+        case op, TokenKind.OPERATOR, span:
+            rhs = parse_expr(ts, rbp)
 
-    rhs = parse_expr(ts, rbp)
-
-    return spanned(
-        make_operator_span(span, get_span(lhs), get_span(rhs)),
-        ast.BinOp(lhs, rhs, op_types[op], op),
-    )
+            return spanned(
+                make_operator_span(span, get_span(lhs), get_span(rhs)),
+                ast.BinOp(lhs, rhs, op_types[op], op),
+            )
+        case tok, kind, _:
+            raise UnexpectedToken(kind, tok)
 
 
 def parse_postfix_operator(lhs, ts):
     match next(ts):
         case "(", _, span:
             arg = parse_expr(ts)
-            sp2 = expect_token(")", ts)
+            sp2 = expect_token(ts, ")")
             return spanned(span.merge(sp2), ast.Application(lhs, arg))
         case op, TokenKind.OPERATOR, span:
             return spanned(
                 make_operator_span(span, get_span(lhs)),
                 ast.UnaryOp(lhs, op_types[op], op),
             )
-        case _, tok, _:
-            raise NotImplementedError(tok)
+        case tok, kind, _:
+            raise UnexpectedToken(kind, tok)
 
 
-def expect_token(expect, ts):
-    s, _, span = next(ts)
-    if s != expect:
-        raise UnexpectedToken(s)
+def expect_tokens(ts, *expect):
+    return [expect_token(ts, ex) for ex in expect]
+
+
+def expect_token(ts, expect):
+    tok, kind, span = next(ts)
+
+    if isinstance(expect, TokenKind):
+        if kind != expect:
+            raise UnexpectedToken(tok, kind)
+    elif tok != expect:
+        raise UnexpectedToken(tok, kind)
+
     return span
 
 
@@ -141,5 +161,5 @@ def spanned(span, x):
     return x
 
 
-def get_span(x):
-    return None
+def get_span(x) -> Span:
+    return Span("", 0, 0)
