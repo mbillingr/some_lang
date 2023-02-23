@@ -113,8 +113,8 @@ def parse_atom(ts):
             expect_tokens(ts, "else", ":")
             rhs = parse_block(ts)
             return spanned(span.merge(get_span(rhs)), ast.Conditional(cond, lhs, rhs))
-        case tok, kind, _:
-            raise UnexpectedToken(kind, tok)
+        case token:
+            raise UnexpectedToken(token)
 
 
 def parse_infix_operator(lhs, rbp, ts):
@@ -133,8 +133,8 @@ def parse_infix_operator(lhs, rbp, ts):
                 make_operator_span(span, get_span(lhs), get_span(rhs)),
                 ast.BinOp(lhs, rhs, op_types[op], op),
             )
-        case tok, kind, _:
-            raise UnexpectedToken(kind, tok)
+        case token:
+            raise UnexpectedToken(token)
 
 
 def parse_postfix_operator(lhs, ts):
@@ -148,8 +148,8 @@ def parse_postfix_operator(lhs, ts):
                 make_operator_span(span, get_span(lhs)),
                 ast.UnaryOp(lhs, op_types[op], op),
             )
-        case tok, kind, _:
-            raise UnexpectedToken(kind, tok)
+        case token:
+            raise UnexpectedToken(token)
 
 
 def expect_tokens(ts, *expect):
@@ -163,9 +163,9 @@ def expect_token(ts, expect):
         case tok, kind, span:
             if isinstance(expect, TokenKind):
                 if kind != expect:
-                    raise UnexpectedToken(tok, kind)
+                    raise UnexpectedToken((kind, tok, span))
             elif tok != expect:
-                raise UnexpectedToken(tok, kind)
+                raise UnexpectedToken((kind, tok, span))
 
             return span
 

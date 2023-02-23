@@ -9,8 +9,13 @@ def read_more(src):
         try:
             token_stream = tokenizer.default_tokenizer(src)
             return parser2.parse_toplevel(token_stream)
-        except parser2.UnexpectedEnd as e:
+        except parser2.UnexpectedEnd:
             pass
+        except parser2.UnexpectedToken as e:
+            tok, kind, span = e.args[0]
+            # unexpected DEDENTs at the end are likely due to incomplete inputs
+            if kind != tokenizer.TokenKind.DEDENT and span.start < len(src):
+                raise
         src += "\n" + input("| ")
 
 
@@ -28,5 +33,5 @@ while True:
             print(val)
     except EOFError:
         break
-    except Exception as e:
-        print(f"{type(e).__name__}: {e}")
+    # except Exception as e:
+    #    print(f"{type(e).__name__}: {e}")
