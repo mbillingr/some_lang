@@ -118,7 +118,7 @@ def test_indentation():
         ],
     )
 
-    # explecit dedent
+    # explicit dedent
     check(
         "foo\n  bar\nbaz",
         [
@@ -141,6 +141,20 @@ def test_indentation():
             ("", TokenKind.DEDENT, Span("", 16, 16)),
             ("baz", TokenKind.IDENTIFIER, Span("", 16, 19)),
             ("", TokenKind.DEDENT, Span("", 19, 19)),
+        ],
+    )
+
+    # suspended indentation inside parentheses
+    check(
+        "  foo(\nbar)\n  baz",
+        [
+            ("  ", TokenKind.INDENT, Span("", 0, 2)),
+            ("foo", TokenKind.IDENTIFIER, Span("", 2, 5)),
+            ("(", TokenKind.LPAREN, Span("", 5, 6)),
+            ("bar", TokenKind.IDENTIFIER, Span("", 7, 10)),
+            (")", TokenKind.RPAREN, Span("", 10, 11)),
+            ("baz", TokenKind.IDENTIFIER, Span("", 14, 17)),
+            ("", TokenKind.DEDENT, Span("", 17, 17)),
         ],
     )
 

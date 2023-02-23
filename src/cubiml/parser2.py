@@ -43,6 +43,13 @@ class UnexpectedToken(ParseError):
     pass
 
 
+def parse_block(ts) -> ast.Expression:
+    expect_token(ts, TokenKind.INDENT)
+    expr = parse_expr(ts)
+    expect_token(ts, TokenKind.DEDENT)
+    return expr
+
+
 def parse_expr(ts: PeekableTokenStream, min_bp: int = 0) -> ast.Expression:
     lhs = parse_atom(ts)
 
@@ -91,11 +98,10 @@ def parse_atom(ts):
             )
         case "if", _, span:
             cond = parse_expr(ts)
-            expect_tokens(ts, ":", TokenKind.INDENT)
-            lhs = parse_expr(ts)
-            expect_tokens(ts, TokenKind.DEDENT, "else", ":", TokenKind.INDENT)
-            rhs = parse_expr(ts)
-            expect_tokens(ts, TokenKind.DEDENT)
+            expect_tokens(ts, ":")
+            lhs = parse_block(ts)
+            expect_tokens(ts, "else", ":")
+            rhs = parse_block(ts)
             return spanned(span.merge(get_span(rhs)), ast.Conditional(cond, lhs, rhs))
         case tok, kind, _:
             raise UnexpectedToken(kind, tok)

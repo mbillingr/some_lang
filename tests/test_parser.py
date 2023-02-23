@@ -58,6 +58,12 @@ def test_parse_regular_if():
     )
 
 
+def test_parse_expr_indented():
+    assert parse_expr("if x:\n  (\n1)\nelse:\n  0") == ast.Conditional(
+        ast.Reference("x"), ast.Literal(1), ast.Literal(0)
+    )
+
+
 def test_parse_expr_incomplete():
     with pytest.raises(parser2.UnexpectedEnd):
         parse_expr("0 +")
