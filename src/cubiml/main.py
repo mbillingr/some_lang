@@ -19,8 +19,8 @@ while True:
         src = input("> ")
         ast = read_more(src)
         ty = tckr.check_script(ast)
-        print(tckr.engine)
-        print(tckr.bindings.m)
+        print(tckr.ctx.engine)
+        print(tckr.ctx.bindings.m)
         if ty is not None:
             print(f"t{ty}")
         val = intr.run_script(ast)
