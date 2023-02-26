@@ -1,5 +1,6 @@
 import pytest
 
+import cubiml.tokenizer
 from cubiml import tokenizer, scanner, abstract_syntax as ast, parser2
 
 
@@ -55,19 +56,51 @@ def test_parse_expr_ternary():
 
 
 def test_parse_regular_if():
-    assert parse_expr("if x:\n   y\nelse:\n   n") == ast.Conditional(
+    src = """
+    if x:
+       y
+    else:
+       n
+    """
+    assert parse_expr(src) == ast.Conditional(
         ast.Reference("x"), ast.Reference("y"), ast.Reference("n")
     )
 
 
-def test_parse_expr_indented():
-    assert parse_expr("if x:\n  (\n1)\nelse:\n  0") == ast.Conditional(
-        ast.Reference("x"), ast.Literal(1), ast.Literal(0)
+@pytest.mark.parametrize("w1", ["", "  ", "    "])
+@pytest.mark.parametrize("w2", [" ", "\n", "\n  ", "\n    "])
+@pytest.mark.parametrize("w3", [" ", "\n", "\n  ", "\n    "])
+def test_parse_expr_indented(w1, w2, w3):
+    src = f"{w1}1{w2}+{w3}2"
+    assert parse_expr(src) == binop("+", ast.Literal(1), ast.Literal(2))
+
+
+def test_parse_expr_indented_in_block():
+    src = f"""
+    if true:
+       1 +
+         2
+    else:
+       3
+    """
+    assert parse_expr(src) == ast.Conditional(
+        ast.Literal(True), binop("+", ast.Literal(1), ast.Literal(2)), ast.Literal(3)
     )
 
 
+def test_invalid_dedent():
+    src = f"""
+    if true:
+        1
+      else:
+        2
+    """
+    with pytest.raises(tokenizer.LayoutError):
+        parse_expr(src)
+
+
 def test_parse_expr_incomplete():
-    with pytest.raises(parser2.UnexpectedEnd):
+    with pytest.raises(cubiml.tokenizer.UnexpectedEnd):
         parse_expr("0 +")
 
     # with pytest.raises(parser2.UnexpectedToken):

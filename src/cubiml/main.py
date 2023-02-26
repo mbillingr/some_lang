@@ -1,3 +1,4 @@
+import cubiml.tokenizer
 from cubiml import type_checker, interpreter, parser2, tokenizer
 
 tckr = type_checker.TypeChecker()
@@ -9,9 +10,9 @@ def read_more(src):
         try:
             token_stream = tokenizer.default_tokenizer(src)
             return parser2.parse_toplevel(token_stream)
-        except parser2.UnexpectedEnd:
+        except cubiml.tokenizer.UnexpectedEnd:
             pass
-        except parser2.UnexpectedToken as e:
+        except cubiml.tokenizer.UnexpectedToken as e:
             tok, kind, span = e.args[0]
             # unexpected DEDENTs at the end are likely due to incomplete inputs
             if kind != tokenizer.TokenKind.DEDENT and span.start < len(src):

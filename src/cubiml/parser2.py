@@ -1,6 +1,5 @@
 from cubiml import abstract_syntax as ast
-from cubiml.tokenizer import PeekableTokenStream, TokenKind, Span
-
+from cubiml.tokenizer import PeekableTokenStream, TokenKind, Span, UnexpectedEnd, UnexpectedToken
 
 infix_binding_power = {
     "if": (2, 1),
@@ -31,18 +30,6 @@ op_types = {
 }
 
 
-class ParseError(Exception):
-    pass
-
-
-class UnexpectedEnd(ParseError):
-    pass
-
-
-class UnexpectedToken(ParseError):
-    pass
-
-
 def parse_toplevel(ts: PeekableTokenStream) -> ast.Script:
     expr = parse_expr(ts)
 
@@ -54,9 +41,9 @@ def parse_toplevel(ts: PeekableTokenStream) -> ast.Script:
 
 
 def parse_block(ts) -> ast.Expression:
-    expect_token(ts, TokenKind.INDENT)
+    expect_token(ts, TokenKind.BEGIN_BLOCK)
     expr = parse_expr(ts)
-    expect_token(ts, TokenKind.DEDENT)
+    expect_token(ts, TokenKind.END_BLOCK)
     return expr
 
 
@@ -86,8 +73,8 @@ def parse_expr(ts: PeekableTokenStream, min_bp: int = 0) -> ast.Expression:
     return lhs
 
 
-def parse_atom(ts):
-    match next(ts):
+def parse_atom(ts: PeekableTokenStream):
+    match ts.get_next():
         case ts.EOF:
             raise UnexpectedEnd()
         case val, TokenKind.LITERAL_BOOL | TokenKind.LITERAL_INT, span:
@@ -108,9 +95,8 @@ def parse_atom(ts):
             )
         case "if", _, span:
             cond = parse_expr(ts)
-            expect_tokens(ts, ":")
             lhs = parse_block(ts)
-            expect_tokens(ts, "else", ":")
+            expect_tokens(ts, "else")
             rhs = parse_block(ts)
             return spanned(span.merge(get_span(rhs)), ast.Conditional(cond, lhs, rhs))
         case token:
@@ -118,7 +104,7 @@ def parse_atom(ts):
 
 
 def parse_infix_operator(lhs, rbp, ts):
-    match next(ts):
+    match ts.get_next():
         case "if", _, _:
             cond = parse_expr(ts)
             expect_token(ts, "else")
@@ -138,7 +124,7 @@ def parse_infix_operator(lhs, rbp, ts):
 
 
 def parse_postfix_operator(lhs, ts):
-    match next(ts):
+    match ts.get_next():
         case "(", _, span:
             arg = parse_expr(ts)
             sp2 = expect_token(ts, ")")
@@ -157,7 +143,7 @@ def expect_tokens(ts, *expect):
 
 
 def expect_token(ts, expect):
-    match next(ts):
+    match ts.get_next():
         case ts.EOF:
             raise UnexpectedEnd()
         case tok, kind, span:

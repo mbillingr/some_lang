@@ -1,7 +1,7 @@
 import pytest
 
 from cubiml.scanner import Span
-from cubiml.tokenizer import ignore_whitespace, indentify, scanner, TokenKind
+from cubiml.tokenizer import remove_all_whitespace, indentify, scanner, TokenKind
 
 
 def test_whitespace():
@@ -64,7 +64,7 @@ def test_whitespace_removal():
     src = " foo \n   bar\t"
     tokenstream = scanner.tokenize(src)
 
-    res = ignore_whitespace(tokenstream)
+    res = remove_all_whitespace(tokenstream)
 
     assert list(res) == [
         ("foo", TokenKind.IDENTIFIER, Span(src, 1, 4)),

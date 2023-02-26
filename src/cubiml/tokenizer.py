@@ -28,8 +28,12 @@ class TokenKind(Enum):
     LITERAL_INT = 8
     COMMENT = 9
     INDENT = 10
-    DEDENT = 11
-    SYNTAX = 12
+    BLOCK_INDENT = 11
+    DEDENT = 12
+    SYNTAX = 13
+    BEGIN_BLOCK = 14
+    SEP_BLOCK = 15
+    END_BLOCK = 16
 
 
 Token: TypeAlias = tuple[Any, TokenKind, Span]
@@ -40,13 +44,22 @@ class PeekableTokenStream:
     EOF = object()
 
     def __init__(self, ts: TokenStream):
-        self.ts = ts
+        self.ts = iter(ts)
         self.buffer = collections.deque()
 
     def peek(self, n=0):
-        while n >= len(self.buffer):
-            self.buffer.append(self._next_from_stream())
-        return self.buffer[n]
+        try:
+            while n >= len(self.buffer):
+                self.buffer.append(next(self.ts))
+            return self.buffer[n]
+        except StopIteration:
+            return self.EOF
+
+    def get_next(self):
+        try:
+            return next(self)
+        except StopIteration:
+            return self.EOF
 
     def __iter__(self):
         return self
@@ -54,22 +67,26 @@ class PeekableTokenStream:
     def __next__(self):
         if self.buffer:
             return self.buffer.popleft()
-        return self._next_from_stream()
-
-    def _next_from_stream(self):
-        try:
-            return next(self.ts)
-        except StopIteration:
-            return self.EOF
+        return next(self.ts)
 
 
 def default_tokenizer(src: str) -> PeekableTokenStream:
     token_stream = scanner.tokenize(src)
-    token_stream = indentify(token_stream)
-    token_stream = ignore_whitespace(token_stream)
+    token_stream = whitespace_to_indent(token_stream)
+    token_stream = augment_layout(token_stream)
+    token_stream = infer_blocks(token_stream)
+    # token_stream = inspect(token_stream)
+    token_stream = remove_all_whitespace(token_stream)
     token_stream = transform_literals(token_stream)
     token_stream = PeekableTokenStream(token_stream)
     return token_stream
+
+
+def inspect(ts):
+    ts = list(ts)
+    for t in ts:
+        print(t)
+    yield from ts
 
 
 # scanner postprocessors
@@ -88,12 +105,72 @@ def transform_literals(token_stream: Iterable[Token]) -> Iterator[Token]:
                 yield token
 
 
-def ignore_whitespace(token_stream: Iterable[Token]) -> Iterator[Token]:
+def remove_all_whitespace(token_stream: Iterable[Token]) -> Iterator[Token]:
     for token in token_stream:
         match token:
-            case _, TokenKind.WHITESPACE | TokenKind.NEWLINE, _:
+            case _, TokenKind.WHITESPACE | TokenKind.NEWLINE | TokenKind.INDENT, _:
                 pass
             case _:
+                yield token
+
+
+def whitespace_to_indent(token_stream: Iterable[Token]) -> Iterator[Token]:
+    newline = True
+    for token in token_stream:
+        match token:
+            case t, TokenKind.WHITESPACE, span:
+                if newline:
+                    yield indent_len(t), TokenKind.INDENT, span
+                newline = False
+            case _, TokenKind.NEWLINE, _:
+                newline = True
+            case _:
+                if newline:
+                    span = token[2]
+                    yield 0, TokenKind.INDENT, Span(span.src, span.start, span.end)
+                newline = False
+                yield token
+
+
+def indent_len(ws: str) -> int:
+    return len(ws)
+
+
+def augment_layout(token_stream: Iterator[Token]) -> Iterator[Token]:
+    ts = PeekableTokenStream(token_stream)
+    for token in ts:
+        match token:
+            case ":", TokenKind.SYNTAX, span:
+                block_indent = 0
+                match ts.peek(0):
+                    case n, TokenKind.INDENT, span:
+                        next(ts)
+                        block_indent = n
+                    case _, _, span:
+                        block_indent = span.column()
+                yield block_indent, TokenKind.BLOCK_INDENT, span
+            case _:
+                yield token
+
+
+def infer_blocks(ts: Iterator[Token], lcs=()) -> Iterator[Token]:
+    for token in ts:
+        match token, lcs:
+            case (0, TokenKind.INDENT, _), ():
+                pass
+            case (n, TokenKind.INDENT, span), (m, *ms) if n == m:
+                yield None, TokenKind.SEP_BLOCK, span
+            case (n, TokenKind.INDENT, _), (m, *ms) if n < m:
+                return
+            case (_, TokenKind.INDENT, _), _:
+                pass
+            case (n, TokenKind.BLOCK_INDENT, span), ():
+                yield None, TokenKind.BEGIN_BLOCK, span
+                yield from infer_blocks(ts, (n,))
+                yield None, TokenKind.END_BLOCK, span
+            case (_, TokenKind.BLOCK_INDENT, _), _:
+                raise NotImplementedError(token, lcs)
+            case token, _:
                 yield token
 
 
@@ -203,3 +280,19 @@ start = time.time()
 print("building scanner...")
 scanner = scg.build()
 print(f"... {time.time() - start:.3f}s")
+
+
+class ParseError(Exception):
+    pass
+
+
+class LayoutError(Exception):
+    pass
+
+
+class UnexpectedEnd(ParseError):
+    pass
+
+
+class UnexpectedToken(ParseError):
+    pass
