@@ -88,11 +88,33 @@ def test_parse_expr_indented_in_block():
     )
 
 
-def test_invalid_dedent():
+def test_parse_expr_multiple_dedent():
+    src = f"""
+if true:
+   if true:
+      1
+   else:
+      if true:
+         2
+      else:
+         3
+   4
+else:
+   5
+    """
+    assert parse_expr(src) == ast.Conditional(
+        ast.Literal(True),
+        ast.Literal(4),
+        ast.Literal(5),
+    )
+
+
+@pytest.mark.parametrize("dent", ["  ", "      "])
+def test_invalid_dedent(dent):
     src = f"""
     if true:
         1
-      else:
+{dent}else:
         2
     """
     with pytest.raises(tokenizer.LayoutError):

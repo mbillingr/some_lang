@@ -1,5 +1,5 @@
 from cubiml import abstract_syntax as ast
-from cubiml.tokenizer import PeekableTokenStream, TokenKind, Span, UnexpectedEnd, UnexpectedToken
+from cubiml.tokenizer import TokenStream, TokenKind, Span, UnexpectedEnd, UnexpectedToken
 
 infix_binding_power = {
     "if": (2, 1),
@@ -30,7 +30,7 @@ op_types = {
 }
 
 
-def parse_toplevel(ts: PeekableTokenStream) -> ast.Script:
+def parse_toplevel(ts: TokenStream) -> ast.Script:
     expr = parse_expr(ts)
 
     extra_token = next(ts)
@@ -40,14 +40,21 @@ def parse_toplevel(ts: PeekableTokenStream) -> ast.Script:
     return ast.Script([expr])
 
 
-def parse_block(ts) -> ast.Expression:
+def parse_block_expr(ts) -> ast.Expression:
     expect_token(ts, TokenKind.BEGIN_BLOCK)
     expr = parse_expr(ts)
-    expect_token(ts, TokenKind.END_BLOCK)
-    return expr
+    while True:
+        match ts.peek():
+            case ts.EOF:
+                raise UnexpectedEnd()
+            case _, TokenKind.END_BLOCK, _:
+                ts.get_next()
+                return expr
+            case _:
+                expr = parse_expr(ts)
 
 
-def parse_expr(ts: PeekableTokenStream, min_bp: int = 0) -> ast.Expression:
+def parse_expr(ts: TokenStream, min_bp: int = 0) -> ast.Expression:
     lhs = parse_atom(ts)
 
     while True:
@@ -73,7 +80,7 @@ def parse_expr(ts: PeekableTokenStream, min_bp: int = 0) -> ast.Expression:
     return lhs
 
 
-def parse_atom(ts: PeekableTokenStream):
+def parse_atom(ts: TokenStream):
     match ts.get_next():
         case ts.EOF:
             raise UnexpectedEnd()
@@ -95,9 +102,9 @@ def parse_atom(ts: PeekableTokenStream):
             )
         case "if", _, span:
             cond = parse_expr(ts)
-            lhs = parse_block(ts)
+            lhs = parse_block_expr(ts)
             expect_tokens(ts, "else")
-            rhs = parse_block(ts)
+            rhs = parse_block_expr(ts)
             return spanned(span.merge(get_span(rhs)), ast.Conditional(cond, lhs, rhs))
         case token:
             raise UnexpectedToken(token)

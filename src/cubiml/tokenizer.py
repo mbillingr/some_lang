@@ -37,13 +37,12 @@ class TokenKind(Enum):
 
 
 Token: TypeAlias = tuple[Any, TokenKind, Span]
-TokenStream: TypeAlias = Iterable[Token]
 
 
-class PeekableTokenStream:
+class TokenStream:
     EOF = object()
 
-    def __init__(self, ts: TokenStream):
+    def __init__(self, ts: Iterable[Token]):
         self.ts = iter(ts)
         self.buffer = collections.deque()
 
@@ -61,6 +60,9 @@ class PeekableTokenStream:
         except StopIteration:
             return self.EOF
 
+    def put_back(self, token: Token):
+        self.buffer.appendleft(token)
+
     def __iter__(self):
         return self
 
@@ -70,15 +72,16 @@ class PeekableTokenStream:
         return next(self.ts)
 
 
-def default_tokenizer(src: str) -> PeekableTokenStream:
+def default_tokenizer(src: str) -> TokenStream:
     token_stream = scanner.tokenize(src)
     token_stream = whitespace_to_indent(token_stream)
     token_stream = augment_layout(token_stream)
+    token_stream = TokenStream(token_stream)
     token_stream = infer_blocks(token_stream)
-    # token_stream = inspect(token_stream)
+    token_stream = inspect(token_stream)
     token_stream = remove_all_whitespace(token_stream)
     token_stream = transform_literals(token_stream)
-    token_stream = PeekableTokenStream(token_stream)
+    token_stream = TokenStream(token_stream)
     return token_stream
 
 
@@ -137,7 +140,7 @@ def indent_len(ws: str) -> int:
 
 
 def augment_layout(token_stream: Iterator[Token]) -> Iterator[Token]:
-    ts = PeekableTokenStream(token_stream)
+    ts = TokenStream(token_stream)
     for token in ts:
         match token:
             case ":", TokenKind.SYNTAX, span:
@@ -153,7 +156,7 @@ def augment_layout(token_stream: Iterator[Token]) -> Iterator[Token]:
                 yield token
 
 
-def infer_blocks(ts: Iterator[Token], lcs=()) -> Iterator[Token]:
+def infer_blocks(ts: TokenStream, lcs=()) -> Iterator[Token]:
     for token in ts:
         match token, lcs:
             case (0, TokenKind.INDENT, _), ():
@@ -164,9 +167,9 @@ def infer_blocks(ts: Iterator[Token], lcs=()) -> Iterator[Token]:
                 return
             case (_, TokenKind.INDENT, _), _:
                 pass
-            case (n, TokenKind.BLOCK_INDENT, span), ():
+            case (n, TokenKind.BLOCK_INDENT, span), _:
                 yield None, TokenKind.BEGIN_BLOCK, span
-                yield from infer_blocks(ts, (n,))
+                yield from infer_blocks(ts, (n, *lcs))
                 yield None, TokenKind.END_BLOCK, span
             case (_, TokenKind.BLOCK_INDENT, _), _:
                 raise NotImplementedError(token, lcs)

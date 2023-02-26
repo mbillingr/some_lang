@@ -18,6 +18,11 @@ class Expression(ToplevelItem):
 
 
 @dataclasses.dataclass(frozen=True)
+class EmptyExpression(Expression):
+    """Represent no expression where an expression was expected, such as in an empty block..."""
+
+
+@dataclasses.dataclass(frozen=True)
 class Literal(Expression):
     val: Any
 
