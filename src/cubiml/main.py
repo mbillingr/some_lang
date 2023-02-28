@@ -15,9 +15,19 @@ def read_more(src):
         except cubiml.tokenizer.UnexpectedToken as e:
             tok, kind, span = e.args[0]
             # unexpected DEDENTs at the end are likely due to incomplete inputs
-            if kind != tokenizer.TokenKind.DEDENT and span.start < len(src):
+            if kind != tokenizer.TokenKind.END_BLOCK and span.start < len(src):
                 raise
-        src += "\n" + input("| ")
+
+        while True:
+            last_line = input("| ")
+            src += "\n" + last_line
+
+            if not last_line:
+                break
+
+            # is the last line indented?
+            if last_line.lstrip() == last_line:
+                break
 
 
 while True:

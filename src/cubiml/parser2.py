@@ -39,7 +39,7 @@ op_types = {
 def parse_toplevel(ts: TokenStream) -> ast.Script:
     expr = parse_expr(ts)
 
-    extra_token = next(ts)
+    extra_token = ts.get_next()
     if extra_token != ts.EOF:
         raise UnexpectedToken(extra_token)
 
