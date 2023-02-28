@@ -1,4 +1,5 @@
 import collections
+import itertools
 import time
 from enum import Enum
 from typing import TypeAlias, Any, Iterable, Iterator
@@ -75,10 +76,10 @@ class TokenStream:
 def default_tokenizer(src: str) -> TokenStream:
     token_stream = scanner.tokenize(src)
     token_stream = whitespace_to_indent(token_stream)
+    token_stream = strip_trailing_indents(token_stream)
     token_stream = augment_layout(token_stream)
-    token_stream = TokenStream(token_stream)
     token_stream = infer_blocks(token_stream)
-    token_stream = inspect(token_stream)
+    # token_stream = inspect(token_stream)
     token_stream = remove_all_whitespace(token_stream)
     token_stream = transform_literals(token_stream)
     token_stream = TokenStream(token_stream)
@@ -135,6 +136,18 @@ def whitespace_to_indent(token_stream: Iterable[Token]) -> Iterator[Token]:
                 yield token
 
 
+def strip_trailing_indents(token_stream: Iterable[Token]) -> Iterator[Token]:
+    buffer = []
+    for token in token_stream:
+        match token:
+            case _, TokenKind.INDENT, _:
+                buffer.append(token)
+            case _:
+                yield from buffer
+                yield token
+                buffer = []
+
+
 def indent_len(ws: str) -> int:
     return len(ws)
 
@@ -156,25 +169,38 @@ def augment_layout(token_stream: Iterator[Token]) -> Iterator[Token]:
                 yield token
 
 
-def infer_blocks(ts: TokenStream, lcs=()) -> Iterator[Token]:
-    for token in ts:
-        match token, lcs:
-            case (0, TokenKind.INDENT, _), ():
-                pass
-            case (n, TokenKind.INDENT, span), (m, *ms) if n == m:
+def infer_blocks(ts: TokenStream) -> Iterator[Token]:
+    layout_context = []
+    while True:
+        try:
+            tok = next(ts)
+        except StopIteration:
+            for _ in layout_context:
+                yield None, TokenKind.END_BLOCK, "EOF-span"
+            return
+
+        match tok, layout_context:
+            case (n, TokenKind.INDENT, span), [m, *_] if m == n:
                 yield None, TokenKind.SEP_BLOCK, span
-            case (n, TokenKind.INDENT, _), (m, *ms) if n < m:
-                return
+            case (n, TokenKind.INDENT, span) as t, [m, *ms] if n < m:
+                yield None, TokenKind.END_BLOCK, span
+                ts, layout_context = itertools.chain([t], ts), ms
             case (_, TokenKind.INDENT, _), _:
                 pass
+            case (n, TokenKind.BLOCK_INDENT, span), [m, *ms] if n > m:
+                yield None, TokenKind.BEGIN_BLOCK, span
+                layout_context = [n, m, *ms]
+            case (n, TokenKind.BLOCK_INDENT, span), [] if n > 0:
+                yield None, TokenKind.BEGIN_BLOCK, span
+                layout_context = [n]
             case (n, TokenKind.BLOCK_INDENT, span), _:
                 yield None, TokenKind.BEGIN_BLOCK, span
-                yield from infer_blocks(ts, (n, *lcs))
                 yield None, TokenKind.END_BLOCK, span
-            case (_, TokenKind.BLOCK_INDENT, _), _:
-                raise NotImplementedError(token, lcs)
-            case token, _:
-                yield token
+                ts = itertools.chain([(n, TokenKind.INDENT, span)], ts)
+            case t, _:
+                yield t
+            case _:
+                raise LayoutError(ts, layout_context)
 
 
 def indentify(token_stream: Iterable[Token]) -> Iterator[Token]:

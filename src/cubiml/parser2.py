@@ -1,5 +1,11 @@
 from cubiml import abstract_syntax as ast
-from cubiml.tokenizer import TokenStream, TokenKind, Span, UnexpectedEnd, UnexpectedToken
+from cubiml.tokenizer import (
+    TokenStream,
+    TokenKind,
+    Span,
+    UnexpectedEnd,
+    UnexpectedToken,
+)
 
 infix_binding_power = {
     "if": (2, 1),
@@ -51,6 +57,7 @@ def parse_block_expr(ts) -> ast.Expression:
                 ts.get_next()
                 return expr
             case _:
+                expect_token(ts, TokenKind.SEP_BLOCK)
                 expr = parse_expr(ts)
 
 
@@ -103,6 +110,7 @@ def parse_atom(ts: TokenStream):
         case "if", _, span:
             cond = parse_expr(ts)
             lhs = parse_block_expr(ts)
+            optional_token(ts, TokenKind.SEP_BLOCK)
             expect_tokens(ts, "else")
             rhs = parse_block_expr(ts)
             return spanned(span.merge(get_span(rhs)), ast.Conditional(cond, lhs, rhs))
@@ -161,6 +169,20 @@ def expect_token(ts, expect):
                 raise UnexpectedToken((kind, tok, span))
 
             return span
+
+
+def optional_token(ts, expect):
+    match ts.peek():
+        case tok, kind, span:
+            if isinstance(expect, TokenKind):
+                if kind == expect:
+                    ts.get_next()
+            elif tok == expect:
+                ts.get_next()
+
+            return span
+        case _:
+            pass
 
 
 def make_operator_span(rator: Span, *rands: Span):

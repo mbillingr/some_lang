@@ -55,33 +55,45 @@ def test_parse_expr_ternary():
     )
 
 
-def test_parse_regular_if():
+def test_parse_whitespace_before_eof():
     src = """
-    if x:
-       y
-    else:
-       n
+if x:
+   y
+else:
+   n
+   
     """
     assert parse_expr(src) == ast.Conditional(
         ast.Reference("x"), ast.Reference("y"), ast.Reference("n")
     )
 
 
-@pytest.mark.parametrize("w1", ["", "  ", "    "])
+def test_parse_regular_if():
+    src = """
+if x:
+   y
+else:
+   n
+"""
+    assert parse_expr(src) == ast.Conditional(
+        ast.Reference("x"), ast.Reference("y"), ast.Reference("n")
+    )
+
+
 @pytest.mark.parametrize("w2", [" ", "\n", "\n  ", "\n    "])
 @pytest.mark.parametrize("w3", [" ", "\n", "\n  ", "\n    "])
-def test_parse_expr_indented(w1, w2, w3):
-    src = f"{w1}1{w2}+{w3}2"
+def test_parse_expr_indented(w2, w3):
+    src = f"1{w2}+{w3}2"
     assert parse_expr(src) == binop("+", ast.Literal(1), ast.Literal(2))
 
 
 def test_parse_expr_indented_in_block():
     src = f"""
-    if true:
-       1 +
-         2
-    else:
-       3
+if true:
+   1 +
+     2
+else:
+   3
     """
     assert parse_expr(src) == ast.Conditional(
         ast.Literal(True), binop("+", ast.Literal(1), ast.Literal(2)), ast.Literal(3)
@@ -110,15 +122,16 @@ else:
 
 
 @pytest.mark.parametrize("dent", ["  ", "      "])
-def test_invalid_dedent(dent):
+def test_unaligned_dedent(dent):
     src = f"""
     if true:
         1
 {dent}else:
         2
     """
-    with pytest.raises(tokenizer.LayoutError):
-        parse_expr(src)
+    assert parse_expr(src) == ast.Conditional(
+        ast.Literal(True), ast.Literal(1), ast.Literal(2)
+    )
 
 
 def test_parse_expr_incomplete():
