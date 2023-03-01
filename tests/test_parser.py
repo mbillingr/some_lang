@@ -44,10 +44,19 @@ def test_parse_expr_parens():
 
 
 def test_parse_expr_call():
-    assert parse_expr("foo(0)") == ast.Application(ast.Reference("foo"), ast.Literal(0))
+    assert parse_expr("foo 0") == ast.Application(ast.Reference("foo"), ast.Literal(0))
+    assert parse_expr("f 1 2") == ast.Application(
+        ast.Application(ast.Reference("f"), ast.Literal(1)), ast.Literal(2)
+    )
+    assert parse_expr("f (g 0)") == ast.Application(
+        ast.Reference("f"), ast.Application(ast.Reference("g"), ast.Literal(0))
+    )
 
 
 def test_parse_expr_ternary():
+    assert parse_expr("a if x else b") == ast.Conditional(
+        ast.Reference("x"), ast.Reference("a"), ast.Reference("b")
+    )
     assert parse_expr("a if x else b if y else c") == ast.Conditional(
         ast.Reference("x"),
         ast.Reference("a"),

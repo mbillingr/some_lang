@@ -14,6 +14,7 @@ infix_binding_power = {
     "*": (7, 8),
     "/": (7, 8),
     "**": (14, 13),
+    "< apply >": (15, 16),  # function call
 }
 
 prefix_binding_power = {
@@ -23,7 +24,6 @@ prefix_binding_power = {
 
 postfix_binding_power = {
     "!": (11, None),
-    "(": (15, None),  # function call
 }
 
 op_types = {
@@ -82,10 +82,31 @@ def parse_expr(ts: TokenStream, min_bp: int = 0) -> ast.Expression:
                 if lbp < min_bp:
                     break
                 lhs = parse_infix_operator(lhs, rbp, ts)
-            case _:
+            case ts.EOF:
                 break
+            case t, k, _ if is_delimiter(t, k):
+                break
+            case _:
+                # we treat application as an "invisible" infix operator
+                lbp, rbp = infix_binding_power["< apply >"]
+                if lbp < min_bp:
+                    break
+                arg = parse_expr(ts, rbp)
+                lhs = spanned(
+                    get_span(lhs).merge(get_span(arg)), ast.Application(lhs, arg)
+                )
 
     return lhs
+
+
+def is_delimiter(t, k) -> bool:
+    match t, k:
+        case _, TokenKind.RPAREN | TokenKind.BEGIN_BLOCK | TokenKind.END_BLOCK | TokenKind.SEP_BLOCK:
+            return True
+        case "else", _:
+            return True
+        case _:
+            return False
 
 
 def parse_atom(ts: TokenStream):
