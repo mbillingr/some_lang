@@ -32,7 +32,15 @@ class Reference(Expression):
     var: str
 
 
-Op = typing.Literal["+", "-", "*", "/", "<", "<=", ">=", ">", "==", "!=", "::", "**", "~", "!"]
+@dataclasses.dataclass(frozen=True)
+class Sequence(Expression):
+    first: Expression
+    next: Expression
+
+
+Op = typing.Literal[
+    "+", "-", "*", "/", "<", "<=", ">=", ">", "==", "!=", "::", "**", "~", "!"
+]
 OpType = typing.Literal["any", "int", "bool"]
 
 

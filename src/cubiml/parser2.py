@@ -48,18 +48,21 @@ def parse_toplevel(ts: TokenStream) -> ast.Script:
 
 
 def parse_block_expr(ts) -> ast.Expression:
-    expect_token(ts, TokenKind.BEGIN_BLOCK)
-    expr = parse_expr(ts)
-    while True:
-        match ts.peek():
+    def recur() -> ast.Expression:
+        expr = parse_expr(ts)
+        match ts.get_next():
             case ts.EOF:
                 raise UnexpectedEnd()
             case _, TokenKind.END_BLOCK, _:
-                ts.get_next()
                 return expr
-            case _:
-                expect_token(ts, TokenKind.SEP_BLOCK)
-                expr = parse_expr(ts)
+            case _, TokenKind.SEP_BLOCK, _:
+                cont = recur()
+                return spanned(
+                    get_span(expr).merge(get_span(cont)), ast.Sequence(expr, cont)
+                )
+
+    expect_token(ts, TokenKind.BEGIN_BLOCK)
+    return recur()
 
 
 def parse_expr(ts: TokenStream, min_bp: int = 0) -> ast.Expression:
@@ -121,13 +124,9 @@ def parse_atom(ts: TokenStream):
             inner = parse_expr(ts)
             _, _, sp2 = expect_token(ts, ")")
             return spanned(span.merge(sp2), inner)
-        case "if", _, span:
-            cond = parse_expr(ts)
-            lhs = parse_block_expr(ts)
-            optional_token(ts, TokenKind.SEP_BLOCK)
-            expect_tokens(ts, "else")
-            rhs = parse_block_expr(ts)
-            return spanned(span.merge(get_span(rhs)), ast.Conditional(cond, lhs, rhs))
+        case "do", _, span:
+            body = parse_block_expr(ts)
+            return spanned(span.merge(get_span(body)), body)
         case token:
             raise UnexpectedToken(token)
 

@@ -66,27 +66,11 @@ def test_parse_expr_ternary():
 
 def test_parse_whitespace_before_eof():
     src = """
-if x:
-   y
-else:
-   n
+do:
+    0
    
     """
-    assert parse_expr(src) == ast.Conditional(
-        ast.Reference("x"), ast.Reference("y"), ast.Reference("n")
-    )
-
-
-def test_parse_regular_if():
-    src = """
-if x:
-   y
-else:
-   n
-"""
-    assert parse_expr(src) == ast.Conditional(
-        ast.Reference("x"), ast.Reference("y"), ast.Reference("n")
-    )
+    assert parse_expr(src) == ast.Literal(0)
 
 
 def test_parse_lambda():
@@ -102,48 +86,27 @@ def test_parse_expr_indented(w2, w3):
 
 def test_parse_expr_indented_in_block():
     src = f"""
-if true:
-   1 +
-     2
-else:
-   3
+do:
+  1 +
+    2
     """
-    assert parse_expr(src) == ast.Conditional(
-        ast.Literal(True), binop("+", ast.Literal(1), ast.Literal(2)), ast.Literal(3)
-    )
+    assert parse_expr(src) == binop("+", ast.Literal(1), ast.Literal(2)), ast.Literal(3)
 
 
 def test_parse_expr_multiple_dedent():
     src = f"""
-if true:
-   if true:
-      1
-   else:
-      if true:
-         2
-      else:
-         3
-   4
-else:
-   5
+do:
+  1
+  do:
+    do:
+      2
+    do:
+      3
+  4
     """
-    assert parse_expr(src) == ast.Conditional(
-        ast.Literal(True),
-        ast.Literal(4),
-        ast.Literal(5),
-    )
-
-
-@pytest.mark.parametrize("dent", ["  ", "      "])
-def test_unaligned_dedent(dent):
-    src = f"""
-    if true:
-        1
-{dent}else:
-        2
-    """
-    assert parse_expr(src) == ast.Conditional(
-        ast.Literal(True), ast.Literal(1), ast.Literal(2)
+    assert parse_expr(src) == ast.Sequence(
+        ast.Literal(1),
+        ast.Sequence(ast.Sequence(ast.Literal(2), ast.Literal(3)), ast.Literal(4)),
     )
 
 
