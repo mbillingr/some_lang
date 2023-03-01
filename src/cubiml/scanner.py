@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import abc
+import bisect
 import dataclasses
-from typing import Iterator, TypeVar, Iterable, Any, Generic
+from typing import Iterator, TypeVar, Iterable, Any, Generic, Self
 
 
 class ScannerError(Exception):
@@ -15,8 +16,37 @@ class Span:
     start: int
     end: int
 
+    @classmethod
+    def make_eof(cls, src) -> Self:
+        return cls(src, len(src)-1, len(src)+1)
+
     def merge(self, other: Span) -> Span:
         return Span(self.src, min(self.start, other.start), max(self.end, other.end))
+
+    def show_line(self, marker="^", n_before=1) -> str:
+        newlines = [-1, *self._find_newlines(), len(self.src)]
+        start_line = bisect.bisect_left(newlines, self.start)
+        line_offset = 1 + newlines[start_line - 1]
+        highlight_offset = self.start - line_offset
+        highlight_len = min(self.end, newlines[start_line]) - self.start
+        output = []
+        for line in range(max(1, start_line - n_before), start_line + 1):
+            row = f"{line:>5}: {self.src[1+newlines[line-1]:newlines[line]]}"
+            output.append(row)
+        output.append(
+            " " * (5 + 2 + highlight_offset)
+            + marker * highlight_len
+            + ("↵" if self.end > newlines[start_line] else "")
+        )
+        return "\n".join(output)
+
+    def _find_newlines(self):
+        ofs = -1
+        while True:
+            ofs = self.src.find("\n", ofs + 1)
+            if ofs == -1:
+                return
+            yield ofs
 
 
 class Regex(abc.ABC):

@@ -6,12 +6,14 @@ intr = interpreter.Interpreter()
 
 
 def read_more(src):
+    last_line = src
     while True:
         try:
             token_stream = tokenizer.default_tokenizer(src)
             return parser2.parse_toplevel(token_stream)
         except cubiml.tokenizer.UnexpectedEnd:
-            pass
+            if src and not last_line:
+                raise cubiml.tokenizer.UnexpectedEnd(tokenizer.Span.make_eof(src))
         except cubiml.tokenizer.UnexpectedToken as e:
             tok, kind, span = e.args[0]
             # unexpected DEDENTs at the end are likely due to incomplete inputs
@@ -44,5 +46,11 @@ while True:
             print(val)
     except EOFError:
         break
+    except tokenizer.UnexpectedEnd as e:
+        span = e.args[0]
+        print(f"{type(e).__name__}")
+        print(span.show_line())
+    except tokenizer.UnexpectedToken as e:
+        print(e)
     # except Exception as e:
     #    print(f"{type(e).__name__}: {e}")

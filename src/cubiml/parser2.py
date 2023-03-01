@@ -200,9 +200,9 @@ def expect_token(ts, expect):
         case tok, kind, span:
             if isinstance(expect, TokenKind):
                 if kind != expect:
-                    raise UnexpectedToken((kind, tok, span))
+                    raise UnexpectedToken((tok, kind, span))
             elif tok != expect:
-                raise UnexpectedToken((kind, tok, span))
+                raise UnexpectedToken((tok, kind, span))
 
             return tok, kind, span
 

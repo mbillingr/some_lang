@@ -324,4 +324,6 @@ class UnexpectedEnd(ParseError):
 
 
 class UnexpectedToken(ParseError):
-    pass
+    def __str__(self):
+        tok, kind, span = self.args[0]
+        return f"Unexpected {kind.name} '{tok}'\n" + span.show_line()
