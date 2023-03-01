@@ -49,7 +49,18 @@ def parse_toplevel(ts: TokenStream) -> ast.Script:
 
 def parse_block_expr(ts) -> ast.Expression:
     def recur() -> ast.Expression:
-        expr = parse_expr(ts)
+        match ts.peek():
+            case "let", _, span:
+                ts.get_next()
+                var = parse_identifier(ts)
+                expect_token(ts, "=")
+                val = parse_expr(ts)
+                expect_token(ts, TokenKind.SEP_BLOCK)
+                body = recur()
+                return spanned(span.merge(get_span(body)), ast.Let(var, val, body))
+            case _:
+                expr = parse_expr(ts)
+
         match ts.get_next():
             case ts.EOF:
                 raise UnexpectedEnd()
@@ -68,7 +79,7 @@ def parse_block_expr(ts) -> ast.Expression:
 def parse_expr(ts: TokenStream, min_bp: int = 0) -> ast.Expression:
     match ts.peek():
         case op, _, _ if op in prefix_binding_power:
-            rbp, _ = prefix_binding_power[op]
+            _, rbp = prefix_binding_power[op]
             lhs = parse_prefix_operator(rbp, ts)
         case _:
             lhs = parse_atom(ts)
@@ -127,6 +138,12 @@ def parse_atom(ts: TokenStream):
         case "do", _, span:
             body = parse_block_expr(ts)
             return spanned(span.merge(get_span(body)), body)
+        case "let", _, span:
+            var = parse_identifier(ts)
+            expect_token(ts, "=")
+            val = parse_expr(ts)
+            body = parse_block_expr(ts)
+            return spanned(span.merge(get_span(body)), ast.Let(var, val, body))
         case token:
             raise UnexpectedToken(token)
 
@@ -183,9 +200,9 @@ def parse_postfix_operator(lhs, ts):
             raise UnexpectedToken(token)
 
 
-def parse_identifier(ts):
+def parse_identifier(ts) -> ast.Identifier:
     tok, _, span = expect_token(ts, TokenKind.IDENTIFIER)
-    return spanned(span, tok)
+    return spanned(span, ast.Identifier(tok))
 
 
 def expect_tokens(ts, *expect):

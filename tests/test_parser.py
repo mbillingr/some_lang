@@ -77,6 +77,44 @@ def test_parse_lambda():
     assert parse_expr("lambda x = x") == ast.Function("x", ast.Reference("x"))
 
 
+def test_parse_lambda_with_lower_precedence_than_application():
+    assert parse_expr("lambda f = f 0") == ast.Function(
+        "f", ast.Application(ast.Reference("f"), ast.Literal(0))
+    )
+    assert parse_expr("(lambda x = x) 0") == ast.Application(
+        ast.Function("x", ast.Reference("x")), ast.Literal(0)
+    )
+
+
+def test_parse_let_in_block():
+    src = """
+do:
+    let x = 0
+    x
+    """
+    assert parse_expr(src) == ast.Let("x", ast.Literal(0), ast.Reference("x"))
+
+
+def test_let_expression():
+    src = """
+let x = 0:
+    x
+    """
+    assert parse_expr(src) == ast.Let("x", ast.Literal(0), ast.Reference("x"))
+
+
+def test_bind_lambda():
+    src = """
+let inc = lambda x = x + 1:
+    inc 41
+    """
+    assert parse_expr(src) == ast.Let(
+        "inc",
+        ast.Function("x", binop("+", ast.Reference("x"), ast.Literal(1))),
+        ast.Application(ast.Reference("inc"), ast.Literal(41)),
+    )
+
+
 @pytest.mark.parametrize("w2", [" ", "\n", "\n  ", "\n    "])
 @pytest.mark.parametrize("w3", [" ", "\n", "\n  ", "\n    "])
 def test_parse_expr_indented(w2, w3):
