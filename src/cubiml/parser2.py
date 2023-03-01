@@ -8,21 +8,22 @@ from cubiml.tokenizer import (
 )
 
 infix_binding_power = {
-    "if": (2, 1),
-    "+": (3, 4),
-    "-": (3, 4),
-    "*": (5, 6),
-    "/": (5, 6),
-    "**": (12, 11),
+    "if": (4, 3),
+    "+": (5, 6),
+    "-": (5, 6),
+    "*": (7, 8),
+    "/": (7, 8),
+    "**": (14, 13),
 }
 
 prefix_binding_power = {
-    "~": (None, 7),
+    "lambda": (None, 1),
+    "~": (None, 9),
 }
 
 postfix_binding_power = {
-    "!": (9, None),
-    "(": (13, None),  # function call
+    "!": (11, None),
+    "(": (15, None),  # function call
 }
 
 op_types = {
@@ -62,27 +63,27 @@ def parse_block_expr(ts) -> ast.Expression:
 
 
 def parse_expr(ts: TokenStream, min_bp: int = 0) -> ast.Expression:
-    lhs = parse_atom(ts)
+    match ts.peek():
+        case op, _, _ if op in prefix_binding_power:
+            rbp, _ = prefix_binding_power[op]
+            lhs = parse_prefix_operator(rbp, ts)
+        case _:
+            lhs = parse_atom(ts)
 
     while True:
         match ts.peek():
-            case ts.EOF:
+            case op, _, _ if op in postfix_binding_power:
+                lbp, _ = postfix_binding_power[op]
+                if lbp < min_bp:
+                    break
+                lhs = parse_postfix_operator(lhs, ts)
+            case op, _, _ if op in infix_binding_power:
+                lbp, rbp = infix_binding_power[op]
+                if lbp < min_bp:
+                    break
+                lhs = parse_infix_operator(lhs, rbp, ts)
+            case _:
                 break
-            case op, _, _:
-                pass
-
-        if op in postfix_binding_power:
-            lbp, _ = postfix_binding_power[op]
-            if lbp < min_bp:
-                break
-            lhs = parse_postfix_operator(lhs, ts)
-        elif op in infix_binding_power:
-            lbp, rbp = infix_binding_power[op]
-            if lbp < min_bp:
-                break
-            lhs = parse_infix_operator(lhs, rbp, ts)
-        else:
-            break
 
     return lhs
 
@@ -97,16 +98,8 @@ def parse_atom(ts: TokenStream):
             return spanned(span, ast.Reference(name))
         case "(", _, span:
             inner = parse_expr(ts)
-            sp2 = expect_token(ts, ")")
+            _, _, sp2 = expect_token(ts, ")")
             return spanned(span.merge(sp2), inner)
-        # prefix operator
-        case op, TokenKind.OPERATOR, span:
-            _, rbp = prefix_binding_power[op]
-            rhs = parse_expr(ts, rbp)
-            return spanned(
-                make_operator_span(span, get_span(rhs)),
-                ast.UnaryOp(rhs, op_types[op], op),
-            )
         case "if", _, span:
             cond = parse_expr(ts)
             lhs = parse_block_expr(ts)
@@ -114,6 +107,24 @@ def parse_atom(ts: TokenStream):
             expect_tokens(ts, "else")
             rhs = parse_block_expr(ts)
             return spanned(span.merge(get_span(rhs)), ast.Conditional(cond, lhs, rhs))
+        case token:
+            raise UnexpectedToken(token)
+
+
+def parse_prefix_operator(rbp, ts):
+    match ts.get_next():
+        case op, TokenKind.OPERATOR, span if op in prefix_binding_power:
+            rhs = parse_expr(ts, rbp)
+            return spanned(
+                make_operator_span(span, get_span(rhs)),
+                ast.UnaryOp(rhs, op_types[op], op),
+            )
+        case "lambda", _, span:
+            expect_token(ts, "(")
+            var, vspan = parse_identifier(ts)
+            expect_token(ts, ")")
+            body = parse_expr(ts, rbp)
+            return spanned(span.merge(get_span(body)), ast.Function(var, body))
         case token:
             raise UnexpectedToken(token)
 
@@ -142,7 +153,7 @@ def parse_postfix_operator(lhs, ts):
     match ts.get_next():
         case "(", _, span:
             arg = parse_expr(ts)
-            sp2 = expect_token(ts, ")")
+            _, _, sp2 = expect_token(ts, ")")
             return spanned(span.merge(sp2), ast.Application(lhs, arg))
         case op, TokenKind.OPERATOR, span:
             return spanned(
@@ -151,6 +162,11 @@ def parse_postfix_operator(lhs, ts):
             )
         case token:
             raise UnexpectedToken(token)
+
+
+def parse_identifier(ts):
+    tok, _, span = expect_token(ts, TokenKind.IDENTIFIER)
+    return tok, span
 
 
 def expect_tokens(ts, *expect):
@@ -168,7 +184,7 @@ def expect_token(ts, expect):
             elif tok != expect:
                 raise UnexpectedToken((kind, tok, span))
 
-            return span
+            return tok, kind, span
 
 
 def optional_token(ts, expect):
