@@ -140,9 +140,8 @@ def parse_prefix_operator(rbp, ts):
                 ast.UnaryOp(rhs, op_types[op], op),
             )
         case "lambda", _, span:
-            expect_token(ts, "(")
-            var, vspan = parse_identifier(ts)
-            expect_token(ts, ")")
+            var = parse_identifier(ts)
+            expect_token(ts, "=")
             body = parse_expr(ts, rbp)
             return spanned(span.merge(get_span(body)), ast.Function(var, body))
         case token:
@@ -186,7 +185,7 @@ def parse_postfix_operator(lhs, ts):
 
 def parse_identifier(ts):
     tok, _, span = expect_token(ts, TokenKind.IDENTIFIER)
-    return tok, span
+    return spanned(span, tok)
 
 
 def expect_tokens(ts, *expect):

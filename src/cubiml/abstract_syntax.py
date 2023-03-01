@@ -9,6 +9,10 @@ class AstNode(abc.ABC):
     pass
 
 
+class Identifier(AstNode, str):
+    pass
+
+
 class ToplevelItem(abc.ABC):
     pass
 
@@ -29,7 +33,7 @@ class Literal(Expression):
 
 @dataclasses.dataclass(frozen=True)
 class Reference(Expression):
-    var: str
+    var: Identifier
 
 
 @dataclasses.dataclass(frozen=True)
@@ -98,13 +102,13 @@ class Match(Expression):
 
 @dataclasses.dataclass(frozen=True)
 class Function(Expression):
-    var: str
+    var: Identifier
     body: Expression
 
 
 @dataclasses.dataclass(frozen=True)
 class Procedure(Expression):
-    var: str
+    var: Identifier
     body: list[Expression]
 
 
@@ -116,14 +120,14 @@ class Application(Expression):
 
 @dataclasses.dataclass(frozen=True)
 class Let(Expression):
-    var: str
+    var: Identifier
     val: Expression
     body: Expression
 
 
 @dataclasses.dataclass(frozen=True)
 class FuncDef(AstNode):
-    name: str
+    name: Identifier
     fun: Function
 
 
@@ -135,7 +139,7 @@ class LetRec(Expression):
 
 @dataclasses.dataclass(frozen=True)
 class DefineLet(ToplevelItem):
-    var: str
+    var: Identifier
     val: Expression
 
 

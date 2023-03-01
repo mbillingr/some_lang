@@ -74,7 +74,7 @@ do:
 
 
 def test_parse_lambda():
-    assert parse_expr("lambda(x) x") == ast.Function("x", ast.Reference("x"))
+    assert parse_expr("lambda x = x") == ast.Function("x", ast.Reference("x"))
 
 
 @pytest.mark.parametrize("w2", [" ", "\n", "\n  ", "\n    "])
