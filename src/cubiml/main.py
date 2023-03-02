@@ -8,17 +8,18 @@ intr = interpreter.Interpreter()
 def read_more(src):
     last_line = src
     while True:
-        try:
-            token_stream = tokenizer.default_tokenizer(src, implicit_block=False)
-            return parser2.parse_toplevel(token_stream)
-        except cubiml.tokenizer.UnexpectedEnd:
-            if src and not last_line:
-                raise cubiml.tokenizer.UnexpectedEnd(tokenizer.Span.make_eof(src))
-        except cubiml.tokenizer.UnexpectedToken as e:
-            tok, kind, span = e.args[0]
-            # unexpected DEDENTs at the end are likely due to incomplete inputs
-            if kind != tokenizer.TokenKind.END_BLOCK and span.start < len(src):
-                raise
+        if not src.endswith(":"):
+            try:
+                token_stream = tokenizer.default_tokenizer(src, implicit_block=True)
+                return parser2.parse_toplevel(token_stream)
+            except cubiml.tokenizer.UnexpectedEnd:
+                if src and not last_line:
+                    raise cubiml.tokenizer.UnexpectedEnd(tokenizer.Span.make_eof(src))
+            except cubiml.tokenizer.UnexpectedToken as e:
+                tok, kind, span = e.args[0]
+                # unexpected DEDENTs at the end are likely due to incomplete inputs
+                if kind != tokenizer.TokenKind.END_BLOCK and span.start < len(src):
+                    raise
 
         while True:
             last_line = input("| ")

@@ -6,7 +6,7 @@ from typing import TypeAlias, Any, Iterable, Iterator
 
 from cubiml.scanner import ScannerGenerator, Repeat, OneOf, Alternative, Opt, Span
 
-KEYWORDS = ("do", "else", "false", "if", "lambda", "let", "true")
+KEYWORDS = ("do", "else", "false", "func", "if", "lambda", "let", "proc", "true")
 DIGITS = "0123456789"
 LETTERS = "abcdefghijklmnopqrstuvwxyz"
 IDENT_SYMS = "+-*/,<>;@$~&%=!?^\\|'\""

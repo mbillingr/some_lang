@@ -39,20 +39,42 @@ op_types = {
 
 
 def parse_toplevel(ts: TokenStream) -> ast.Script:
-    script = []
-    while ts.peek() != ts.EOF:
+    lets = []
+    funcs = []
+    exprs = []
+    expect_token(ts, TokenKind.BEGIN_BLOCK)
+    nesting_depth = 1
+    while nesting_depth > 0:
         match ts.peek():
+            case _, TokenKind.END_BLOCK, _:
+                ts.get_next()
+                nesting_depth -= 1
+            case _, TokenKind.SEP_BLOCK, _:
+                ts.get_next()
+            case "do", _, _:
+                expect_tokens(ts, "do", TokenKind.BEGIN_BLOCK)
+                nesting_depth += 1
             case "let", _, span:
                 ts.get_next()
                 var = parse_identifier(ts)
                 expect_token(ts, "=")
                 val = parse_expr(ts)
-                item = spanned(span.merge(get_span(val)), ast.DefineLet(var, val))
+                let = spanned(span.merge(get_span(val)), ast.DefineLet(var, val))
+                lets.append(let)
+            case "func", _, span:
+                ts.get_next()
+                name = parse_identifier(ts)
+                var = parse_identifier(ts)
+                expect_token(ts, "=")
+                body = parse_expr(ts)
+                func = spanned(span.merge(get_span(body)), ast.FuncDef(name, ast.Function(var, body)))
+                funcs.append(func)
             case _:
-                item = parse_expr(ts)
-        script.append(item)
+                exprs.append(parse_expr(ts))
 
-    return ast.Script(script)
+    funcs = funcs and [ast.DefineLetRec(funcs)]
+
+    return ast.Script(funcs + lets + exprs)
 
 
 def parse_block_expr(ts) -> ast.Expression:
@@ -125,7 +147,7 @@ def is_delimiter(t, k) -> bool:
     match t, k:
         case _, TokenKind.RPAREN | TokenKind.BEGIN_BLOCK | TokenKind.END_BLOCK | TokenKind.SEP_BLOCK:
             return True
-        case "else", _:
+        case "else" | "func" | "proc", _:
             return True
         case _:
             return False

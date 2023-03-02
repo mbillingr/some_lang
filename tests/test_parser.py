@@ -156,9 +156,47 @@ def test_parse_expr_incomplete():
     #    print(parse_expr("0 0"))
 
 
+def test_parse_toplevel_expr():
+    assert parse_top("0") == ast.Script([ast.Literal(0)])
+
+
+def test_parse_toplevel_let():
+    assert parse_top("let x = 0") == ast.Script([ast.DefineLet("x", ast.Literal(0))])
+
+
+def test_parse_toplevel_function():
+    assert parse_top("func foo x = 0") == ast.Script(
+        [ast.DefineLetRec([ast.FuncDef("foo", ast.Function("x", ast.Literal(0)))])]
+    )
+
+
+def test_parse_toplevel_functions_are_mutually_recursive():
+    assert parse_top("func foo x = 0\nfunc bar y = 1") == ast.Script(
+        [
+            ast.DefineLetRec(
+                [
+                    ast.FuncDef("foo", ast.Function("x", ast.Literal(0))),
+                    ast.FuncDef("bar", ast.Function("y", ast.Literal(1))),
+                ]
+            )
+        ]
+    )
+
+
+def test_parse_nested_toplevel_blocks():
+    assert parse_top("do:\n  let x = 1\nlet y = 0") == ast.Script(
+        [ast.DefineLet("x", ast.Literal(1)), ast.DefineLet("y", ast.Literal(0))]
+    )
+
+
 def parse_expr(src):
     token_stream = tokenizer.default_tokenizer(src, implicit_block=False)
     return parser2.parse_expr(token_stream)
+
+
+def parse_top(src):
+    token_stream = tokenizer.default_tokenizer(src, implicit_block=True)
+    return parser2.parse_toplevel(token_stream)
 
 
 def token(txt: str, t: tokenizer.TokenKind) -> tokenizer.Token:
