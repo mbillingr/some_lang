@@ -20,7 +20,18 @@ class Span:
     def make_eof(cls, src) -> Self:
         return cls(src, len(src)-1, len(src)+1)
 
+    @classmethod
+    def virtual(cls) -> Self:
+        return cls("", -1, -1)
+
+    def is_virtual(self) -> bool:
+        return self.src == "" and self.start == -1 and self.end == -1
+
     def merge(self, other: Span) -> Span:
+        if self.is_virtual():
+            return other
+        if other.is_virtual():
+            return self
         return Span(self.src, min(self.start, other.start), max(self.end, other.end))
 
     def show_line(self, marker="^", n_before=1) -> str:

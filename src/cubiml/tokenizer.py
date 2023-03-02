@@ -61,8 +61,11 @@ class TokenStream:
         except StopIteration:
             return self.EOF
 
-    def put_back(self, token: Token):
+    def insert(self, token: Token):
         self.buffer.appendleft(token)
+
+    def append(self, token: Token):
+        self.buffer.append(token)
 
     def __iter__(self):
         return self
@@ -73,12 +76,12 @@ class TokenStream:
         return next(self.ts)
 
 
-def default_tokenizer(src: str) -> TokenStream:
+def default_tokenizer(src: str, implicit_block: bool) -> TokenStream:
     token_stream = scanner.tokenize(src)
     token_stream = whitespace_to_indent(token_stream)
     token_stream = strip_trailing_indents(token_stream)
     token_stream = augment_layout(token_stream)
-    token_stream = infer_blocks(token_stream)
+    token_stream = infer_blocks(token_stream, implicit_block)
     # token_stream = inspect(token_stream)
     token_stream = remove_all_whitespace(token_stream)
     token_stream = transform_literals(token_stream)
@@ -169,8 +172,16 @@ def augment_layout(token_stream: Iterator[Token]) -> Iterator[Token]:
                 yield token
 
 
-def infer_blocks(ts: TokenStream) -> Iterator[Token]:
-    layout_context = []
+def infer_blocks(ts: Iterator[Token], implicit_block: bool) -> Iterator[Token]:
+    if implicit_block:
+        # ignore first indent, but make sure we don't get anything else
+        assert next(ts)[:2] == (0, TokenKind.INDENT)
+
+        yield None, TokenKind.BEGIN_BLOCK, Span.virtual()
+        layout_context = [0]
+    else:
+        layout_context = []
+
     while True:
         try:
             tok = next(ts)

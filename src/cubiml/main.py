@@ -9,7 +9,7 @@ def read_more(src):
     last_line = src
     while True:
         try:
-            token_stream = tokenizer.default_tokenizer(src)
+            token_stream = tokenizer.default_tokenizer(src, implicit_block=False)
             return parser2.parse_toplevel(token_stream)
         except cubiml.tokenizer.UnexpectedEnd:
             if src and not last_line:

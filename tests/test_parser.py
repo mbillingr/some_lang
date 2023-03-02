@@ -157,7 +157,7 @@ def test_parse_expr_incomplete():
 
 
 def parse_expr(src):
-    token_stream = tokenizer.default_tokenizer(src)
+    token_stream = tokenizer.default_tokenizer(src, implicit_block=False)
     return parser2.parse_expr(token_stream)
 
 

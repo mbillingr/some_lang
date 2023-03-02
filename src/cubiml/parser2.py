@@ -1,5 +1,6 @@
 from cubiml import abstract_syntax as ast
 from cubiml.tokenizer import (
+    Token,
     TokenStream,
     TokenKind,
     Span,
@@ -38,13 +39,20 @@ op_types = {
 
 
 def parse_toplevel(ts: TokenStream) -> ast.Script:
-    expr = parse_expr(ts)
+    script = []
+    while ts.peek() != ts.EOF:
+        match ts.peek():
+            case "let", _, span:
+                ts.get_next()
+                var = parse_identifier(ts)
+                expect_token(ts, "=")
+                val = parse_expr(ts)
+                item = spanned(span.merge(get_span(val)), ast.DefineLet(var, val))
+            case _:
+                item = parse_expr(ts)
+        script.append(item)
 
-    extra_token = ts.get_next()
-    if extra_token != ts.EOF:
-        raise UnexpectedToken(extra_token)
-
-    return ast.Script([expr])
+    return ast.Script(script)
 
 
 def parse_block_expr(ts) -> ast.Expression:
@@ -221,6 +229,18 @@ def expect_token(ts, expect):
                 raise UnexpectedToken((tok, kind, span))
 
             return tok, kind, span
+
+
+def try_token(ts, expect) -> Token | bool:
+    match ts.peek(), expect:
+        case (tok, kind, span), TokenKind() if kind == expect:
+            ts.get_next()
+            return tok, kind, span
+        case (tok, kind, span), _ if tok == expect:
+            ts.get_next()
+            return tok, kind, span
+        case _:
+            return False
 
 
 def optional_token(ts, expect):
