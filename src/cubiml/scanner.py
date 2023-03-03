@@ -3,6 +3,7 @@ from __future__ import annotations
 import abc
 import bisect
 import dataclasses
+import json
 from typing import Iterator, TypeVar, Iterable, Any, Generic, Self
 
 
@@ -18,7 +19,7 @@ class Span:
 
     @classmethod
     def make_eof(cls, src) -> Self:
-        return cls(src, len(src)-1, len(src)+1)
+        return cls(src, len(src) - 1, len(src) + 1)
 
     @classmethod
     def virtual(cls) -> Self:
@@ -384,6 +385,27 @@ class Scanner(Generic[T]):
         # could be used to compress the transition table by
         # grouping equal columns into character categories
         return ch
+
+    def store(self, filename):
+        transitions = {}
+        for k, v in self._transitions.items():
+            transitions.setdefault(k[0], {})[k[1]] = v
+        with open(filename, "w") as f:
+            json.dump({"accept": self._accept, "transitions": transitions}, f, indent=4, sort_keys=True)
+
+    @staticmethod
+    def load(TokenType, filename):
+        with open(filename) as f:
+            data = json.load(f)
+
+        transitions = {}
+        for state, edge in data["transitions"].items():
+            for ch, newstate in edge.items():
+                transitions[(int(state), ch)] = newstate
+
+        accept = {int(k): TokenType(v) for k, v in data["accept"].items()}
+
+        return Scanner(accept, transitions)
 
 
 def num():

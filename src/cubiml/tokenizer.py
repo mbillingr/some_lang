@@ -1,10 +1,20 @@
 import collections
 import itertools
+import os
 import time
 from enum import Enum
+from pathlib import Path
 from typing import TypeAlias, Any, Iterable, Iterator
 
-from cubiml.scanner import ScannerGenerator, Repeat, OneOf, Alternative, Opt, Span
+from cubiml.scanner import (
+    ScannerGenerator,
+    Repeat,
+    OneOf,
+    Alternative,
+    Opt,
+    Span,
+    Scanner,
+)
 
 KEYWORDS = ("do", "else", "false", "func", "if", "lambda", "let", "proc", "true")
 DIGITS = "0123456789"
@@ -16,25 +26,24 @@ LPARENS = "([{"
 RPARENS = ")]}"
 
 
-class TokenKind(Enum):
-    SPECIAL = -1  # not part of teh syntax, used during processing
-    WHITESPACE = 0
-    NEWLINE = 1
-    KEYWORD = 2
-    IDENTIFIER = 3
-    OPERATOR = 4
-    LPAREN = 5
-    RPAREN = 6
-    LITERAL_BOOL = 7
-    LITERAL_INT = 8
-    COMMENT = 9
-    INDENT = 10
-    BLOCK_INDENT = 11
-    DEDENT = 12
-    SYNTAX = 13
-    BEGIN_BLOCK = 14
-    SEP_BLOCK = 15
-    END_BLOCK = 16
+class TokenKind(str, Enum):
+    WHITESPACE = "whitespace"
+    NEWLINE = "newline"
+    KEYWORD = "keyword"
+    IDENTIFIER = "identifier"
+    OPERATOR = "operator"
+    LPAREN = "lparen"
+    RPAREN = "rparen"
+    LITERAL_BOOL = "literal-bool"
+    LITERAL_INT = "literal-int"
+    COMMENT = "comment"
+    INDENT = "indent"
+    BLOCK_INDENT = "block-indent"
+    DEDENT = "dedent"
+    SYNTAX = "syntax"
+    BEGIN_BLOCK = "begin-block"
+    SEP_BLOCK = "sep-block"
+    END_BLOCK = "end-block"
 
 
 Token: TypeAlias = tuple[Any, TokenKind, Span]
@@ -316,10 +325,14 @@ scg = (
 # this rule needs to know the complete alphabet to implement an "any char" like regex
 scg.add_rule(TokenKind.COMMENT, "#" + Repeat(OneOf(scg.alphabet - {"\n"})) + Opt("\n"))
 
-start = time.time()
-print("building scanner...")
-scanner = scg.build()
-print(f"... {time.time() - start:.3f}s")
+if os.getenv("REBUILD_SCANNER"):
+    print("building scanner...")
+    start = time.time()
+    scanner = scg.build()
+    print(f"... {time.time() - start:.3f}s")
+    scanner.store(Path(__file__).parent / "scanner.json")
+else:
+    scanner = Scanner.load(TokenKind, Path(__file__).parent / "scanner.json")
 
 
 class ParseError(Exception):
