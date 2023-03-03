@@ -54,10 +54,10 @@ def test_parse_expr_call():
 
 
 def test_parse_expr_ternary():
-    assert parse_expr("a if x else b") == ast.Conditional(
+    assert parse_expr("if x then a else b") == ast.Conditional(
         ast.Reference("x"), ast.Reference("a"), ast.Reference("b")
     )
-    assert parse_expr("a if x else b if y else c") == ast.Conditional(
+    assert parse_expr("if x then a else if y then b else c") == ast.Conditional(
         ast.Reference("x"),
         ast.Reference("a"),
         ast.Conditional(ast.Reference("y"), ast.Reference("b"), ast.Reference("c")),

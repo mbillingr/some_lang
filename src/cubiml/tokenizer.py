@@ -16,7 +16,7 @@ from cubiml.scanner import (
     Scanner,
 )
 
-KEYWORDS = ("do", "else", "false", "func", "if", "lambda", "let", "proc", "true")
+KEYWORDS = ("do", "else", "false", "func", "if", "lambda", "let", "proc", "then", "true")
 DIGITS = "0123456789"
 LETTERS = "abcdefghijklmnopqrstuvwxyz"
 IDENT_SYMS = "+-*/,<>;@$~&%=!?^\\|'\""

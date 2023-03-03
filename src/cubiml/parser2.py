@@ -9,7 +9,6 @@ from cubiml.tokenizer import (
 )
 
 infix_binding_power = {
-    "if": (4, 3),
     "+": (5, 6),
     "-": (5, 6),
     "*": (7, 8),
@@ -20,6 +19,7 @@ infix_binding_power = {
 
 prefix_binding_power = {
     "lambda": (None, 1),
+    "if": (None, 3),
     "~": (None, 9),
 }
 
@@ -67,7 +67,10 @@ def parse_toplevel(ts: TokenStream) -> ast.Script:
                 var = parse_identifier(ts)
                 expect_token(ts, "=")
                 body = parse_expr(ts)
-                func = spanned(span.merge(get_span(body)), ast.FuncDef(name, ast.Function(var, body)))
+                func = spanned(
+                    span.merge(get_span(body)),
+                    ast.FuncDef(name, ast.Function(var, body)),
+                )
                 funcs.append(func)
             case _:
                 exprs.append(parse_expr(ts))
@@ -147,7 +150,7 @@ def is_delimiter(t, k) -> bool:
     match t, k:
         case _, TokenKind.RPAREN | TokenKind.BEGIN_BLOCK | TokenKind.END_BLOCK | TokenKind.SEP_BLOCK:
             return True
-        case "else" | "func" | "proc", _:
+        case "else" | "func" | "proc" | "then", _:
             return True
         case _:
             return False
@@ -191,19 +194,19 @@ def parse_prefix_operator(rbp, ts):
             expect_token(ts, "=")
             body = parse_expr(ts, rbp)
             return spanned(span.merge(get_span(body)), ast.Function(var, body))
+        case "if", _, span:
+            cond = parse_expr(ts)
+            expect_token(ts, "then")
+            lhs = parse_expr(ts)
+            expect_token(ts, "else")
+            rhs = parse_expr(ts, rbp)
+            return spanned(span.merge(get_span(rhs)), ast.Conditional(cond, lhs, rhs))
         case token:
             raise UnexpectedToken(token)
 
 
 def parse_infix_operator(lhs, rbp, ts):
     match ts.get_next():
-        case "if", _, _:
-            cond = parse_expr(ts)
-            expect_token(ts, "else")
-            rhs = parse_expr(ts, rbp)
-            return spanned(
-                get_span(lhs).merge(get_span(rhs)), ast.Conditional(cond, lhs, rhs)
-            )
         case op, TokenKind.OPERATOR, span:
             rhs = parse_expr(ts, rbp)
 
