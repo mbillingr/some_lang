@@ -9,6 +9,12 @@ from cubiml.tokenizer import (
 )
 
 infix_binding_power = {
+    "!=": (3, 4),
+    "==": (3, 4),
+    "<": (3, 4),
+    ">": (3, 4),
+    "<=": (3, 4),
+    ">=": (3, 4),
     "+": (5, 6),
     "-": (5, 6),
     "*": (7, 8),
@@ -35,6 +41,12 @@ op_types = {
     "~": ("bool", "bool"),
     "**": ("int", "int", "int"),
     "!": ("int", "int"),
+    "<": ("int", "int", "bool"),
+    ">": ("int", "int", "bool"),
+    "<=": ("int", "int", "bool"),
+    ">=": ("int", "int", "bool"),
+    "==": ("any", "any", "bool"),
+    "!=": ("any", "any", "bool"),
 }
 
 
