@@ -55,11 +55,15 @@ def parse_toplevel(ts: TokenStream) -> ast.Script:
     funcs = []
     exprs = []
     expect_token(ts, TokenKind.BEGIN_BLOCK)
-    while True:
+    nesting_depth = 1
+    while nesting_depth > 0:
         match ts.peek():
+            case _, TokenKind.BEGIN_BLOCK, _:
+                ts.get_next()
+                nesting_depth += 1
             case _, TokenKind.END_BLOCK, _:
                 ts.get_next()
-                break
+                nesting_depth -= 1
             case _, TokenKind.SEP_BLOCK, _:
                 ts.get_next()
             case "let", _, span:
