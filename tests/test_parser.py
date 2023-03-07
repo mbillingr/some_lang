@@ -183,12 +183,6 @@ def test_parse_toplevel_functions_are_mutually_recursive():
     )
 
 
-def test_parse_nested_toplevel_blocks():
-    assert parse_top("do:\n  let x = 1\nlet y = 0") == ast.Script(
-        [ast.DefineLet("x", ast.Literal(1)), ast.DefineLet("y", ast.Literal(0))]
-    )
-
-
 def parse_expr(src):
     token_stream = tokenizer.default_tokenizer(src, implicit_block=False)
     return parser2.parse_expr(token_stream)
