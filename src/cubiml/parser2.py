@@ -189,6 +189,9 @@ def parse_atom(ts: TokenStream):
             val = parse_expr(ts)
             body = parse_block_expr(ts)
             return spanned(span.merge(get_span(body)), ast.Let(var, val, body))
+        case "{", _, span:
+            _, _, sp2 = expect_token(ts, "}")
+            return spanned(span.merge(sp2), ast.Record([]))
         case token:
             raise UnexpectedToken(token)
 
