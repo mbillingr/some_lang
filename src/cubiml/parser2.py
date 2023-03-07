@@ -24,7 +24,7 @@ infix_binding_power = {
 }
 
 prefix_binding_power = {
-    "lambda": (None, 1),
+    "fn": (None, 1),
     "if": (None, 3),
     "~": (None, 9),
 }
@@ -92,35 +92,6 @@ def parse_toplevel(ts: TokenStream) -> ast.Script:
     return ast.Script(funcs + lets + exprs)
 
 
-def parse_block_expr(ts) -> ast.Expression:
-    def recur() -> ast.Expression:
-        match ts.peek():
-            case "let", _, span:
-                ts.get_next()
-                var = parse_identifier(ts)
-                expect_token(ts, "=")
-                val = parse_expr(ts)
-                expect_token(ts, TokenKind.SEP_BLOCK)
-                body = recur()
-                return spanned(span.merge(get_span(body)), ast.Let(var, val, body))
-            case _:
-                expr = parse_expr(ts)
-
-        match ts.get_next():
-            case ts.EOF:
-                raise UnexpectedEnd()
-            case _, TokenKind.END_BLOCK, _:
-                return expr
-            case _, TokenKind.SEP_BLOCK, _:
-                cont = recur()
-                return spanned(
-                    get_span(expr).merge(get_span(cont)), ast.Sequence(expr, cont)
-                )
-
-    expect_token(ts, TokenKind.BEGIN_BLOCK)
-    return recur()
-
-
 def parse_expr(ts: TokenStream, min_bp: int = 0) -> ast.Expression:
     match ts.peek():
         case op, _, _ if op in prefix_binding_power:
@@ -160,9 +131,11 @@ def parse_expr(ts: TokenStream, min_bp: int = 0) -> ast.Expression:
 
 def is_delimiter(t, k) -> bool:
     match t, k:
-        case _, TokenKind.RPAREN | TokenKind.BEGIN_BLOCK | TokenKind.END_BLOCK | TokenKind.SEP_BLOCK:
+        case "true" | "false", _:
+            return False
+        case _, TokenKind.RPAREN:
             return True
-        case "else" | "func" | "proc" | "then", _:
+        case _, TokenKind.KEYWORD:
             return True
         case _:
             return False
@@ -180,14 +153,12 @@ def parse_atom(ts: TokenStream):
             inner = parse_expr(ts)
             _, _, sp2 = expect_token(ts, ")")
             return spanned(span.merge(sp2), inner)
-        case "do", _, span:
-            body = parse_block_expr(ts)
-            return spanned(span.merge(get_span(body)), body)
         case "let", _, span:
             var = parse_identifier(ts)
             expect_token(ts, "=")
             val = parse_expr(ts)
-            body = parse_block_expr(ts)
+            expect_token(ts, "in")
+            body = parse_expr(ts)
             return spanned(span.merge(get_span(body)), ast.Let(var, val, body))
         case "{", _, span:
             _, _, sp2 = expect_token(ts, "}")
@@ -204,9 +175,9 @@ def parse_prefix_operator(rbp, ts):
                 make_operator_span(span, get_span(rhs)),
                 ast.UnaryOp(rhs, op_types[op], op),
             )
-        case "lambda", _, span:
+        case "fn", _, span:
             var = parse_identifier(ts)
-            expect_token(ts, "=")
+            expect_token(ts, "=>")
             body = parse_expr(ts, rbp)
             return spanned(span.merge(get_span(body)), ast.Function(var, body))
         case "if", _, span:
