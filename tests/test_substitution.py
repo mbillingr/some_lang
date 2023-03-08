@@ -1,5 +1,4 @@
-import some_lang.unification.substitution as s
-from some_lang import ast
+import unification.substitution as s
 
 
 def test_apply_empty_subst():

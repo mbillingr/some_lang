@@ -1,4 +1,5 @@
-from some_lang.unification import unify as u, substitution as s
+from unification import substitution as s
+from unification import unify as u
 
 
 def test_occurs_self_var():

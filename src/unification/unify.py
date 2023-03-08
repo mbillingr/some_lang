@@ -1,7 +1,7 @@
 from typing import Any, Optional
 
-from some_lang.unification.substitution import Substitution, Var
-from some_lang.unification.structure import structural_visitor
+from unification.substitution import Substitution, Var
+from unification.structure import structural_visitor
 
 
 class NoOccurrenceViolation(Exception):

@@ -1,7 +1,7 @@
 from __future__ import annotations
-from typing import Any, Optional, Self
+from typing import Any, Optional
 
-from some_lang.unification.structure import structural_visitor
+from unification.structure import structural_visitor
 
 
 class Var:
