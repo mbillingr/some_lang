@@ -1,6 +1,6 @@
 import pytest
 
-from cubiml.scanner import Span
+from parsing.scanner_generator import Span
 from cubiml.tokenizer import remove_all_whitespace, scanner, TokenKind
 
 

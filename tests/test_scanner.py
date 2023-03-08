@@ -1,6 +1,6 @@
 import pytest
 
-from cubiml.scanner import Scanner, ScannerError, Span
+from parsing.scanner_generator import Scanner, ScannerError, Span
 
 
 def test_empty_scanner_empty_input():

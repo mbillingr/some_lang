@@ -1,12 +1,11 @@
 import collections
-import itertools
 import os
 import time
 from enum import Enum
 from pathlib import Path
 from typing import TypeAlias, Any, Iterable, Iterator
 
-from cubiml.scanner import (
+from parsing.scanner_generator import (
     ScannerGenerator,
     Repeat,
     OneOf,

@@ -1,7 +1,8 @@
 import pytest
 
 import cubiml.tokenizer
-from cubiml import tokenizer, scanner, abstract_syntax as ast, parser2
+from cubiml import tokenizer, abstract_syntax as ast, parser2
+from parsing import scanner_generator
 
 
 def test_parse_expr_atom():
