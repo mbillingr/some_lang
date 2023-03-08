@@ -91,13 +91,6 @@ def test_bind_lambda():
     )
 
 
-@pytest.mark.parametrize("w2", [" ", "\n", "\n  ", "\n    "])
-@pytest.mark.parametrize("w3", [" ", "\n", "\n  ", "\n    "])
-def test_parse_expr_indented(w2, w3):
-    src = f"1{w2}+{w3}2"
-    assert parse_expr(src) == binop("+", ast.Literal(1), ast.Literal(2))
-
-
 def test_parse_expr_incomplete():
     with pytest.raises(cubiml.tokenizer.UnexpectedEnd):
         parse_expr("0 +")
@@ -118,7 +111,7 @@ def test_parse_toplevel_function():
 
 
 def test_parse_toplevel_functions_are_mutually_recursive():
-    assert parse_top("func foo x = 0\nfunc bar y = 1") == ast.Script(
+    assert parse_top("func foo x = 0; func bar y = 1") == ast.Script(
         [
             ast.DefineLetRec(
                 [

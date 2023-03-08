@@ -32,9 +32,8 @@ KEYWORDS = (
 )
 DIGITS = "0123456789"
 LETTERS = "abcdefghijklmnopqrstuvwxyz"
-IDENT_SYMS = "+-*/,<>;@$~&%=!?^\\|'\""
+IDENT_SYMS = "+-*/,<>@$~&%=!?^\\|'\""
 OP_SYMBOLS = IDENT_SYMS + ".:"
-SYNTAX = ":"
 LPARENS = "([{"
 RPARENS = ")]}"
 
@@ -50,7 +49,7 @@ class TokenKind(str, Enum):
     LITERAL_BOOL = "literal-bool"
     LITERAL_INT = "literal-int"
     COMMENT = "comment"
-    SYNTAX = "syntax"
+    TOPLEVEL_SEPARATOR = "top-level-separator"
 
 
 Token: TypeAlias = tuple[Any, TokenKind, Span]
@@ -154,8 +153,8 @@ def num():
 
 scg = (
     ScannerGenerator()
-    .set_token_priority(TokenKind.SYNTAX, TokenKind.OPERATOR)
     .set_token_priority(TokenKind.KEYWORD, TokenKind.IDENTIFIER)
+    .add_rule(TokenKind.TOPLEVEL_SEPARATOR, ";")
     .add_rule(TokenKind.NEWLINE, "\n" + Repeat(whitespace(optional=True) + "\n"))
     .add_rule(TokenKind.WHITESPACE, whitespace())
     .add_rule(TokenKind.KEYWORD, Alternative(*KEYWORDS))
@@ -163,7 +162,6 @@ scg = (
     .add_rule(TokenKind.OPERATOR, Repeat(OneOf(OP_SYMBOLS), accept_empty=False))
     .add_rule(TokenKind.LPAREN, OneOf(LPARENS))
     .add_rule(TokenKind.RPAREN, OneOf(RPARENS))
-    .add_rule(TokenKind.SYNTAX, OneOf(SYNTAX))
     .add_rule(TokenKind.LITERAL_INT, Opt(OneOf("+-")) + num())
 )
 # this rule needs to know the complete alphabet to implement an "any char" like regex

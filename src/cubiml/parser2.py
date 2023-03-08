@@ -54,18 +54,9 @@ def parse_toplevel(ts: TokenStream) -> ast.Script:
     lets = []
     funcs = []
     exprs = []
-    expect_token(ts, TokenKind.BEGIN_BLOCK)
     nesting_depth = 1
     while nesting_depth > 0:
         match ts.peek():
-            case _, TokenKind.BEGIN_BLOCK, _:
-                ts.get_next()
-                nesting_depth += 1
-            case _, TokenKind.END_BLOCK, _:
-                ts.get_next()
-                nesting_depth -= 1
-            case _, TokenKind.SEP_BLOCK, _:
-                ts.get_next()
             case "let", _, span:
                 ts.get_next()
                 var = parse_identifier(ts)
@@ -86,6 +77,12 @@ def parse_toplevel(ts: TokenStream) -> ast.Script:
                 funcs.append(func)
             case _:
                 exprs.append(parse_expr(ts))
+
+        match ts.peek():
+            case _, TokenKind.TOPLEVEL_SEPARATOR, _:
+                ts.get_next()
+            case _:
+                break
 
     funcs = funcs and [ast.DefineLetRec(funcs)]
 
@@ -133,9 +130,7 @@ def is_delimiter(t, k) -> bool:
     match t, k:
         case "true" | "false", _:
             return False
-        case _, TokenKind.RPAREN:
-            return True
-        case _, TokenKind.KEYWORD:
+        case _, TokenKind.RPAREN | TokenKind.KEYWORD | TokenKind.TOPLEVEL_SEPARATOR:
             return True
         case _:
             return False
