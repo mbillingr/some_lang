@@ -24,6 +24,9 @@ class Substitution:
             case _:
                 return structural_visitor(struc, self.apply)
 
+    def __repr__(self):
+        return f"Substitution({self.subs})"
+
 
 def apply_one_subst(s0: Any, var: Var, s1: Any) -> Any:
     match s0:
