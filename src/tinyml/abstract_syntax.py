@@ -21,9 +21,24 @@ class Expression(ToplevelItem):
     pass
 
 
+class TypeExpression(AstNode):
+    pass
+
+
+@dataclasses.dataclass(frozen=True)
+class TypeLiteral(TypeExpression):
+    typ: str
+
+
 @dataclasses.dataclass(frozen=True)
 class EmptyExpression(Expression):
     """Represent no expression where an expression was expected, such as in an empty block..."""
+
+
+@dataclasses.dataclass(frozen=True)
+class Annotation(Expression):
+    exp: Expression
+    typ: TypeExpression
 
 
 @dataclasses.dataclass(frozen=True)

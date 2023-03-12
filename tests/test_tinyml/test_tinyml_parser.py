@@ -11,6 +11,20 @@ def test_parse_expr_atom():
     assert parse_expr("foo") == ast.Reference("foo")
 
 
+def test_parse_annotation():
+    assert parse_expr("the int 0") == ast.Annotation(
+        ast.Literal(0), ast.TypeLiteral("int")
+    )
+
+    assert parse_expr("the int -> int -> int 0") == ast.Annotation(
+        ast.Literal(0),
+        ast.FuncType(
+            ast.TypeLiteral("int"),
+            ast.FuncType(ast.TypeLiteral("int"), ast.TypeLiteral("int")),
+        ),
+    )
+
+
 def test_parse_expr_infix():
     assert parse_expr("0 + 0") == binop("+", ast.Literal(0), ast.Literal(0))
 

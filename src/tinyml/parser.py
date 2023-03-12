@@ -148,6 +148,10 @@ def parse_atom(ts: TokenStream):
             inner = parse_expr(ts)
             _, _, sp2 = expect_token(ts, ")")
             return spanned(span.merge(sp2), inner)
+        case "the", _, span:
+            typ = parse_type(ts)
+            exp = parse_expr(ts)
+            return spanned(span.merge(get_span(exp)), ast.Annotation(exp, typ))
         case "let", _, span:
             var = parse_identifier(ts)
             expect_token(ts, "=")
@@ -212,6 +216,14 @@ def parse_postfix_operator(lhs, ts):
             )
         case token:
             raise UnexpectedToken(token)
+
+
+def parse_type(ts):
+    match ts.get_next():
+        case txt, TokenKind.IDENTIFIER, span:
+            return spanned(span, ast.TypeLiteral(txt))
+        case token:
+            raise NotImplementedError(token)
 
 
 def parse_identifier(ts) -> ast.Identifier:

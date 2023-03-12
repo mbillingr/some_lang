@@ -26,6 +26,7 @@ KEYWORDS = (
     "lambda",
     "let",
     "proc",
+    "the",
     "then",
     "true",
 )
