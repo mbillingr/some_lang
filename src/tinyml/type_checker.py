@@ -1,17 +1,36 @@
+import abc
 import dataclasses
-from typing import Any, Type, TypeAlias
+from typing import Any, TypeAlias
 
 from tinyml import abstract_syntax as ast
 from tinyml.bindings import Bindings
+
+
+class Type(abc.ABC):
+    def __str__(self):
+        return f"{self.__class__.__name__}"
 
 
 TEnv: TypeAlias = Bindings[Type]
 
 
 @dataclasses.dataclass
-class FunctionType:
+class Bool(Type):
+    pass
+
+
+@dataclasses.dataclass
+class Int(Type):
+    pass
+
+
+@dataclasses.dataclass
+class FunctionType(Type):
     targ: Type
     tret: Type
+
+    def __str__(self):
+        return f"({self.targ} -> {self.tret})"
 
 
 def check(ty: Type, expr: ast.Expression, tenv: TEnv):
@@ -32,8 +51,10 @@ def infer(expr: ast.Expression, tenv: TEnv) -> Type:
             typ = eval_type(txp, tenv)
             check(typ, exp, tenv)
             return typ
-        case ast.Literal(x):
-            return type(x)
+        case ast.Literal(bool()):
+            return Bool()
+        case ast.Literal(int()):
+            return Int()
         case ast.Reference(var):
             return tenv.get(var)
         case ast.Application(ast.Function(var, body), arg):
@@ -53,8 +74,14 @@ def infer(expr: ast.Expression, tenv: TEnv) -> Type:
 
 def eval_type(texp: ast.TypeExpression, tenv: TEnv) -> Type:
     match texp:
-        case ast.TypeLiteral("int"):
-            return int
+        case ast.TypeLiteral("Bool"):
+            return Bool()
+        case ast.TypeLiteral("Int"):
+            return Int()
+        case ast.FuncType(lhs, rhs):
+            targ = eval_type(lhs, tenv)
+            tret = eval_type(rhs, tenv)
+            return FunctionType(targ, tret)
         case _:
             raise NotImplementedError(texp)
 

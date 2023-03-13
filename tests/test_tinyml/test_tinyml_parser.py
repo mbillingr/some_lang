@@ -12,8 +12,11 @@ def test_parse_expr_atom():
 
 
 def test_parse_annotation():
-    assert parse_expr("the int 0") == ast.Annotation(
-        ast.Literal(0), ast.TypeLiteral("int")
+    assert parse_expr("the Int 0") == ast.Annotation(
+        ast.Literal(0), ast.TypeLiteral("Int")
+    )
+    assert parse_expr("the Bool true") == ast.Annotation(
+        ast.Literal(True), ast.TypeLiteral("Bool")
     )
 
     assert parse_expr("the int -> int -> int 0") == ast.Annotation(

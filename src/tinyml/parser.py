@@ -219,6 +219,18 @@ def parse_postfix_operator(lhs, ts):
 
 
 def parse_type(ts):
+    typ = parse_atomic_type(ts)
+
+    match ts.peek():
+        case "->", _, _:
+            ts.get_next()
+            rhs = parse_type(ts)
+            return spanned(get_span(typ).merge(get_span(rhs)), ast.FuncType(typ, rhs))
+        case _:
+            return typ
+
+
+def parse_atomic_type(ts):
     match ts.get_next():
         case txt, TokenKind.IDENTIFIER, span:
             return spanned(span, ast.TypeLiteral(txt))

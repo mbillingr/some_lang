@@ -31,6 +31,12 @@ class TypeLiteral(TypeExpression):
 
 
 @dataclasses.dataclass(frozen=True)
+class FuncType(TypeExpression):
+    arg: TypeExpression
+    ret: TypeExpression
+
+
+@dataclasses.dataclass(frozen=True)
 class EmptyExpression(Expression):
     """Represent no expression where an expression was expected, such as in an empty block..."""
 
