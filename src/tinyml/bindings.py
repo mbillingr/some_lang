@@ -10,6 +10,9 @@ class Bindings(Generic[T]):
         self.m: dict[str, T] = {}
         self.changes: list[tuple[str, Optional[T]]] = []
 
+    def depth(self) -> int:
+        return len(self.m)
+
     def get(self, k: str) -> T:
         return self.m[k]
 

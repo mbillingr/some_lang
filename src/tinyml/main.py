@@ -1,4 +1,4 @@
-from tinyml import type_checker, tokenizer, parser
+from tinyml import interpreter, type_checker, tokenizer, parser
 
 
 def read_more(src):
@@ -30,6 +30,8 @@ def read_more(src):
 
 
 tenv = type_checker.empty_tenv()
+env = interpreter.empty_env()
+store = ()
 
 while True:
     try:
@@ -37,6 +39,8 @@ while True:
         ast = read_more(src)
         ty = type_checker.infer(ast, tenv)
         print("Inferred type:", ty)
+        thunk = interpreter.analyze(ast, env)
+        print(thunk(store))
     except EOFError:
         break
     except tokenizer.UnexpectedEnd as e:
