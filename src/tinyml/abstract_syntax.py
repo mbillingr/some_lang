@@ -31,9 +31,32 @@ class TypeLiteral(TypeExpression):
 
 
 @dataclasses.dataclass(frozen=True)
+class TypeVariable(TypeExpression):
+    var: str
+
+
+@dataclasses.dataclass(frozen=True)
 class FuncType(TypeExpression):
+    """The type of a function"""
+
     arg: TypeExpression
     ret: TypeExpression
+
+
+@dataclasses.dataclass(frozen=True)
+class TypeFunction(TypeExpression):
+    """A function over types"""
+
+    tvar: str
+    constraints: frozenset[TypeExpression]
+    body: TypeExpression
+
+
+@dataclasses.dataclass(frozen=True)
+class TypeApplication(TypeExpression):
+    """Apply a type function to a type"""
+    tfun: TypeExpression
+    targ: TypeExpression
 
 
 @dataclasses.dataclass(frozen=True)

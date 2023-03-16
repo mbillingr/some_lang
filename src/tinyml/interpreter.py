@@ -17,10 +17,9 @@ def analyze(expr: ast.Expression, env: Env):
             idx = env.get(var)
             return lambda store: store[idx]
         case ast.Function(var, body):
-            with env.child_scope() as env_:
-                env_.insert(var, env_.depth())
-                fun = analyze(body, env_)
-                return lambda store: lambda arg: fun(store + (arg,))
+            env_ = env.extend(var, env.depth())
+            fun = analyze(body, env_)
+            return lambda store: lambda arg: fun(store + (arg,))
         case ast.Application(fun, arg):
             f = analyze(fun, env)
             a = analyze(arg, env)

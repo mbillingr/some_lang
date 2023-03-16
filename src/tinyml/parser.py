@@ -234,6 +234,24 @@ def parse_atomic_type(ts):
     match ts.get_next():
         case txt, TokenKind.IDENTIFIER, span:
             return spanned(span, ast.TypeLiteral(txt))
+        case "(", _, span:
+            inner = parse_type(ts)
+            expect_token(ts, ")")
+            return inner
+        case "lambda", _, span:
+            expect_token(ts, "(")
+            var = parse_identifier(ts)
+            expect_token(ts, ")")
+            body = parse_type(ts)
+            return spanned(
+                span.merge(get_span(body)), ast.TypeFunction(var, frozenset(), body)
+            )
+        case "apply", _, span:
+            tfun = parse_type(ts)
+            targ = parse_type(ts)
+            return spanned(
+                span.merge(get_span(targ)), ast.TypeApplication(tfun, targ)
+            )
         case token:
             raise NotImplementedError(token)
 

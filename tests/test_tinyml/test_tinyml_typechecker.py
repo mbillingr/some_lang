@@ -8,7 +8,7 @@ def test_infer_literals():
 
 
 def test_infer_variables():
-    assert infer(ast.Reference("x"), empty_tenv().insert("x", bool)) == bool
+    assert infer(ast.Reference("x"), empty_tenv().extend("x", bool)) == bool
 
 
 def test_check_function():
@@ -25,7 +25,7 @@ def test_infer_application():
     assert (
         infer(
             ast.Application(ast.Reference("f"), ast.Literal(0)),
-            empty_tenv().insert("f", FunctionType(Int(), Bool())),
+            empty_tenv().extend("f", FunctionType(Int(), Bool())),
         )
         == Bool()
     )

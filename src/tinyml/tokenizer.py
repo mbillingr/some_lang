@@ -16,6 +16,7 @@ from parsing.scanner_generator import (
 )
 
 KEYWORDS = (
+    "apply",
     "do",
     "else",
     "false",
