@@ -9,6 +9,7 @@ from eopl_explicit_refs.tokenizer import (
 )
 
 infix_binding_power = {
+    ":=": (2, 1),
     "!=": (3, 4),
     "==": (3, 4),
     "<": (3, 4),
@@ -25,6 +26,8 @@ infix_binding_power = {
 
 prefix_binding_power = {
     "fn": (None, 1),
+    "deref": (None, 3),
+    "newref": (None, 3),
     "if": (None, 3),
     "~": (None, 9),
 }
@@ -122,17 +125,6 @@ def parse_atom(ts: TokenStream):
             expect_token(ts, "in")
             body = parse_expr(ts)
             return spanned(span.merge(get_span(body)), ast.Let(var, val, body))
-        case "newref", _, span:
-            val = parse_expr(ts)
-            return spanned(span.merge(get_span(val)), ast.NewRef(val))
-        case "deref", _, span:
-            ref = parse_expr(ts)
-            return spanned(span.merge(get_span(ref)), ast.DeRef(ref))
-        case "setref", _, span:
-            ref = parse_expr(ts)
-            expect_token(ts, ":=")
-            val = parse_expr(ts)
-            return spanned(span.merge(get_span(val)), ast.SetRef(ref, val))
         case token:
             raise UnexpectedToken(token)
 
@@ -150,6 +142,12 @@ def parse_prefix_operator(rbp, ts):
             expect_token(ts, "=>")
             body = parse_expr(ts, rbp)
             return spanned(span.merge(get_span(body)), ast.Function(var, body))
+        case "newref", _, span:
+            val = parse_expr(ts, rbp)
+            return spanned(span.merge(get_span(val)), ast.NewRef(val))
+        case "deref", _, span:
+            ref = parse_expr(ts, rbp)
+            return spanned(span.merge(get_span(ref)), ast.DeRef(ref))
         case "if", _, span:
             cond = parse_expr(ts)
             expect_token(ts, "then")
@@ -163,6 +161,9 @@ def parse_prefix_operator(rbp, ts):
 
 def parse_infix_operator(lhs, rbp, ts):
     match ts.get_next():
+        case ":=", _, span:
+            rhs = parse_expr(ts, rbp)
+            return spanned(span.merge(get_span(rhs)), ast.SetRef(lhs, rhs))
         case op, TokenKind.OPERATOR, span:
             rhs = parse_expr(ts, rbp)
 

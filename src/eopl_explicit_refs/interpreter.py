@@ -28,6 +28,12 @@ def value_of(exp: ast.Expression, env: Env) -> Any:
             ref_ = value_of(ref, env)
             val_ = value_of(val, env)
             setref(ref_, val_)
-            return val_
+            return Nothing()
         case _:
             raise NotImplementedError(exp)
+
+
+class Nothing:
+    """No value - this is "returned" by statements and such."""
+    def __str__(self):
+        return "<nothing>"
