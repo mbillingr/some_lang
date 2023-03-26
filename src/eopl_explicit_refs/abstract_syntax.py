@@ -7,6 +7,10 @@ class Expression(abc.ABC):
     pass
 
 
+class Statement(abc.ABC):
+    pass
+
+
 @dataclasses.dataclass
 class Program:
     exp: Expression
@@ -14,6 +18,17 @@ class Program:
 
 class Symbol(str):
     pass
+
+
+@dataclasses.dataclass
+class ExprStmt(Statement):
+    expr: Expression
+
+
+@dataclasses.dataclass
+class Sequence(Expression):
+    pre: Statement
+    exp: Expression
 
 
 @dataclasses.dataclass

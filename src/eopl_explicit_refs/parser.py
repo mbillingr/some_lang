@@ -57,6 +57,13 @@ def parse_program(ts: TokenStream) -> ast.Program:
     return ast.Program(parse_expr(ts))
 
 
+def parse_statement(ts: TokenStream) -> ast.Statement:
+    match ts.peek():
+        case _:
+            expr = parse_expr(ts)
+            return spanned(get_span(expr), ast.ExprStmt(expr))
+
+
 def parse_expr(ts: TokenStream, min_bp: int = 0) -> ast.Expression:
     match ts.peek():
         case op, _, _ if op in prefix_binding_power:
@@ -119,9 +126,9 @@ def parse_atom(ts: TokenStream):
             _, _, sp2 = expect_token(ts, ")")
             return spanned(span.merge(sp2), inner)
         case "begin", _, span:
-            exprs = []
+            stmts = []
             while True:
-                exprs.append(parse_expr(ts))
+                stmts.append(parse_statement(ts))
                 match ts.peek():
                     case ";", _, _:
                         pass
@@ -130,8 +137,11 @@ def parse_atom(ts: TokenStream):
                     case _:
                         break
                 ts.get_next()
-            last_expr = exprs[-1]
-            return spanned(span.merge(get_span(last_expr)), last_expr)
+            expr = stmts.pop().expr
+            while stmts:
+                s = stmts.pop()
+                expr = spanned(get_span(s).merge(get_span(expr)), ast.Sequence(s, expr))
+            return spanned(span.merge(get_span(expr)), expr)
         case "let", _, span:
             var = parse_symbol(ts)
             expect_token(ts, "=")
