@@ -1,42 +1,24 @@
 import dataclasses
-from typing import Any, TypeAlias, NewType
-
-Store = NewType("Store", list)
+from typing import Any
 
 
 @dataclasses.dataclass
 class Ref:
-    r: int
+    r: Any
 
 
-def initialize_store():
-    _the_store.clear()
+class PythonStore:
+    def clear(self):
+        pass
 
+    def is_reference(self, x: Any) -> bool:
+        return isinstance(x, Ref)
 
-def get_store() -> Store:
-    return _the_store
+    def newref(self, val: Any) -> Ref:
+        return Ref(val)
 
+    def deref(self, ref: Ref) -> Any:
+        return ref.r
 
-def empty_store() -> Store:
-    return Store([])
-
-
-def is_reference(v: Any) -> bool:
-    return isinstance(v, Ref)
-
-
-def newref(val: Any) -> Ref:
-    next_ref = len(_the_store)
-    _the_store.append(val)
-    return Ref(next_ref)
-
-
-def deref(ref: Ref) -> Any:
-    return _the_store[ref.r]
-
-
-def setref(ref: Ref, val: Any):
-    _the_store[ref.r] = val
-
-
-_the_store: Store = Store([])
+    def setref(self, ref: Ref, val: Any):
+        ref.r = val

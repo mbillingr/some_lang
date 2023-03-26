@@ -1,11 +1,14 @@
 from eopl_explicit_refs import interpreter, tokenizer, parser
-from eopl_explicit_refs.store import is_reference, deref
+from eopl_explicit_refs.store import PythonStore
+
+
+store = PythonStore()
 
 
 def print_result(val):
-    if is_reference(val):
+    if store.is_reference(val):
         print("*", end="")
-        print_result(deref(val))
+        print_result(store.deref(val))
     else:
         print(val)
 
@@ -19,6 +22,7 @@ while True:
 
 token_stream = tokenizer.default_tokenizer("\n".join(src_lines))
 program = parser.parse_program(token_stream)
-result = interpreter.value_of_program(program)
+runner = interpreter.analyze_program(program)
+result = runner(store)
 
 print_result(result)
