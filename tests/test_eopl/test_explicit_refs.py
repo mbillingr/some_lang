@@ -13,12 +13,16 @@ from eopl_explicit_refs.store import PythonStore as Store
         (0, "0"),
         (42, "42"),
         (-123, "-123"),
+        # Sequence
+        (0, "begin 0"),
+        (3, "begin 1; 2; 3"),
         # Binding
         (0, "let x = 0 in x"),
         (1, "let x = 0 in let x = 1 in x"),
         (0, "let x = 0 in let y = 1 in x"),
         # References
         (Store.Ref(1), "newref 1"),
+        (2, "let x = newref 2 in deref x"),
     ],
 )
 def test_literals(src, expect):

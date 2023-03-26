@@ -15,7 +15,7 @@ from parsing.scanner_generator import (
     Scanner,
 )
 
-KEYWORDS = ("deref", "false", "in", "let", "newref", "true")
+KEYWORDS = (";", "begin", "deref", "false", "in", "let", "newref", "true")
 DIGITS = "0123456789"
 LETTERS = "abcdefghijklmnopqrstuvwxyz"
 IDENT_SYMS = "+-*/,<>@$~&%=!?^\\|'\""

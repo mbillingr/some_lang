@@ -98,7 +98,7 @@ def is_delimiter(t, k) -> bool:
     match t, k:
         case "true" | "false", _:
             return False
-        case ":=", _:
+        case ":=" | ";", _:
             return True
         case _, TokenKind.RPAREN | TokenKind.KEYWORD:
             return True
@@ -118,6 +118,20 @@ def parse_atom(ts: TokenStream):
             inner = parse_expr(ts)
             _, _, sp2 = expect_token(ts, ")")
             return spanned(span.merge(sp2), inner)
+        case "begin", _, span:
+            exprs = []
+            while True:
+                exprs.append(parse_expr(ts))
+                match ts.peek():
+                    case ";", _, _:
+                        pass
+                    case ts.EOF:
+                        break
+                    case _:
+                        break
+                ts.get_next()
+            last_expr = exprs[-1]
+            return spanned(span.merge(get_span(last_expr)), last_expr)
         case "let", _, span:
             var = parse_symbol(ts)
             expect_token(ts, "=")
