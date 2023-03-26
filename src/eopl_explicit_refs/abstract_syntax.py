@@ -12,8 +12,12 @@ class Program:
     exp: Expression
 
 
+class Symbol(str):
+    pass
+
+
 @dataclasses.dataclass
-class Identifier:
+class Identifier(Expression):
     name: str
 
 
@@ -36,3 +40,10 @@ class DeRef(Expression):
 class SetRef(Expression):
     ref: Expression
     val: Expression
+
+
+@dataclasses.dataclass
+class Let(Expression):
+    var: Identifier
+    val: Expression
+    bdy: Expression

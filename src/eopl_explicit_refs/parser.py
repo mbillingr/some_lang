@@ -113,13 +113,13 @@ def parse_atom(ts: TokenStream):
         case val, TokenKind.LITERAL_BOOL | TokenKind.LITERAL_INT, span:
             return spanned(span, ast.Literal(val))
         case name, TokenKind.IDENTIFIER, span:
-            return spanned(span, ast.Reference(name))
+            return spanned(span, ast.Identifier(name))
         case "(", _, span:
             inner = parse_expr(ts)
             _, _, sp2 = expect_token(ts, ")")
             return spanned(span.merge(sp2), inner)
         case "let", _, span:
-            var = parse_identifier(ts)
+            var = parse_symbol(ts)
             expect_token(ts, "=")
             val = parse_expr(ts)
             expect_token(ts, "in")
@@ -138,7 +138,7 @@ def parse_prefix_operator(rbp, ts):
                 ast.UnaryOp(rhs, op_types[op], op),
             )
         case "fn", _, span:
-            var = parse_identifier(ts)
+            var = parse_symbol(ts)
             expect_token(ts, "=>")
             body = parse_expr(ts, rbp)
             return spanned(span.merge(get_span(body)), ast.Function(var, body))
@@ -190,9 +190,9 @@ def parse_postfix_operator(lhs, ts):
             raise UnexpectedToken(token)
 
 
-def parse_identifier(ts) -> ast.Identifier:
+def parse_symbol(ts) -> ast.Symbol:
     tok, _, span = expect_token(ts, TokenKind.IDENTIFIER)
-    return spanned(span, ast.Identifier(tok))
+    return spanned(span, ast.Symbol(tok))
 
 
 def expect_tokens(ts, *expect):

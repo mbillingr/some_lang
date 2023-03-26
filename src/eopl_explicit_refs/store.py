@@ -2,23 +2,34 @@ import dataclasses
 from typing import Any
 
 
-@dataclasses.dataclass
-class Ref:
-    r: Any
-
-
 class PythonStore:
+    @dataclasses.dataclass
+    class Ref:
+        val: Any
+
+    def __init__(self):
+        self.stack = []
+
     def clear(self):
-        pass
+        self.stack = []
+
+    def push(self, val):
+        self.stack.append(val)
+
+    def pop(self):
+        return self.stack.pop()
+
+    def get(self, idx: int):
+        return self.stack[idx]
 
     def is_reference(self, x: Any) -> bool:
-        return isinstance(x, Ref)
+        return isinstance(x, PythonStore.Ref)
 
     def newref(self, val: Any) -> Ref:
-        return Ref(val)
+        return PythonStore.Ref(val)
 
     def deref(self, ref: Ref) -> Any:
-        return ref.r
+        return ref.val
 
     def setref(self, ref: Ref, val: Any):
-        ref.r = val
+        ref.val = val

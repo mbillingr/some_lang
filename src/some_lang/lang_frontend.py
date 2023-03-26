@@ -87,14 +87,14 @@ def gen_type(t: int, env, engine, skip=None):
         case "Var":
             types = {
                 gen_type(s, env, engine, skip | {t})
-                for s in engine.r.upsets[t]
+                for s in engine.val.upsets[t]
                 if s not in skip
             }
             if types: return "|".join(types)
 
             types = {
                 gen_type(s, env, engine, skip | {t})
-                for s in engine.r.downsets[t]
+                for s in engine.val.downsets[t]
                 if s not in skip
             }
             tv = f"t{len(env)}"

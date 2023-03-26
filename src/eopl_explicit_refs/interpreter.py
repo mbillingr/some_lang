@@ -25,6 +25,9 @@ def analyze_expr(exp: ast.Expression, env: Env) -> Any:
     match exp:
         case ast.Literal(val):
             return lambda _: val
+        case ast.Identifier(name):
+            idx = env.lookup(name)
+            return lambda store: store.get(idx)
         case ast.NewRef(val):
             val_ = analyze_expr(val, env)
             return lambda store: store.newref(val_(store))
@@ -40,6 +43,18 @@ def analyze_expr(exp: ast.Expression, env: Env) -> Any:
                 return Nothing()
 
             return set_ref
+        case ast.Let(var, val, bdy):
+            val_ = analyze_expr(val, env)
+            bdy_env = env.extend(var)
+            bdy_ = analyze_expr(bdy, bdy_env)
+
+            def let(store):
+                store.push(val_(store))
+                result = bdy_(store)
+                store.pop()
+                return result
+
+            return let
         case _:
             raise NotImplementedError(exp)
 
