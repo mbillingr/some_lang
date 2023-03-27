@@ -20,6 +20,7 @@ from eopl_explicit_refs.store import PythonStore as Store
         (0, "let x = 0 in x"),
         (1, "let x = 0 in let x = 1 in x"),
         (0, "let x = 0 in let y = 1 in x"),
+        (0, "let x = 0 in 1; 2; x"),
         # References
         (Store.Ref(1), "newref 1"),
         (2, "let x = newref 2 in deref x"),

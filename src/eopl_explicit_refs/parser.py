@@ -126,31 +126,36 @@ def parse_atom(ts: TokenStream):
             _, _, sp2 = expect_token(ts, ")")
             return spanned(span.merge(sp2), inner)
         case "begin", _, span:
-            stmts = []
-            while True:
-                stmts.append(parse_statement(ts))
-                match ts.peek():
-                    case ";", _, _:
-                        pass
-                    case ts.EOF:
-                        break
-                    case _:
-                        break
-                ts.get_next()
-            expr = stmts.pop().expr
-            while stmts:
-                s = stmts.pop()
-                expr = spanned(get_span(s).merge(get_span(expr)), ast.Sequence(s, expr))
+            expr = parse_sequence(ts)
             return spanned(span.merge(get_span(expr)), expr)
         case "let", _, span:
             var = parse_symbol(ts)
             expect_token(ts, "=")
             val = parse_expr(ts)
             expect_token(ts, "in")
-            body = parse_expr(ts)
+            body = parse_sequence(ts)
             return spanned(span.merge(get_span(body)), ast.Let(var, val, body))
         case token:
             raise UnexpectedToken(token)
+
+
+def parse_sequence(ts):
+    stmts = []
+    while True:
+        stmts.append(parse_statement(ts))
+        match ts.peek():
+            case ";", _, _:
+                pass
+            case ts.EOF:
+                break
+            case _:
+                break
+        ts.get_next()
+    expr = stmts.pop().expr  # last statement is expected to be an expression
+    while stmts:
+        s = stmts.pop()
+        expr = spanned(get_span(s).merge(get_span(expr)), ast.Sequence(s, expr))
+    return expr
 
 
 def parse_prefix_operator(rbp, ts):
