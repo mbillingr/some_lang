@@ -26,6 +26,12 @@ class ExprStmt(Statement):
 
 
 @dataclasses.dataclass
+class Assignment(Statement):
+    lhs: Expression
+    rhs: Expression
+
+
+@dataclasses.dataclass
 class Sequence(Expression):
     pre: Statement
     exp: Expression

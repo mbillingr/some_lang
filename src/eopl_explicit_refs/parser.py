@@ -59,6 +59,12 @@ def parse_program(ts: TokenStream) -> ast.Program:
 
 def parse_statement(ts: TokenStream) -> ast.Statement:
     match ts.peek():
+        case "set", _, span:
+            ts.get_next()
+            lhs = parse_expr(ts)
+            expect_token(ts, "=")
+            rhs = parse_expr(ts)
+            return spanned(span.merge(get_span(rhs)), ast.Assignment(lhs, rhs))
         case _:
             expr = parse_expr(ts)
             return spanned(get_span(expr), ast.ExprStmt(expr))
@@ -105,7 +111,7 @@ def is_delimiter(t, k) -> bool:
     match t, k:
         case "true" | "false", _:
             return False
-        case ":=" | ";", _:
+        case "=" | ";", _:
             return True
         case _, TokenKind.RPAREN | TokenKind.KEYWORD:
             return True

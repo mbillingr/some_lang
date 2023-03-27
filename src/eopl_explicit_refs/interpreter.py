@@ -22,13 +22,18 @@ def analyze_program(pgm: ast.Program) -> Any:
 
 def analyze_stmt(stmt: ast.Statement, env: Env) -> Callable:
     match stmt:
-        case ast.ExprStmt(_):
-            # Let's assume expressions have no side effects, so we can just ignore them here' \
+        case ast.ExprStmt(expr):
+            # Let's assume expressions have no side effects, so we can just ignore them here
+            _ = analyze_expr(expr, env)  # we still check if the expression is valid
             def nop(store):
                 pass
 
             return nop
 
+        case ast.Assignment(lhs, rhs):
+            lhs_ = analyze_expr(lhs, env)
+            rhs_ = analyze_expr(rhs, env)
+            return lambda store: store.setref(lhs_(store), rhs_(store))
         case _:
             raise NotImplementedError(stmt)
 
