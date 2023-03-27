@@ -33,5 +33,5 @@ class Entry(Env):
 
     def lookup(self, var: str) -> int:
         if self.var == var:
-            return -1
-        return self.nxt.lookup(var) - 1
+            return 0
+        return self.nxt.lookup(var) + 1

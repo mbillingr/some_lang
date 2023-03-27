@@ -81,7 +81,7 @@ def analyze_expr(exp: ast.Expression, env: Env) -> Callable:
             bdy_ = analyze_expr(bdy, bdy_env)
 
             def the_function(store):
-                return Closure(bdy_)
+                return Closure(store, bdy_)
 
             return the_function
 
@@ -93,12 +93,16 @@ def analyze_expr(exp: ast.Expression, env: Env) -> Callable:
             raise NotImplementedError(exp)
 
 
-@dataclasses.dataclass
 class Closure:
-    body: Callable
+    def __init__(self, store, body):
+        self.body = body
+        self.saved_stack = store.stack
 
     def apply(self, arg, store):
-        store.push(arg)
-        ret = self.body(store)
-        store.pop()
-        return ret
+        preserved_stack = store.stack
+        store.stack = self.saved_stack
+        try:
+            store.push(arg)
+            return self.body(store)
+        finally:
+            store.stack = preserved_stack

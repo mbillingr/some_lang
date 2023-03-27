@@ -8,19 +8,24 @@ class PythonStore:
         val: Any
 
     def __init__(self):
-        self.stack = []
+        self.stack = ()
 
     def clear(self):
-        self.stack = []
+        self.stack = ()
 
     def push(self, val):
-        self.stack.append(val)
+        self.stack = (val, self.stack)
 
     def pop(self):
-        return self.stack.pop()
+        item = self.stack[0]
+        self.stack = self.stack[1]
+        return item
 
     def get(self, idx: int):
-        return self.stack[idx]
+        frame = self.stack
+        for _ in range(idx):
+            frame = self.stack[1]
+        return frame[0]
 
     def is_reference(self, x: Any) -> bool:
         return isinstance(x, PythonStore.Ref)
