@@ -62,3 +62,15 @@ class Let(Expression):
     var: Identifier
     val: Expression
     bdy: Expression
+
+
+@dataclasses.dataclass
+class Function(Expression):
+    var: Identifier
+    bdy: Expression
+
+
+@dataclasses.dataclass
+class Application(Expression):
+    fun: Expression
+    arg: Expression

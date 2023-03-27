@@ -24,7 +24,9 @@ from eopl_explicit_refs.store import PythonStore as Store
         # References
         (Store.Ref(1), "newref 1"),
         (2, "let x = newref 2 in deref x"),
-        (42, "let x = newref 0 in set x = 42; deref x")
+        (42, "let x = newref 0 in set x = 42; deref x"),
+        # Anonymous Functions
+        (0, "let foo = fn x => x in foo 0"),
     ],
 )
 def test_literals(src, expect):

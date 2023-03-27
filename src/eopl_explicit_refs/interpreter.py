@@ -1,3 +1,4 @@
+import dataclasses
 from typing import Any, Callable
 
 from eopl_explicit_refs.environment import EmptyEnv, Env
@@ -25,6 +26,7 @@ def analyze_stmt(stmt: ast.Statement, env: Env) -> Callable:
         case ast.ExprStmt(expr):
             # Let's assume expressions have no side effects, so we can just ignore them here
             _ = analyze_expr(expr, env)  # we still check if the expression is valid
+
             def nop(store):
                 pass
 
@@ -73,5 +75,30 @@ def analyze_expr(exp: ast.Expression, env: Env) -> Callable:
                 return result
 
             return let
+
+        case ast.Function(var, bdy):
+            bdy_env = env.extend(var)
+            bdy_ = analyze_expr(bdy, bdy_env)
+
+            def the_function(store):
+                return Closure(bdy_)
+
+            return the_function
+
+        case ast.Application(fun, arg):
+            fun_ = analyze_expr(fun, env)
+            arg_ = analyze_expr(arg, env)
+            return lambda store: fun_(store).apply(arg_(store), store)
         case _:
             raise NotImplementedError(exp)
+
+
+@dataclasses.dataclass
+class Closure:
+    body: Callable
+
+    def apply(self, arg, store):
+        store.push(arg)
+        ret = self.body(store)
+        store.pop()
+        return ret

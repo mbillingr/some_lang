@@ -17,22 +17,21 @@ class EmptyEnv(Env):
         pass
 
     def extend(self, var: str):
-        return Entry(var, 0, self)
+        return Entry(var, self)
 
     def lookup(self, var: str) -> int:
         raise LookupError(var)
 
 
 class Entry(Env):
-    def __init__(self, var: str, idx: int, nxt: Env):
+    def __init__(self, var: str, nxt: Env):
         self.var = var
-        self.idx = idx
         self.nxt = nxt
 
     def extend(self, var: str):
-        return Entry(var, self.idx + 1, self)
+        return Entry(var, self)
 
     def lookup(self, var: str) -> int:
         if self.var == var:
-            return self.idx
-        return self.nxt.lookup(var)
+            return -1
+        return self.nxt.lookup(var) - 1
