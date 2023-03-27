@@ -75,10 +75,3 @@ def analyze_expr(exp: ast.Expression, env: Env) -> Callable:
             return let
         case _:
             raise NotImplementedError(exp)
-
-
-class Nothing:
-    """No value - this is "returned" by statements and such."""
-
-    def __str__(self):
-        return "<nothing>"
