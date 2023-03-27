@@ -200,16 +200,13 @@ class MySet(Generic[T]):
     def __init__(self, iterable: Iterable[T] = ()):
         self.elems = {x: () for x in iterable}
 
-    def copy(self) -> MySet[T]:
-        return MySet(self.elems.copy())
-
     def add(self, item):
         self.elems[item] = ()
 
     def pop(self) -> T:
         if not self.elems:
             raise IndexError()
-        elem = next(iter(self))
+        elem = next(iter(self.elems))
         del self.elems[elem]
         return elem
 
@@ -217,12 +214,11 @@ class MySet(Generic[T]):
         return bool(self.elems)
 
     def __iter__(self):
-        return iter(self.elems.keys())
+        return iter(self.elems)
 
-    def __or__(self, other):
-        out = self.copy()
-        out.elems |= other.elems
-        return out
+    def __ior__(self, other):
+        self.elems |= other.elems
+        return self
 
     def __sub__(self, other):
         return MySet(x for x in self.elems if x not in other)
