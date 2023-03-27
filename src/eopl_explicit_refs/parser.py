@@ -9,7 +9,6 @@ from eopl_explicit_refs.tokenizer import (
 )
 
 infix_binding_power = {
-    ":=": (2, 1),
     "!=": (3, 4),
     "==": (3, 4),
     "<": (3, 4),
@@ -196,9 +195,6 @@ def parse_prefix_operator(rbp, ts):
 
 def parse_infix_operator(lhs, rbp, ts):
     match ts.get_next():
-        case ":=", _, span:
-            rhs = parse_expr(ts, rbp)
-            return spanned(span.merge(get_span(rhs)), ast.SetRef(lhs, rhs))
         case op, TokenKind.OPERATOR, span:
             rhs = parse_expr(ts, rbp)
 

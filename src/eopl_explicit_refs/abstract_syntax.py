@@ -58,12 +58,6 @@ class DeRef(Expression):
 
 
 @dataclasses.dataclass
-class SetRef(Expression):
-    ref: Expression
-    val: Expression
-
-
-@dataclasses.dataclass
 class Let(Expression):
     var: Identifier
     val: Expression

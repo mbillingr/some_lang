@@ -51,15 +51,6 @@ def analyze_expr(exp: ast.Expression, env: Env) -> Callable:
         case ast.DeRef(ref):
             ref_ = analyze_expr(ref, env)
             return lambda store: store.deref(ref_(store))
-        case ast.SetRef(ref, val):
-            ref_ = analyze_expr(ref, env)
-            val_ = analyze_expr(val, env)
-
-            def set_ref(store):
-                store.setref(ref_(store), val_(store))
-                return Nothing()
-
-            return set_ref
         case ast.Sequence(stmt, expr):
             stmt_ = analyze_stmt(stmt, env)
             expr_ = analyze_expr(expr, env)
