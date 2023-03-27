@@ -4,7 +4,7 @@ import abc
 import bisect
 import dataclasses
 import json
-from typing import Iterator, TypeVar, Iterable, Any, Generic, Self
+from typing import Iterator, TypeVar, Iterable, Any, Generic, Self, Optional
 
 
 class ScannerError(Exception):
@@ -66,7 +66,7 @@ class Regex(abc.ABC):
 
     nfa_start: Node
     nfa_end: Node
-    alphabet: set[str]
+    alphabet: MySet[str]
 
     def __add__(self, other):
         return Sequence(self, to_regex(other))
@@ -105,7 +105,7 @@ class Literal(Regex):
             current = end
         self.nfa_end = end
 
-        self.alphabet = set(text)
+        self.alphabet = MySet(text)
 
 
 class Sequence(Regex):
@@ -141,7 +141,7 @@ class Alternative(Regex):
 
         self.nfa_start = s
         self.nfa_end = e
-        self.alphabet = set()
+        self.alphabet = MySet()
         for a in alts:
             self.alphabet |= a.alphabet
 
@@ -196,11 +196,43 @@ class Opt(Regex):
 T = TypeVar("T")
 
 
+class MySet(Generic[T]):
+    def __init__(self, iterable: Iterable[T] = ()):
+        self.elems = {x: () for x in iterable}
+
+    def copy(self) -> MySet[T]:
+        return MySet(self.elems.copy())
+
+    def add(self, item):
+        self.elems[item] = ()
+
+    def pop(self) -> T:
+        if not self.elems:
+            raise IndexError()
+        elem = next(iter(self))
+        del self.elems[elem]
+        return elem
+
+    def __bool__(self):
+        return bool(self.elems)
+
+    def __iter__(self):
+        return iter(self.elems.keys())
+
+    def __or__(self, other):
+        out = self.copy()
+        out.elems |= other.elems
+        return out
+
+    def __sub__(self, other):
+        return MySet(x for x in self.elems if x not in other)
+
+
 class ScannerGenerator(Generic[T]):
     """Generate a scanner from pairs of tokens and regexes"""
 
     def __init__(self):
-        self.alphabet: set[str] = set()
+        self.alphabet: MySet[str] = MySet()
         self.nfas: list[Node] = []
         self.accept: dict[Node, T] = {}
         self.token_preference: dict[tuple[T, T], T] = {}
@@ -275,8 +307,8 @@ class ScannerGenerator(Generic[T]):
 
     def _subset_construction(self, start_node: Node):
         transitions = {}
-        q0 = epsilon_closure({start_node})
-        subsets = {tuple(q0)}
+        q0 = epsilon_closure(MySet({start_node}))
+        subsets = MySet({tuple(q0)})
         worklist = [q0]
         while worklist:
             q = worklist.pop()
@@ -292,9 +324,9 @@ class ScannerGenerator(Generic[T]):
 
 
 class Node:
-    def __init__(self, ch_edges: dict[str, Node] = None, epsilon: set[Node] = None):
+    def __init__(self, ch_edges: dict[str, Node] = None, epsilon: MySet[Node] = None):
         self.ch_edges = ch_edges or {}
-        self.epsilon = epsilon or set()
+        self.epsilon = epsilon or MySet()
 
     def __hash__(self):
         return hash(id(self))
@@ -303,9 +335,9 @@ class Node:
         return self is other
 
 
-def epsilon_closure(nodes: set[Node]) -> set[Node]:
+def epsilon_closure(nodes: MySet[Node]) -> MySet[Node]:
     """extend a set of nodes with all nodes reachable through epsilon edges"""
-    ec = set()
+    ec = MySet()
     while nodes:
         node = nodes.pop()
         if node not in ec:
@@ -314,9 +346,9 @@ def epsilon_closure(nodes: set[Node]) -> set[Node]:
     return ec
 
 
-def delta(nodes: set[Node], ch: str) -> set[Node]:
+def delta(nodes: MySet[Node], ch: str) -> MySet[Node]:
     """compute the transition between two sets of nodes"""
-    out = set()
+    out = MySet()
     for node in nodes:
         try:
             out.add(node.ch_edges[ch])
@@ -391,7 +423,12 @@ class Scanner(Generic[T]):
         for k, v in self._transitions.items():
             transitions.setdefault(k[0], {})[k[1]] = v
         with open(filename, "w") as f:
-            json.dump({"accept": self._accept, "transitions": transitions}, f, indent=4, sort_keys=True)
+            json.dump(
+                {"accept": self._accept, "transitions": transitions},
+                f,
+                indent=4,
+                sort_keys=True,
+            )
 
     @staticmethod
     def load(TokenType, filename):
