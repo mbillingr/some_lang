@@ -15,7 +15,7 @@ def init_env() -> Env:
 def analyze_program(pgm: ast.Program) -> Any:
     match pgm:
         case ast.Program(exp):
-            prog = analyze_expr(exp, init_env())
+            prog = analyze_expr(exp, init_env(), tail=False)
 
             def program(store):
                 store.clear()
@@ -28,7 +28,9 @@ def analyze_stmt(stmt: ast.Statement, env: Env) -> Callable:
     match stmt:
         case ast.ExprStmt(expr):
             # Let's assume expressions have no side effects, so we can just ignore them here
-            _ = analyze_expr(expr, env)  # we still check if the expression is valid
+            _ = analyze_expr(
+                expr, env, tail=False
+            )  # we still check if the expression is valid
 
             def nop(store):
                 pass
@@ -36,14 +38,14 @@ def analyze_stmt(stmt: ast.Statement, env: Env) -> Callable:
             return nop
 
         case ast.Assignment(lhs, rhs):
-            lhs_ = analyze_expr(lhs, env)
-            rhs_ = analyze_expr(rhs, env)
+            lhs_ = analyze_expr(lhs, env, tail=False)
+            rhs_ = analyze_expr(rhs, env, tail=False)
             return lambda store: store.setref(lhs_(store), rhs_(store))
         case _:
             raise NotImplementedError(stmt)
 
 
-def analyze_expr(exp: ast.Expression, env: Env) -> Callable:
+def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
     match exp:
         case ast.Literal(val):
             return lambda _: val
@@ -51,8 +53,8 @@ def analyze_expr(exp: ast.Expression, env: Env) -> Callable:
             idx = env.lookup(name)
             return lambda store: store.get(idx)
         case ast.BinOp(lhs, rhs, op):
-            lhs_ = analyze_expr(lhs, env)
-            rhs_ = analyze_expr(rhs, env)
+            lhs_ = analyze_expr(lhs, env, tail=False)
+            rhs_ = analyze_expr(rhs, env, tail=False)
             match op:
                 case "+":
                     return lambda store: lhs_(store) + rhs_(store)
@@ -65,14 +67,14 @@ def analyze_expr(exp: ast.Expression, env: Env) -> Callable:
                 case _:
                     raise NotImplementedError(op)
         case ast.NewRef(val):
-            val_ = analyze_expr(val, env)
+            val_ = analyze_expr(val, env, tail=False)
             return lambda store: store.newref(val_(store))
         case ast.DeRef(ref):
-            ref_ = analyze_expr(ref, env)
+            ref_ = analyze_expr(ref, env, tail=False)
             return lambda store: store.deref(ref_(store))
         case ast.Sequence(stmt, expr):
             stmt_ = analyze_stmt(stmt, env)
-            expr_ = analyze_expr(expr, env)
+            expr_ = analyze_expr(expr, env, tail=tail)
 
             def sequence(store):
                 stmt_(store)
@@ -82,8 +84,8 @@ def analyze_expr(exp: ast.Expression, env: Env) -> Callable:
 
         case ast.Let(var, val, bdy):
             let_env = env.extend(var)
-            val_ = analyze_expr(val, let_env)
-            bdy_ = analyze_expr(bdy, let_env)
+            val_ = analyze_expr(val, let_env, tail=False)
+            bdy_ = analyze_expr(bdy, let_env, tail=tail)
 
             def let(store):
                 store.push(UNDEFINED)
@@ -99,7 +101,7 @@ def analyze_expr(exp: ast.Expression, env: Env) -> Callable:
             for arm in arms:
                 matcher, bound = analyze_pattern(arm.pat)
                 bdy_env = env.extend(*bound)
-                bdy_ = analyze_expr(arm.bdy, bdy_env)
+                bdy_ = analyze_expr(arm.bdy, bdy_env, tail=True)
                 match_bodies.append((matcher, bdy_))
 
             def the_function(store):
@@ -108,9 +110,16 @@ def analyze_expr(exp: ast.Expression, env: Env) -> Callable:
             return the_function
 
         case ast.Application(fun, arg):
-            fun_ = analyze_expr(fun, env)
-            arg_ = analyze_expr(arg, env)
-            return lambda store: fun_(store).apply(arg_(store), store)
+            fun_ = analyze_expr(fun, env, tail=False)
+            arg_ = analyze_expr(arg, env, tail=False)
+            if tail:
+
+                def tail_call(store):
+                    raise TailCall(fun_(store), arg_(store))
+
+                return tail_call
+            else:
+                return lambda store: fun_(store).apply(arg_(store), store)
         case _:
             raise NotImplementedError(exp)
 
@@ -142,15 +151,29 @@ class Closure:
 
     def apply(self, arg, store):
         preserved_stack = store.stack
-        store.stack = self.saved_stack
-        for matcher, body in self.match_bodies:
-            try:
-                bindings = matcher(arg)
-            except MatcherError:
-                continue
-            try:
-                store.push(*bindings)
-                return body(store)
-            finally:
-                store.stack = preserved_stack
-        raise MatcherError("no pattern matched")
+        try:
+            store.stack = self.saved_stack
+            match_bodies = self.match_bodies
+            while True:
+                try:
+                    for matcher, body in match_bodies:
+                        try:
+                            bindings = matcher(arg)
+                        except MatcherError:
+                            continue
+                        store.push(*bindings)
+                        return body(store)
+                    raise MatcherError("no pattern matched")
+                except TailCall as tc:
+                    store.stack = tc.func.saved_stack
+                    match_bodies = tc.func.match_bodies
+                    arg = tc.arg
+        finally:
+            store.stack = preserved_stack
+
+
+
+@dataclasses.dataclass
+class TailCall(Exception):
+    func: Closure
+    arg: Any

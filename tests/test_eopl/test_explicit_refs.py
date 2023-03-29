@@ -42,7 +42,7 @@ from eopl_explicit_refs.store import PythonStore as Store
         (1, "(let x = 1 in (fn y => x)) 0"),
         # Recursive Functions
         (10, "let sum = fn 0 => 0 | n => n + (sum (n - 1)) in sum 4"),
-        (10000*9999//2, "let sum = fn 0 => 0 | n => n + (sum (n - 1)) in sum 10000"),
+        (0, "let red = fn 0 => 0 | n => red (n - 1) in red 10000"),
     ],
 )
 def test_literals(src, expect):
