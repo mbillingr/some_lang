@@ -172,8 +172,8 @@ def parse_prefix_operator(rbp, ts):
                 ast.UnaryOp(rhs, op_types[op], op),
             )
         case "fn", _, span:
-            arm = parse_match_arm(ts)
-            return spanned(span.merge(get_span(arm)), ast.Function([arm]))
+            arms = parse_match_arms(ts)
+            return spanned(span.merge(get_span(arms[-1])), ast.Function(arms))
         case "newref", _, span:
             val = parse_expr(ts, rbp)
             return spanned(span.merge(get_span(val)), ast.NewRef(val))
@@ -219,11 +219,21 @@ def parse_postfix_operator(lhs, ts):
             raise UnexpectedToken(token)
 
 
+def parse_match_arms(ts) -> list[ast.MatchArm]:
+    arms = [parse_match_arm(ts)]
+    while ts.peek()[0] == "|":
+        ts.get_next()
+        arms.append(parse_match_arm(ts))
+    return arms
+
+
 def parse_match_arm(ts) -> ast.MatchArm:
     pat = parse_pattern(ts)
     expect_token(ts, "=>")
     body = parse_expr(ts)
     return spanned(get_span(pat).merge(get_span(body)), ast.MatchArm(pat, body))
+
+
 def parse_pattern(ts) -> ast.Pattern:
     match ts.peek():
         case ident, TokenKind.IDENTIFIER, span:

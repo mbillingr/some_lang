@@ -102,10 +102,12 @@ def analyze_pattern(pat: ast.Pattern) -> tuple[Callable, list[ast.Symbol]]:
         case ast.BindingPattern(name):
             return lambda val: (val,), [name]
         case ast.LiteralPattern(value):
+
             def literal_matcher(val):
                 if value == val:
-                    return value,
+                    return (value,)
                 raise MatcherError(value, val)
+
             return literal_matcher, []
         case _:
             raise NotImplementedError(pat)
