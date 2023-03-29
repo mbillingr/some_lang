@@ -40,6 +40,19 @@ class Assignment(Statement):
 
 
 @dataclasses.dataclass
+class IfStatement(Statement):
+    condition: Expression
+    consequence: Statement
+    alternative: Statement
+
+
+@dataclasses.dataclass
+class Statements(Statement):
+    fst: Statement
+    snd: Statement
+
+
+@dataclasses.dataclass
 class Sequence(Expression):
     pre: Statement
     exp: Expression
@@ -70,6 +83,13 @@ class NewRef(Expression):
 @dataclasses.dataclass
 class DeRef(Expression):
     ref: Expression
+
+
+@dataclasses.dataclass
+class Conditional(Expression):
+    condition: Expression
+    consequence: Expression
+    alternative: Expression
 
 
 @dataclasses.dataclass
@@ -104,3 +124,13 @@ class BindingPattern(Pattern):
 @dataclasses.dataclass
 class LiteralPattern(Pattern):
     value: Any
+
+
+def stmt_to_expr(stmt: Statement) -> Expression:
+    match stmt:
+        case ExprStmt(x):
+            return x
+        case IfStatement(a, b, c):
+            return Conditional(a, stmt_to_expr(b), stmt_to_expr(c))
+        case _:
+            raise TypeError(f"Can't convert {type(stmt).__name__} to expression")

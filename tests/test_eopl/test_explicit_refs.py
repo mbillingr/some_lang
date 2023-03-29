@@ -23,6 +23,11 @@ from eopl_explicit_refs.store import PythonStore as Store
         # Sequence
         (0, "begin 0"),
         (3, "begin 1; 2; 3"),
+        # Conditional Expression
+        (1, "if true then 1 else 2"),
+        (2, "if false then 1 else 2"),
+        # If Statement
+        (0, "let x = newref 0 in if true then set x = 1 else set x = 2; x"),  # todo: there is an ambiguity because blocks are not delimited: is ;x part of the else or the let?
         # Binding
         (0, "let x = 0 in x"),
         (1, "let x = 0 in let x = 1 in x"),

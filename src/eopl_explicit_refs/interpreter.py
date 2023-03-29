@@ -82,6 +82,11 @@ def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
 
             return sequence
 
+        case ast.Conditional(a, b, c):
+            cond_ = analyze_expr(a, env, tail=False)
+            then_ = analyze_expr(b, env, tail=tail)
+            else_ = analyze_expr(c, env, tail=tail)
+            return lambda store: then_(store) if cond_(store) else else_(store)
         case ast.Let(var, val, bdy):
             let_env = env.extend(var)
             val_ = analyze_expr(val, let_env, tail=False)
@@ -170,7 +175,6 @@ class Closure:
                     arg = tc.arg
         finally:
             store.stack = preserved_stack
-
 
 
 @dataclasses.dataclass

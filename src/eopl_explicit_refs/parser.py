@@ -58,6 +58,14 @@ def parse_program(ts: TokenStream) -> ast.Program:
 
 def parse_statement(ts: TokenStream) -> ast.Statement:
     match ts.peek():
+        case "if", _, span:
+            ts.get_next()
+            cond = parse_expr(ts)
+            expect_token(ts, "then")
+            lhs = parse_statements(ts)
+            expect_token(ts, "else")
+            rhs = parse_statements(ts)
+            return spanned(span.merge(get_span(rhs)), ast.IfStatement(cond, lhs, rhs))
         case "set", _, span:
             ts.get_next()
             lhs = parse_expr(ts)
@@ -156,11 +164,35 @@ def parse_sequence(ts):
             case _:
                 break
         ts.get_next()
-    expr = stmts.pop().expr  # last statement is expected to be an expression
+    expr = ast.stmt_to_expr(
+        stmts.pop()
+    )  # last statement is expected to be an expression
     while stmts:
         s = stmts.pop()
         expr = spanned(get_span(s).merge(get_span(expr)), ast.Sequence(s, expr))
     return expr
+
+
+def parse_statements(ts):
+    stmts = []
+    while True:
+        stmts.append(parse_statement(ts))
+        match ts.peek():
+            case ";", _, _:
+                pass
+            case ts.EOF:
+                break
+            case _:
+                break
+        ts.get_next()
+    compound_statement = stmts.pop()
+    while stmts:
+        s = stmts.pop()
+        compound_statement = spanned(
+            get_span(s).merge(get_span(compound_statement)),
+            ast.Statements(s, compound_statement),
+        )
+    return compound_statement
 
 
 def parse_prefix_operator(rbp, ts):
