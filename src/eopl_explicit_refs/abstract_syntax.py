@@ -3,20 +3,28 @@ import dataclasses
 from typing import Any
 
 
-class Expression(abc.ABC):
+class AstNode(abc.ABC):
     pass
 
 
-class Statement(abc.ABC):
+class Expression(AstNode):
+    pass
+
+
+class Statement(AstNode):
+    pass
+
+
+class Pattern(AstNode):
     pass
 
 
 @dataclasses.dataclass
-class Program:
+class Program(AstNode):
     exp: Expression
 
 
-class Symbol(str):
+class Symbol(str, AstNode):
     pass
 
 
@@ -65,12 +73,27 @@ class Let(Expression):
 
 
 @dataclasses.dataclass
-class Function(Expression):
-    var: Identifier
+class MatchArm(AstNode):
+    pat: Pattern
     bdy: Expression
+
+
+@dataclasses.dataclass
+class Function(Expression):
+    patterns: list[MatchArm]
 
 
 @dataclasses.dataclass
 class Application(Expression):
     fun: Expression
     arg: Expression
+
+
+@dataclasses.dataclass
+class BindingPattern(Pattern):
+    name: Symbol
+
+
+@dataclasses.dataclass
+class LiteralPattern(Pattern):
+    value: Any

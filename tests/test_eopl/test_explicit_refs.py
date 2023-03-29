@@ -27,8 +27,10 @@ from eopl_explicit_refs.store import PythonStore as Store
         (42, "let x = newref 0 in set x = 42; deref x"),
         # Anonymous Functions
         (0, "let foo = fn x => x in foo 0"),
-        (11, "let not = fn 0 => 11 | x => x in foo 0"),
-        (99, "let not = fn 0 => 11 | x => x in foo 99"),
+        (1, "let zzz = fn 0 => 1 in zzz 0"),
+        (1, "let zzz = fn true => 1 in zzz true"),
+        (11, "let foo = fn 0 => 11 | x => x in foo 0"),
+        (99, "let foo = fn 0 => 11 | x => x in foo 99"),
         # Closure
         (1, "(let x = 1 in (fn y => x)) 0"),
     ],

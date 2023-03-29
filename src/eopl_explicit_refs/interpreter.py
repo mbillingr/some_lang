@@ -76,12 +76,16 @@ def analyze_expr(exp: ast.Expression, env: Env) -> Callable:
 
             return let
 
-        case ast.Function(var, bdy):
-            bdy_env = env.extend(var)
-            bdy_ = analyze_expr(bdy, bdy_env)
+        case ast.Function(arms):
+            match_bodies = []
+            for arm in arms:
+                matcher, bound = analyze_pattern(arm.pat)
+                bdy_env = env.extend(*bound)
+                bdy_ = analyze_expr(arm.bdy, bdy_env)
+                match_bodies.append((matcher, bdy_))
 
             def the_function(store):
-                return Closure(store, bdy_)
+                return Closure(store, match_bodies)
 
             return the_function
 
@@ -93,16 +97,40 @@ def analyze_expr(exp: ast.Expression, env: Env) -> Callable:
             raise NotImplementedError(exp)
 
 
+def analyze_pattern(pat: ast.Pattern) -> tuple[Callable, list[ast.Symbol]]:
+    match pat:
+        case ast.BindingPattern(name):
+            return lambda val: (val,), [name]
+        case ast.LiteralPattern(value):
+            def literal_matcher(val):
+                if value == val:
+                    return value,
+                raise MatcherError(value, val)
+            return literal_matcher, []
+        case _:
+            raise NotImplementedError(pat)
+
+
+class MatcherError(Exception):
+    pass
+
+
 class Closure:
-    def __init__(self, store, body):
-        self.body = body
+    def __init__(self, store, match_bodies):
+        self.match_bodies = match_bodies
         self.saved_stack = store.stack
 
     def apply(self, arg, store):
         preserved_stack = store.stack
         store.stack = self.saved_stack
-        try:
-            store.push(arg)
-            return self.body(store)
-        finally:
-            store.stack = preserved_stack
+        for matcher, body in self.match_bodies:
+            try:
+                bindings = matcher(arg)
+            except MatcherError:
+                continue
+            try:
+                store.push(*bindings)
+                return body(store)
+            finally:
+                store.stack = preserved_stack
+        raise MatcherError("no pattern matched")
