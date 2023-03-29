@@ -198,7 +198,7 @@ def parse_infix_operator(lhs, rbp, ts):
 
             return spanned(
                 make_operator_span(span, get_span(lhs), get_span(rhs)),
-                ast.BinOp(lhs, rhs, op_types[op], op),
+                ast.BinOp(lhs, rhs, op),
             )
         case token:
             raise UnexpectedToken(token)

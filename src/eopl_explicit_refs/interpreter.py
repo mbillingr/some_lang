@@ -47,6 +47,20 @@ def analyze_expr(exp: ast.Expression, env: Env) -> Callable:
         case ast.Identifier(name):
             idx = env.lookup(name)
             return lambda store: store.get(idx)
+        case ast.BinOp(lhs, rhs, op):
+            lhs_ = analyze_expr(lhs, env)
+            rhs_ = analyze_expr(rhs, env)
+            match op:
+                case "+":
+                    return lambda store: lhs_(store) + rhs_(store)
+                case "-":
+                    return lambda store: lhs_(store) - rhs_(store)
+                case "*":
+                    return lambda store: lhs_(store) * rhs_(store)
+                case "/":
+                    return lambda store: lhs_(store) / rhs_(store)
+                case _:
+                    raise NotImplementedError(op)
         case ast.NewRef(val):
             val_ = analyze_expr(val, env)
             return lambda store: store.newref(val_(store))

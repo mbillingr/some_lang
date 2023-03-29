@@ -56,6 +56,13 @@ class Literal(Expression):
 
 
 @dataclasses.dataclass
+class BinOp(Expression):
+    lhs: Expression
+    rhs: Expression
+    op: str
+
+
+@dataclasses.dataclass
 class NewRef(Expression):
     val: Expression
 

@@ -13,6 +13,13 @@ from eopl_explicit_refs.store import PythonStore as Store
         (0, "0"),
         (42, "42"),
         (-123, "-123"),
+        # Operators
+        (3, "1 + 2"),
+        (-1, "1 - 2"),
+        (12, "6 * 2"),
+        (3, "6 / 2"),
+        (11, "1 + 2 * 3 + 4"),
+        (21, "(1 + 2) * (3 + 4)"),
         # Sequence
         (0, "begin 0"),
         (3, "begin 1; 2; 3"),
