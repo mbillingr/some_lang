@@ -14,7 +14,7 @@ class PythonStore:
         self.stack = ()
 
     def push(self, val):
-        self.stack = (val, self.stack)
+        self.stack = [val, self.stack]
 
     def pop(self):
         item = self.stack[0]
@@ -26,6 +26,12 @@ class PythonStore:
         for _ in range(idx):
             frame = self.stack[1]
         return frame[0]
+
+    def set(self, idx: int, val):
+        frame = self.stack
+        for _ in range(idx):
+            frame = self.stack[1]
+        frame[0] = val
 
     def is_reference(self, x: Any) -> bool:
         return isinstance(x, PythonStore.Ref)

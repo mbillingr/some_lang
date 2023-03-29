@@ -5,6 +5,9 @@ from eopl_explicit_refs.environment import EmptyEnv, Env
 from eopl_explicit_refs import abstract_syntax as ast
 
 
+UNDEFINED = object()
+
+
 def init_env() -> Env:
     return EmptyEnv()
 
@@ -78,12 +81,13 @@ def analyze_expr(exp: ast.Expression, env: Env) -> Callable:
             return sequence
 
         case ast.Let(var, val, bdy):
-            val_ = analyze_expr(val, env)
-            bdy_env = env.extend(var)
-            bdy_ = analyze_expr(bdy, bdy_env)
+            let_env = env.extend(var)
+            val_ = analyze_expr(val, let_env)
+            bdy_ = analyze_expr(bdy, let_env)
 
             def let(store):
-                store.push(val_(store))
+                store.push(UNDEFINED)
+                store.set(0, val_(store))
                 result = bdy_(store)
                 store.pop()
                 return result
