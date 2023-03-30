@@ -57,6 +57,8 @@ def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
         case ast.Identifier(name):
             idx = env.lookup(name)
             return lambda store: store.get(idx)
+        case ast.EmptyList():
+            return lambda _: empty_list()
         case ast.BinOp(lhs, rhs, op):
             lhs_ = analyze_expr(lhs, env, tail=False)
             rhs_ = analyze_expr(rhs, env, tail=False)
@@ -69,6 +71,8 @@ def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
                     return lambda store: lhs_(store) * rhs_(store)
                 case "/":
                     return lambda store: lhs_(store) / rhs_(store)
+                case "::":
+                    return lambda store: list_cons(lhs_(store), rhs_(store))
                 case _:
                     raise NotImplementedError(op)
         case ast.NewRef(val):
@@ -186,3 +190,11 @@ class Closure:
 class TailCall(Exception):
     func: Closure
     arg: Any
+
+
+def empty_list():
+    return ()
+
+
+def list_cons(car, cdr):
+    return car, cdr

@@ -15,24 +15,25 @@ infix_binding_power = {
     ">": (3, 4),
     "<=": (3, 4),
     ">=": (3, 4),
-    "+": (5, 6),
-    "-": (5, 6),
-    "*": (7, 8),
-    "/": (7, 8),
-    "**": (14, 13),
-    "< apply >": (15, 16),  # function call
+    "::": (6, 5),
+    "+": (7, 8),
+    "-": (7, 8),
+    "*": (9, 10),
+    "/": (9, 10),
+    "**": (16, 15),
+    "< apply >": (17, 18),  # function call
 }
 
 prefix_binding_power = {
     "fn": (None, 1),
-    "deref": (None, 3),
-    "newref": (None, 3),
-    "if": (None, 3),
-    "~": (None, 9),
+    "if": (None, 1),
+    "newref": (None, 5),
+    "~": (None, 11),
+    "deref": (None, 99),
 }
 
 postfix_binding_power = {
-    "!": (11, None),
+    "!": (13, None),
 }
 
 op_types = {
@@ -79,7 +80,9 @@ def parse_statement(ts: TokenStream) -> ast.Statement:
             return spanned(get_span(expr), ast.ExprStmt(expr))
 
 
-def parse_expr(ts: TokenStream, min_bp: int = 0) -> ast.Expression:
+def parse_expr(
+    ts: TokenStream, min_bp: int = 0, invisible_application=True
+) -> ast.Expression:
     match ts.peek():
         case op, _, _ if op in prefix_binding_power:
             _, rbp = prefix_binding_power[op]
@@ -103,7 +106,7 @@ def parse_expr(ts: TokenStream, min_bp: int = 0) -> ast.Expression:
                 break
             case t, k, _ if is_delimiter(t, k):
                 break
-            case _:
+            case _ if invisible_application:
                 # we treat application as an "invisible" infix operator
                 lbp, rbp = infix_binding_power["< apply >"]
                 if lbp < min_bp:
@@ -112,6 +115,8 @@ def parse_expr(ts: TokenStream, min_bp: int = 0) -> ast.Expression:
                 lhs = spanned(
                     get_span(lhs).merge(get_span(arg)), ast.Application(lhs, arg)
                 )
+            case _:
+                break
 
     return lhs
 
@@ -143,6 +148,9 @@ def parse_atom(ts: TokenStream):
         case "{", _, span:
             expr = parse_block_expression(ts, skip_opening=True)
             return spanned(span.merge(get_span(expr)), expr)
+        case "[", _, span:
+            expr = parse_list_expression(ts, skip_opening=True)
+            return spanned(span.merge(get_span(expr)), expr)
         case "let", _, span:
             var = parse_symbol(ts)
             expect_token(ts, "=")
@@ -161,20 +169,22 @@ def parse_block_expression(ts, skip_opening: bool):
     stmts = []
     while True:
         stmts.append(parse_statement(ts))
-        match ts.peek():
-            case "}", _, _:
+        match ts.get_next():
+            case "}", _, span:
                 break
             case ";", _, _:
-                ts.get_next()
+                pass
             case tok:
                 raise UnexpectedToken(tok)
-    expr = ast.stmt_to_expr(
-        stmts.pop()
-    )  # last statement is expected to be an expression
+    # last statement is expected to be an expression
+    last = stmts.pop()
+    expr = ast.stmt_to_expr(last)
+    expr_span = get_span(last)
     while stmts:
         s = stmts.pop()
-        expr = spanned(get_span(s).merge(get_span(expr)), ast.BlockExpression(s, expr))
-    return expr
+        expr_span = get_span(s).merge(expr_span)
+        expr = spanned(expr_span, ast.BlockExpression(s, expr))
+    return spanned(expr_span.merge(span), expr)
 
 
 def parse_block_statement(ts, skip_opening: bool):
@@ -184,11 +194,11 @@ def parse_block_statement(ts, skip_opening: bool):
     stmts = []
     while True:
         stmts.append(parse_statement(ts))
-        match ts.peek():
+        match ts.get_next():
             case "}", _, _:
                 break
             case ";", _, _:
-                ts.get_next()
+                pass
             case tok:
                 raise UnexpectedToken(tok)
     compound_statement = stmts.pop()
@@ -199,6 +209,28 @@ def parse_block_statement(ts, skip_opening: bool):
             ast.BlockStatement(s, compound_statement),
         )
     return compound_statement
+
+
+def parse_list_expression(ts, skip_opening: bool):
+    span0 = None
+    if not skip_opening:
+        _, _, span0 = expect_token(ts, "[")
+
+    match ts.peek():
+        case "]", _, span:
+            ts.get_next()
+            result = spanned(span, ast.EmptyList())
+        case _:
+            first = parse_expr(ts, invisible_application=False)
+            rest = parse_list_expression(ts, skip_opening=True)
+            result = spanned(
+                get_span(first).merge(get_span(rest)), ast.BinOp(first, rest, "::")
+            )
+
+    if span0 is not None:
+        return spanned(span0.merge(get_span(result)), result)
+    else:
+        return result
 
 
 def parse_prefix_operator(rbp, ts):
@@ -244,10 +276,6 @@ def parse_infix_operator(lhs, rbp, ts):
 
 def parse_postfix_operator(lhs, ts):
     match ts.get_next():
-        case "(", _, span:
-            arg = parse_expr(ts)
-            _, _, sp2 = expect_token(ts, ")")
-            return spanned(span.merge(sp2), ast.Application(lhs, arg))
         case op, TokenKind.OPERATOR, span:
             return spanned(
                 make_operator_span(span, get_span(lhs)),

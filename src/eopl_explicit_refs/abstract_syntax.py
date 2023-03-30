@@ -105,6 +105,17 @@ class Let(Expression):
 
 
 @dataclasses.dataclass
+class EmptyList(Expression):
+    pass
+
+
+@dataclasses.dataclass
+class ListCons(Expression):
+    car: Expression
+    cdr: Expression
+
+
+@dataclasses.dataclass
 class MatchArm(AstNode):
     pat: Pattern
     bdy: Expression
