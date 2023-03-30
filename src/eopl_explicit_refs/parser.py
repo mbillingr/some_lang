@@ -301,6 +301,19 @@ def parse_match_arm(ts) -> ast.MatchArm:
 
 
 def parse_pattern(ts) -> ast.Pattern:
+    lhs = parse_atomic_pattern(ts)
+    match ts.peek():
+        case "::", _, span:
+            ts.get_next()
+            rhs = parse_pattern(ts)
+            return spanned(
+                get_span(lhs).merge(get_span(rhs)), ast.ListConsPattern(lhs, rhs)
+            )
+        case _:
+            return lhs
+
+
+def parse_atomic_pattern(ts) -> ast.Pattern:
     match ts.peek():
         case ident, TokenKind.IDENTIFIER, span:
             ts.get_next()

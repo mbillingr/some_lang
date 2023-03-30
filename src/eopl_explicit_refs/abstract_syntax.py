@@ -142,6 +142,12 @@ class LiteralPattern(Pattern):
     value: Any
 
 
+@dataclasses.dataclass
+class ListConsPattern(Pattern):
+    car: Pattern
+    cdr: Pattern
+
+
 def stmt_to_expr(stmt: Statement) -> Expression:
     match stmt:
         case ExprStmt(x):

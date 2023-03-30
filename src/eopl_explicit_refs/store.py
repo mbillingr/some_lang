@@ -13,8 +13,9 @@ class PythonStore:
     def clear(self):
         self.stack = ()
 
-    def push(self, val):
-        self.stack = [val, self.stack]
+    def push(self, *val):
+        for v in val:
+            self.stack = [v, self.stack]
 
     def pop(self):
         item = self.stack[0]

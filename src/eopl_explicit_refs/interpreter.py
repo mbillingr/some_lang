@@ -142,14 +142,29 @@ def analyze_pattern(pat: ast.Pattern) -> tuple[Callable, list[ast.Symbol]]:
     match pat:
         case ast.BindingPattern(name):
             return lambda val: (val,), [name]
+
         case ast.LiteralPattern(value):
 
             def literal_matcher(val):
                 if value == val:
                     return (value,)
-                raise MatcherError(value, val)
+                raise MatcherError(val, value)
 
             return literal_matcher, []
+
+        case ast.ListConsPattern(car, cdr):
+            car_, b1 = analyze_pattern(car)
+            cdr_, b2 = analyze_pattern(cdr)
+
+            def cons_matcher(val):
+                match val:
+                    case (a, d):
+                        return car_(a) + cdr_(d)
+                    case _:
+                        raise MatcherError(val, "non-empty list")
+
+            return cons_matcher, b1 + b2
+
         case _:
             raise NotImplementedError(pat)
 
