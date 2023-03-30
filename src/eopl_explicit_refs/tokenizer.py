@@ -18,7 +18,6 @@ from parsing.scanner_generator import (
 KEYWORDS = (
     ";",
     "|",
-    "begin",
     "deref",
     "else",
     "false",

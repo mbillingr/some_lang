@@ -62,9 +62,11 @@ def parse_statement(ts: TokenStream) -> ast.Statement:
             ts.get_next()
             cond = parse_expr(ts)
             expect_token(ts, "then")
-            lhs = parse_statements(ts)
-            expect_token(ts, "else")
-            rhs = parse_statements(ts)
+            lhs = parse_statement(ts)
+            if try_token(ts, "else"):
+                rhs = parse_statement(ts)
+            else:
+                rhs = ast.NopStatement()
             return spanned(span.merge(get_span(rhs)), ast.IfStatement(cond, lhs, rhs))
         case "set", _, span:
             ts.get_next()
@@ -138,59 +140,63 @@ def parse_atom(ts: TokenStream):
             inner = parse_expr(ts)
             _, _, sp2 = expect_token(ts, ")")
             return spanned(span.merge(sp2), inner)
-        case "begin", _, span:
-            expr = parse_sequence(ts)
+        case "{", _, span:
+            expr = parse_block_expression(ts, skip_opening=True)
             return spanned(span.merge(get_span(expr)), expr)
         case "let", _, span:
             var = parse_symbol(ts)
             expect_token(ts, "=")
             val = parse_expr(ts)
             expect_token(ts, "in")
-            body = parse_sequence(ts)
+            body = parse_expr(ts)
             return spanned(span.merge(get_span(body)), ast.Let(var, val, body))
         case token:
             raise UnexpectedToken(token)
 
 
-def parse_sequence(ts):
+def parse_block_expression(ts, skip_opening: bool):
+    if not skip_opening:
+        expect_token(ts, "{")
+
     stmts = []
     while True:
         stmts.append(parse_statement(ts))
         match ts.peek():
+            case "}", _, _:
+                break
             case ";", _, _:
-                pass
-            case ts.EOF:
-                break
-            case _:
-                break
-        ts.get_next()
+                ts.get_next()
+            case tok:
+                raise UnexpectedToken(tok)
     expr = ast.stmt_to_expr(
         stmts.pop()
     )  # last statement is expected to be an expression
     while stmts:
         s = stmts.pop()
-        expr = spanned(get_span(s).merge(get_span(expr)), ast.Sequence(s, expr))
+        expr = spanned(get_span(s).merge(get_span(expr)), ast.BlockExpression(s, expr))
     return expr
 
 
-def parse_statements(ts):
+def parse_block_statement(ts, skip_opening: bool):
+    if not skip_opening:
+        expect_token(ts, "{")
+
     stmts = []
     while True:
         stmts.append(parse_statement(ts))
         match ts.peek():
+            case "}", _, _:
+                break
             case ";", _, _:
-                pass
-            case ts.EOF:
-                break
-            case _:
-                break
-        ts.get_next()
+                ts.get_next()
+            case tok:
+                raise UnexpectedToken(tok)
     compound_statement = stmts.pop()
     while stmts:
         s = stmts.pop()
         compound_statement = spanned(
             get_span(s).merge(get_span(compound_statement)),
-            ast.Statements(s, compound_statement),
+            ast.BlockStatement(s, compound_statement),
         )
     return compound_statement
 

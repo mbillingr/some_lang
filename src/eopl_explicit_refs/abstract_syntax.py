@@ -29,6 +29,11 @@ class Symbol(str, AstNode):
 
 
 @dataclasses.dataclass
+class NopStatement(Statement):
+    pass
+
+
+@dataclasses.dataclass
 class ExprStmt(Statement):
     expr: Expression
 
@@ -47,13 +52,13 @@ class IfStatement(Statement):
 
 
 @dataclasses.dataclass
-class Statements(Statement):
+class BlockStatement(Statement):
     fst: Statement
     snd: Statement
 
 
 @dataclasses.dataclass
-class Sequence(Expression):
+class BlockExpression(Expression):
     pre: Statement
     exp: Expression
 

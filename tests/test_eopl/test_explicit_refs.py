@@ -21,22 +21,28 @@ from eopl_explicit_refs.store import PythonStore as Store
         (11, "1 + 2 * 3 + 4"),
         (21, "(1 + 2) * (3 + 4)"),
         # Sequence
-        (0, "begin 0"),
-        (3, "begin 1; 2; 3"),
+        (0, "{ 0 }"),
+        (
+            3,
+            "{ 1; 2; 3 }",
+        ),  # maybe delimit sequences with { } (and no more implicit sequences)?
         # Conditional Expression
         (1, "if true then 1 else 2"),
         (2, "if false then 1 else 2"),
         # If Statement
-        (0, "let x = newref 0 in if true then set x = 1 else set x = 2; x"),  # todo: there is an ambiguity because blocks are not delimited: is ;x part of the else or the let?
+        (1, "let x = newref 0 in {if true then set x = 1 else set x = 2; deref x}"),
+        (2, "let x = newref 0 in {if false then set x = 1 else set x = 2; deref x}"),
+        (1, "let x = newref 0 in {if true then set x = 1; deref x}"),
+        (0, "let x = newref 0 in {if false then set x = 1; deref x}"),
         # Binding
         (0, "let x = 0 in x"),
         (1, "let x = 0 in let x = 1 in x"),
         (0, "let x = 0 in let y = 1 in x"),
-        (0, "let x = 0 in 1; 2; x"),
+        (0, "let x = 0 in {1; 2; x}"),
         # References
         (Store.Ref(1), "newref 1"),
         (2, "let x = newref 2 in deref x"),
-        (42, "let x = newref 0 in set x = 42; deref x"),
+        (42, "let x = newref 0 in {set x = 42; deref x}"),
         # Anonymous Functions
         (0, "let foo = fn x => x in foo 0"),
         (1, "let zzz = fn 0 => 1 in zzz 0"),

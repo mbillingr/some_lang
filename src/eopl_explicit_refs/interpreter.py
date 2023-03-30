@@ -26,21 +26,26 @@ def analyze_program(pgm: ast.Program) -> Any:
 
 def analyze_stmt(stmt: ast.Statement, env: Env) -> Callable:
     match stmt:
+        case ast.NopStatement():
+            return lambda _: None
+
         case ast.ExprStmt(expr):
-            # Let's assume expressions have no side effects, so we can just ignore them here
-            _ = analyze_expr(
-                expr, env, tail=False
-            )  # we still check if the expression is valid
-
-            def nop(store):
-                pass
-
-            return nop
+            # Let's assume expressions have no side effects, so we don't execute them,
+            # but we still check if they are valid
+            _ = analyze_expr(expr, env, tail=False)
+            return lambda _: None
 
         case ast.Assignment(lhs, rhs):
             lhs_ = analyze_expr(lhs, env, tail=False)
             rhs_ = analyze_expr(rhs, env, tail=False)
             return lambda store: store.setref(lhs_(store), rhs_(store))
+
+        case ast.IfStatement(cond, cons, alt):
+            cond_ = analyze_expr(cond, env, tail=False)
+            cons_ = analyze_stmt(cons, env)
+            alt_ = analyze_stmt(alt, env)
+            return lambda store: cons_(store) if cond_(store) else alt_(store)
+
         case _:
             raise NotImplementedError(stmt)
 
@@ -72,7 +77,7 @@ def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
         case ast.DeRef(ref):
             ref_ = analyze_expr(ref, env, tail=False)
             return lambda store: store.deref(ref_(store))
-        case ast.Sequence(stmt, expr):
+        case ast.BlockExpression(stmt, expr):
             stmt_ = analyze_stmt(stmt, env)
             expr_ = analyze_expr(expr, env, tail=tail)
 
