@@ -1,5 +1,3 @@
-from pprint import pprint
-
 import pytest
 
 from eopl_explicit_refs import tokenizer, parser, interpreter
