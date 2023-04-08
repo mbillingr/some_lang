@@ -31,6 +31,7 @@ from eopl_explicit_refs.store import PythonStore as Store
         ((2, ()), "(fn x::xs => xs) [1 2]"),
         ((), "(fn x::y::ys => ys) [1 2]"),
         (2, "(fn x::y::ys => y) [1 2]"),
+        (0, "(fn [] => 0) []"),
         # Sequence
         (0, "{ 0 }"),
         (

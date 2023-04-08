@@ -143,6 +143,11 @@ class LiteralPattern(Pattern):
 
 
 @dataclasses.dataclass
+class EmptyListPattern(Pattern):
+    pass
+
+
+@dataclasses.dataclass
 class ListConsPattern(Pattern):
     car: Pattern
     cdr: Pattern

@@ -174,6 +174,9 @@ def analyze_pattern(pat: ast.Pattern) -> Matcher:
         case ast.LiteralPattern(value):
             return LiteralMatcher(value)
 
+        case ast.EmptyListPattern():
+            return LiteralMatcher(empty_list())
+
         case ast.ListConsPattern(car, cdr):
             car_ = analyze_pattern(car)
             cdr_ = analyze_pattern(cdr)

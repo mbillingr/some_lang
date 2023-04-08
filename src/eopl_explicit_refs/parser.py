@@ -327,8 +327,22 @@ def parse_atomic_pattern(ts) -> ast.Pattern:
         case value, TokenKind.LITERAL_BOOL | TokenKind.LITERAL_INT, span:
             ts.get_next()
             return spanned(span, ast.LiteralPattern(value))
+        case "[", _, span:
+            pat = parse_list_pattern(ts)
+            return spanned(span.merge(get_span(pat)), pat)
         case token:
             raise NotImplementedError(token)
+
+
+def parse_list_pattern(ts) -> ast.Pattern:
+    _, _, span0 = expect_token(ts, "[")
+
+    match ts.peek():
+        case "]", _, span:
+            ts.get_next()
+            return spanned(span0.merge(span), ast.EmptyListPattern())
+        case _:
+            raise NotImplementedError()
 
 
 def parse_symbol(ts) -> ast.Symbol:
