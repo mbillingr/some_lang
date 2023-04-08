@@ -264,7 +264,7 @@ class Closure:
                 try:
                     for matcher, body in match_bodies:
                         if len(args) < matcher.n_args():
-                            raise NotImplementedError()
+                            return Partial(self, args)
                         try:
                             bindings = matcher.match(args)
                         except MatcherError:
@@ -283,6 +283,17 @@ class Closure:
                     args = tc.args
         finally:
             store.stack = preserved_stack
+
+
+class Partial:
+    """A partially applied function"""
+
+    def __init__(self, func, args):
+        self.func = func
+        self.args = args
+
+    def apply(self, args, store):
+        return self.func.apply(self.args + args, store)
 
 
 @dataclasses.dataclass

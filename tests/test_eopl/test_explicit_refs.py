@@ -65,9 +65,11 @@ from eopl_explicit_refs.store import PythonStore as Store
         # Recursive Functions
         (10, "let sum = fn 0 => 0 | n => n + (sum (n - 1)) in sum 4"),
         (0, "let red = fn 0 => 0 | n => red (n - 1) in red 10000"),
-        # Multiple Arguments & Currying
+        # Multiple Arguments & Partial Application
         (6, "(fn a => fn b => fn c => a + b + c) 1 2 3"),
+        (6, "(((fn a => fn b => fn c => a + b + c) 1) 2) 3"),
         (6, "(fn a b c => a + b + c) 1 2 3"),
+        (6, "let part = (fn a b c => a + b + c) 1 2 in part 3"),
     ],
 )
 def test_literals(src, expect):
@@ -77,6 +79,5 @@ def test_literals(src, expect):
 def evaluate(src):
     token_stream = tokenizer.default_tokenizer(src)
     program = parser.parse_program(token_stream)
-    pprint(program)
     runner = interpreter.analyze_program(program)
     return runner(Store())
