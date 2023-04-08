@@ -25,7 +25,7 @@ class PythonStore:
     def get(self, idx: int):
         frame = self.stack
         for _ in range(idx):
-            frame = self.stack[1]
+            frame = frame[1]
         return frame[0]
 
     def set(self, idx: int, val):
