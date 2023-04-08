@@ -31,7 +31,9 @@ from eopl_explicit_refs.store import PythonStore as Store
         ((2, ()), "(fn x::xs => xs) [1 2]"),
         ((), "(fn x::y::ys => ys) [1 2]"),
         (2, "(fn x::y::ys => y) [1 2]"),
-        (0, "(fn [] => 0) []"),
+        (0, "let len = fn [] => 0 | x::xs => 1 + len xs in len []"),
+        (1, "let len = fn [] => 0 | x::xs => 1 + len xs in len [0]"),
+        (3, "let len = fn [] => 0 | x::xs => 1 + len xs in len [0 0 0]"),
         # Sequence
         (0, "{ 0 }"),
         (
