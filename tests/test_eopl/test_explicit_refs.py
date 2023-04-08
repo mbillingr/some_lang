@@ -36,10 +36,7 @@ from eopl_explicit_refs.store import PythonStore as Store
         (3, "let len = fn [] => 0 | x::xs => 1 + len xs in len [0 0 0]"),
         # Sequence
         (0, "{ 0 }"),
-        (
-            3,
-            "{ 1; 2; 3 }",
-        ),  # maybe delimit sequences with { } (and no more implicit sequences)?
+        (3, "{ 1; 2; 3 }"),
         # Conditional Expression
         (1, "if true then 1 else 2"),
         (2, "if false then 1 else 2"),
