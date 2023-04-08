@@ -124,19 +124,28 @@ def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
 
             return the_function
 
-        case ast.Application(fun, arg):
+        case ast.Application():
+            return analyze_application(exp, env=env, tail=tail)
+        case _:
+            raise NotImplementedError(exp)
+
+
+def analyze_application(fun, *args_, env, tail):
+    match fun:
+        case ast.Application(f, a):
+            a_ = analyze_expr(a, env, tail=False)
+            return analyze_application(f, a_, *args_, env=env, tail=tail)
+        case _:
             fun_ = analyze_expr(fun, env, tail=False)
-            arg_ = analyze_expr(arg, env, tail=False)
+
             if tail:
 
                 def tail_call(store):
-                    raise TailCall(fun_(store), arg_(store))
+                    raise TailCall(fun_(store), [a(store) for a in args_])
 
                 return tail_call
             else:
-                return lambda store: fun_(store).apply(arg_(store), store)
-        case _:
-            raise NotImplementedError(exp)
+                return lambda store: fun_(store).apply([a(store) for a in args_], store)
 
 
 class Matcher(abc.ABC):
@@ -246,7 +255,7 @@ class Closure:
         self.match_bodies = match_bodies
         self.saved_stack = store.stack
 
-    def apply(self, arg, store):
+    def apply(self, args, store):
         preserved_stack = store.stack
         try:
             store.stack = self.saved_stack
@@ -254,17 +263,24 @@ class Closure:
             while True:
                 try:
                     for matcher, body in match_bodies:
+                        if len(args) < matcher.n_args():
+                            raise NotImplementedError()
                         try:
-                            bindings = matcher.match([arg])
+                            bindings = matcher.match(args)
                         except MatcherError:
                             continue
                         store.push(*bindings)
-                        return body(store)
+                        res = body(store)
+                        args = args[matcher.n_args() :]
+                        if not args:
+                            return res
+                        else:
+                            return res.apply(args, store)
                     raise MatcherError("no pattern matched")
                 except TailCall as tc:
                     store.stack = tc.func.saved_stack
                     match_bodies = tc.func.match_bodies
-                    arg = tc.arg
+                    args = tc.args
         finally:
             store.stack = preserved_stack
 
@@ -272,7 +288,7 @@ class Closure:
 @dataclasses.dataclass
 class TailCall(Exception):
     func: Closure
-    arg: Any
+    args: list[Any]
 
 
 def empty_list():
