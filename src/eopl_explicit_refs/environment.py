@@ -3,11 +3,8 @@ import abc
 
 
 class Env(abc.ABC):
-    def extend(self, *var: str):
-        env = self
-        for v in var:
-            env = Entry(v, env)
-        return env
+    def extend(self, *vars: str):
+        return Level(vars, self)
 
     @abc.abstractmethod
     def lookup(self, var: str) -> int:
@@ -22,12 +19,15 @@ class EmptyEnv(Env):
         raise LookupError(var)
 
 
-class Entry(Env):
-    def __init__(self, var: str, nxt: Env):
-        self.var = var
+class Level(Env):
+    def __init__(self, vars: tuple[str, ...], nxt: Env):
+        self.vars = vars
         self.nxt = nxt
 
-    def lookup(self, var: str) -> int:
-        if self.var == var:
-            return 0
-        return self.nxt.lookup(var) + 1
+    def lookup(self, var: str) -> tuple[int, int]:
+        try:
+            return self.vars.index(var), 0
+        except ValueError:
+            pass
+        ofs, depth = self.nxt.lookup(var)
+        return ofs, depth + 1

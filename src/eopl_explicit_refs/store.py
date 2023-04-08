@@ -8,31 +8,30 @@ class PythonStore:
         val: Any
 
     def __init__(self):
-        self.stack = ()
+        self.env = ()
 
     def clear(self):
-        self.stack = ()
+        self.env = ()
 
-    def push(self, *val):
-        for v in val:
-            self.stack = [v, self.stack]
+    def push(self, *vals):
+        self.env = (list(vals), self.env)
 
     def pop(self):
-        item = self.stack[0]
-        self.stack = self.stack[1]
-        return item
+        self.env = self.env[1]
 
-    def get(self, idx: int):
-        frame = self.stack
-        for _ in range(idx):
+    def get(self, idx: tuple[int, int]):
+        ofs, depth = idx
+        frame = self.env
+        for _ in range(depth):
             frame = frame[1]
-        return frame[0]
+        return frame[0][ofs]
 
     def set(self, idx: int, val):
-        frame = self.stack
-        for _ in range(idx):
-            frame = self.stack[1]
-        frame[0] = val
+        ofs, depth = idx
+        frame = self.env
+        for _ in range(depth):
+            frame = self.env[1]
+        frame[0][ofs] = val
 
     def is_reference(self, x: Any) -> bool:
         return isinstance(x, PythonStore.Ref)

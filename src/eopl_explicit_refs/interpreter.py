@@ -104,7 +104,7 @@ def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
 
             def let(store):
                 store.push(UNDEFINED)
-                store.set(0, val_(store))
+                store.set((0, 0), val_(store))
                 result = bdy_(store)
                 store.pop()
                 return result
@@ -253,12 +253,12 @@ class MatcherError(Exception):
 class Closure:
     def __init__(self, store, match_bodies):
         self.match_bodies = match_bodies
-        self.saved_stack = store.stack
+        self.saved_env = store.env
 
     def apply(self, args, store):
-        preserved_stack = store.stack
+        preserved_stack = store.env
         try:
-            store.stack = self.saved_stack
+            store.env = self.saved_env
             match_bodies = self.match_bodies
             while True:
                 try:
@@ -278,11 +278,11 @@ class Closure:
                             return res.apply(args, store)
                     raise MatcherError("no pattern matched")
                 except TailCall as tc:
-                    store.stack = tc.func.saved_stack
+                    store.env = tc.func.saved_env
                     match_bodies = tc.func.match_bodies
                     args = tc.args
         finally:
-            store.stack = preserved_stack
+            store.env = preserved_stack
 
 
 class Partial:
