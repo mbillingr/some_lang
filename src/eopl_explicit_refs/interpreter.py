@@ -1,3 +1,4 @@
+import abc
 import dataclasses
 from typing import Any, Callable
 
@@ -113,9 +114,9 @@ def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
         case ast.Function(arms):
             match_bodies = []
             for arm in arms:
-                matcher, bound = analyze_pattern(arm.pat)
-                bdy_env = env.extend(*bound)
-                bdy_ = analyze_expr(arm.bdy, bdy_env, tail=True)
+                matcher = analyze_patterns(arm.pats)
+                bdy_env = env.extend(*matcher.bindings())
+                bdy_ = analyze_expr(arm.body, bdy_env, tail=True)
                 match_bodies.append((matcher, bdy_))
 
             def the_function(store):
@@ -138,35 +139,102 @@ def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
             raise NotImplementedError(exp)
 
 
-def analyze_pattern(pat: ast.Pattern) -> tuple[Callable, list[ast.Symbol]]:
+class Matcher(abc.ABC):
+    @abc.abstractmethod
+    def match(self, val) -> tuple[Any, ...]:
+        pass
+
+    @abc.abstractmethod
+    def n_args(self) -> int:
+        pass
+
+    @abc.abstractmethod
+    def bindings(self) -> list[str]:
+        pass
+
+
+def analyze_patterns(pats: list[ast.Pattern]) -> Matcher:
+    return NaryMatcher(list(map(analyze_pattern, pats)))
+
+
+def analyze_pattern(pat: ast.Pattern) -> Matcher:
     match pat:
         case ast.BindingPattern(name):
-            return lambda val: (val,), [name]
+            return BindingMatcher(name)
 
         case ast.LiteralPattern(value):
-
-            def literal_matcher(val):
-                if value == val:
-                    return (value,)
-                raise MatcherError(val, value)
-
-            return literal_matcher, []
+            return LiteralMatcher(value)
 
         case ast.ListConsPattern(car, cdr):
-            car_, b1 = analyze_pattern(car)
-            cdr_, b2 = analyze_pattern(cdr)
-
-            def cons_matcher(val):
-                match val:
-                    case (a, d):
-                        return car_(a) + cdr_(d)
-                    case _:
-                        raise MatcherError(val, "non-empty list")
-
-            return cons_matcher, b1 + b2
+            car_ = analyze_pattern(car)
+            cdr_ = analyze_pattern(cdr)
+            return ListConsMatcher(car_, cdr_)
 
         case _:
             raise NotImplementedError(pat)
+
+
+@dataclasses.dataclass
+class LiteralMatcher(Matcher):
+    value: Any
+
+    def match(self, val) -> tuple[Any, ...]:
+        if self.value == val:
+            return ()
+        raise MatcherError(val, self.value)
+
+    def n_args(self) -> int:
+        return 1
+
+    def bindings(self) -> list[str]:
+        return []
+
+
+@dataclasses.dataclass
+class BindingMatcher(Matcher):
+    name: str
+
+    def match(self, val) -> tuple[Any, ...]:
+        return (val,)
+
+    def n_args(self) -> int:
+        return 1
+
+    def bindings(self) -> list[str]:
+        return [self.name]
+
+
+@dataclasses.dataclass
+class NaryMatcher(Matcher):
+    matchers: list[Matcher]
+
+    def match(self, val) -> tuple[Any, ...]:
+        return sum((m.match(v) for m, v in zip(self.matchers, val)), start=())
+
+    def n_args(self) -> int:
+        return len(self.matchers)
+
+    def bindings(self) -> list[str]:
+        return sum((m.bindings() for m in self.matchers), start=[])
+
+
+@dataclasses.dataclass
+class ListConsMatcher(Matcher):
+    car: Matcher
+    cdr: Matcher
+
+    def match(self, val) -> tuple[Any, ...]:
+        match val:
+            case (a, d):
+                return self.car.match(a) + self.cdr.match(d)
+            case _:
+                raise MatcherError(val, "non-empty list")
+
+    def n_args(self) -> int:
+        return 1
+
+    def bindings(self) -> list[str]:
+        return self.car.bindings() + self.cdr.bindings()
 
 
 class MatcherError(Exception):
@@ -187,7 +255,7 @@ class Closure:
                 try:
                     for matcher, body in match_bodies:
                         try:
-                            bindings = matcher(arg)
+                            bindings = matcher.match([arg])
                         except MatcherError:
                             continue
                         store.push(*bindings)

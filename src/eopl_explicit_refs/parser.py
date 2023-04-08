@@ -294,10 +294,16 @@ def parse_match_arms(ts) -> list[ast.MatchArm]:
 
 
 def parse_match_arm(ts) -> ast.MatchArm:
-    pat = parse_pattern(ts)
-    expect_token(ts, "=>")
+    patterns = []
+    while True:
+        pat = parse_pattern(ts)
+        patterns.append(pat)
+        if try_token(ts, "=>"):
+            break
     body = parse_expr(ts)
-    return spanned(get_span(pat).merge(get_span(body)), ast.MatchArm(pat, body))
+    return spanned(
+        get_span(patterns[0]).merge(get_span(body)), ast.MatchArm(patterns, body)
+    )
 
 
 def parse_pattern(ts) -> ast.Pattern:

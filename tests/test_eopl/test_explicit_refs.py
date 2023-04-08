@@ -67,6 +67,7 @@ from eopl_explicit_refs.store import PythonStore as Store
         (0, "let red = fn 0 => 0 | n => red (n - 1) in red 10000"),
         # Multiple Arguments & Currying
         (6, "(fn a => fn b => fn c => a + b + c) 1 2 3"),
+        (6, "(fn a b c => a + b + c) 1 2 3"),
     ],
 )
 def test_literals(src, expect):

@@ -117,8 +117,8 @@ class ListCons(Expression):
 
 @dataclasses.dataclass
 class MatchArm(AstNode):
-    pat: Pattern
-    bdy: Expression
+    pats: list[Pattern]
+    body: Expression
 
 
 @dataclasses.dataclass
