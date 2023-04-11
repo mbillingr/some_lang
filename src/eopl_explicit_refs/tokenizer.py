@@ -18,6 +18,7 @@ from parsing.scanner_generator import (
 KEYWORDS = (
     ";",
     "|",
+    "class",
     "deref",
     "else",
     "false",

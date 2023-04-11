@@ -54,7 +54,24 @@ op_types = {
 
 
 def parse_program(ts: TokenStream) -> ast.Program:
+    classes = []
+    while True:
+        match ts.peek():
+            case "class", _, span:
+                cld = parse_classdecl(ts)
+                classes.append(cld)
+            case _: break
     return ast.Program(parse_expr(ts))
+
+
+def parse_classdecl(ts: TokenStream) -> ast.Class:
+    _, _, begin = expect_token(ts, "class")
+    cls_name = parse_symbol(ts)
+
+    expect_token(ts, "{")
+    _, _, end = expect_token(ts, "}")
+
+    return ast.Class(cls_name)
 
 
 def parse_statement(ts: TokenStream) -> ast.Statement:

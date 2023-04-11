@@ -29,6 +29,11 @@ class Symbol(str, AstNode):
 
 
 @dataclasses.dataclass
+class Class(AstNode):
+    name: Symbol
+
+
+@dataclasses.dataclass
 class NopStatement(Statement):
     pass
 
