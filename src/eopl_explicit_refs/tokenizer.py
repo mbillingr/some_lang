@@ -25,6 +25,7 @@ KEYWORDS = (
     "if",
     "in",
     "let",
+    "new",
     "newref",
     "set",
     "then",

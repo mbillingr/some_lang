@@ -69,7 +69,8 @@ from eopl_explicit_refs.store import PythonStore as Store
         (6, "(fn a b c => a + b + c) 1 2 3"),
         (6, "let part = (fn a b c => a + b + c) 1 2 in part 3"),
         # Classes
-        (0, "class Foo { } 0"),
+        (0, "class Foo { } new Foo"),
+        #(0, "class Foo { method bar x => x } 0"),
     ],
 )
 def test_literals(src, expect):

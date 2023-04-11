@@ -29,6 +29,7 @@ prefix_binding_power = {
     "if": (None, 1),
     "newref": (None, 5),
     "~": (None, 11),
+    "new": (None, 17),  # same as application
     "deref": (None, 99),
 }
 
@@ -261,6 +262,8 @@ def parse_prefix_operator(rbp, ts):
         case "fn", _, span:
             arms = parse_match_arms(ts)
             return spanned(span.merge(get_span(arms[-1])), ast.Function(arms))
+        case "new", _, span:
+            raise NotImplementedError()
         case "newref", _, span:
             val = parse_expr(ts, rbp)
             return spanned(span.merge(get_span(val)), ast.NewRef(val))
