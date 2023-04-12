@@ -86,6 +86,11 @@ class BinOp(Expression):
 
 
 @dataclasses.dataclass
+class NewObj(Expression):
+    cls: Symbol
+
+
+@dataclasses.dataclass
 class NewRef(Expression):
     val: Expression
 
@@ -104,7 +109,7 @@ class Conditional(Expression):
 
 @dataclasses.dataclass
 class Let(Expression):
-    var: Identifier
+    var: Symbol
     val: Expression
     bdy: Expression
 

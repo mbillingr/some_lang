@@ -29,7 +29,6 @@ prefix_binding_power = {
     "if": (None, 1),
     "newref": (None, 5),
     "~": (None, 11),
-    "new": (None, 17),  # same as application
     "deref": (None, 99),
 }
 
@@ -176,6 +175,9 @@ def parse_atom(ts: TokenStream):
             expect_token(ts, "in")
             body = parse_expr(ts)
             return spanned(span.merge(get_span(body)), ast.Let(var, val, body))
+        case "new", _, span:
+            cls = parse_symbol(ts)
+            return ast.NewObj(cls)
         case token:
             raise UnexpectedToken(token)
 
@@ -262,8 +264,6 @@ def parse_prefix_operator(rbp, ts):
         case "fn", _, span:
             arms = parse_match_arms(ts)
             return spanned(span.merge(get_span(arms[-1])), ast.Function(arms))
-        case "new", _, span:
-            raise NotImplementedError()
         case "newref", _, span:
             val = parse_expr(ts, rbp)
             return spanned(span.merge(get_span(val)), ast.NewRef(val))

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import abc
 import dataclasses
 from typing import Any, Callable
@@ -9,14 +11,33 @@ from eopl_explicit_refs import abstract_syntax as ast
 UNDEFINED = object()
 
 
-def init_env() -> Env:
-    return EmptyEnv()
+class Class:
+    pass
+
+
+class StaticContext:
+    def __init__(self, lexical_env=None, class_env=None, tail=False):
+        self.lexical_env = lexical_env or EmptyEnv()
+        self.class_env = class_env or {}
+        self.tail = tail
+
+    def in_tail(self, tail: bool):
+        return StaticContext(self.lexical_env, self.class_env, tail)
+
+    def lexical_extend(self, *vars: str) -> StaticContext:
+        return StaticContext(self.lexical_env.extend(*vars), self.class_env)
+
+    def lexical_lookup(self, name: str) -> int:
+        return self.lexical_env.lookup(name)
+
+    def lookup_class(self, name: str) -> Class:
+        return self.class_env[name]
 
 
 def analyze_program(pgm: ast.Program) -> Any:
     match pgm:
         case ast.Program(exp):
-            prog = analyze_expr(exp, init_env(), tail=False)
+            prog = analyze_expr(exp, StaticContext())
 
             def program(store):
                 store.clear()
@@ -25,7 +46,7 @@ def analyze_program(pgm: ast.Program) -> Any:
             return program
 
 
-def analyze_stmt(stmt: ast.Statement, env: Env) -> Callable:
+def analyze_stmt(stmt: ast.Statement, ctx: StaticContext) -> Callable:
     match stmt:
         case ast.NopStatement():
             return lambda _: None
@@ -33,36 +54,36 @@ def analyze_stmt(stmt: ast.Statement, env: Env) -> Callable:
         case ast.ExprStmt(expr):
             # Let's assume expressions have no side effects, so we don't execute them,
             # but we still check if they are valid
-            _ = analyze_expr(expr, env, tail=False)
+            _ = analyze_expr(expr, ctx)
             return lambda _: None
 
         case ast.Assignment(lhs, rhs):
-            lhs_ = analyze_expr(lhs, env, tail=False)
-            rhs_ = analyze_expr(rhs, env, tail=False)
+            lhs_ = analyze_expr(lhs, ctx)
+            rhs_ = analyze_expr(rhs, ctx)
             return lambda store: store.setref(lhs_(store), rhs_(store))
 
         case ast.IfStatement(cond, cons, alt):
-            cond_ = analyze_expr(cond, env, tail=False)
-            cons_ = analyze_stmt(cons, env)
-            alt_ = analyze_stmt(alt, env)
+            cond_ = analyze_expr(cond, ctx)
+            cons_ = analyze_stmt(cons, ctx)
+            alt_ = analyze_stmt(alt, ctx)
             return lambda store: cons_(store) if cond_(store) else alt_(store)
 
         case _:
             raise NotImplementedError(stmt)
 
 
-def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
+def analyze_expr(exp: ast.Expression, ctx: StaticContext) -> Callable:
     match exp:
         case ast.Literal(val):
             return lambda _: val
         case ast.Identifier(name):
-            idx = env.lookup(name)
+            idx = ctx.lexical_lookup(name)
             return lambda store: store.get(idx)
         case ast.EmptyList():
             return lambda _: empty_list()
         case ast.BinOp(lhs, rhs, op):
-            lhs_ = analyze_expr(lhs, env, tail=False)
-            rhs_ = analyze_expr(rhs, env, tail=False)
+            lhs_ = analyze_expr(lhs, ctx.in_tail(False))
+            rhs_ = analyze_expr(rhs, ctx.in_tail(False))
             match op:
                 case "+":
                     return lambda store: lhs_(store) + rhs_(store)
@@ -77,14 +98,14 @@ def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
                 case _:
                     raise NotImplementedError(op)
         case ast.NewRef(val):
-            val_ = analyze_expr(val, env, tail=False)
+            val_ = analyze_expr(val, ctx.in_tail(False))
             return lambda store: store.newref(val_(store))
         case ast.DeRef(ref):
-            ref_ = analyze_expr(ref, env, tail=False)
+            ref_ = analyze_expr(ref, ctx.in_tail(False))
             return lambda store: store.deref(ref_(store))
         case ast.BlockExpression(stmt, expr):
-            stmt_ = analyze_stmt(stmt, env)
-            expr_ = analyze_expr(expr, env, tail=tail)
+            stmt_ = analyze_stmt(stmt, ctx.in_tail(False))
+            expr_ = analyze_expr(expr, ctx)
 
             def sequence(store):
                 stmt_(store)
@@ -93,14 +114,15 @@ def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
             return sequence
 
         case ast.Conditional(a, b, c):
-            cond_ = analyze_expr(a, env, tail=False)
-            then_ = analyze_expr(b, env, tail=tail)
-            else_ = analyze_expr(c, env, tail=tail)
+            cond_ = analyze_expr(a, ctx.in_tail(False))
+            then_ = analyze_expr(b, ctx)
+            else_ = analyze_expr(c, ctx)
             return lambda store: then_(store) if cond_(store) else else_(store)
+
         case ast.Let(var, val, bdy):
-            let_env = env.extend(var)
-            val_ = analyze_expr(val, let_env, tail=False)
-            bdy_ = analyze_expr(bdy, let_env, tail=tail)
+            let_ctx = ctx.lexical_extend(var)
+            val_ = analyze_expr(val, let_ctx.in_tail(False))
+            bdy_ = analyze_expr(bdy, let_ctx)
 
             def let(store):
                 store.push(UNDEFINED)
@@ -115,8 +137,8 @@ def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
             match_bodies = []
             for arm in arms:
                 matcher = analyze_patterns(arm.pats)
-                bdy_env = env.extend(*matcher.bindings())
-                bdy_ = analyze_expr(arm.body, bdy_env, tail=True)
+                bdy_ctx = ctx.lexical_extend(*matcher.bindings())
+                bdy_ = analyze_expr(arm.body, bdy_ctx.in_tail(True))
                 match_bodies.append((matcher, bdy_))
 
             def the_function(store):
@@ -125,20 +147,26 @@ def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
             return the_function
 
         case ast.Application():
-            return analyze_application(exp, env=env, tail=tail)
+            return analyze_application(exp, ctx=ctx)
+
+        case ast.NewObj(cls):
+            return analyze_newobj(ctx, cls)
+
         case _:
             raise NotImplementedError(exp)
 
 
-def analyze_application(fun, *args_, env, tail):
+def analyze_application(fun, *args_, ctx: StaticContext):
     match fun:
         case ast.Application(f, a):
-            a_ = analyze_expr(a, env, tail=False)
-            return analyze_application(f, a_, *args_, env=env, tail=tail)
+            a_ = analyze_expr(a, ctx.in_tail(False))
+            return analyze_application(f, a_, *args_, ctx=ctx)
+        case ast.NewObj(cls):
+            return analyze_newobj(ctx, cls, args_)
         case _:
-            fun_ = analyze_expr(fun, env, tail=False)
+            fun_ = analyze_expr(fun, ctx.in_tail(False))
 
-            if tail:
+            if ctx.tail:
 
                 def tail_call(store):
                     raise TailCall(fun_(store), [a(store) for a in args_])
@@ -146,6 +174,13 @@ def analyze_application(fun, *args_, env, tail):
                 return tail_call
             else:
                 return lambda store: fun_(store).apply([a(store) for a in args_], store)
+
+
+def analyze_newobj(ctx: StaticContext, cls: str, args_=()):
+    cls_obj = ctx.lookup_class(cls)
+    init = cls_obj.get_method("init")
+    assert args_ == init.n_args()
+    return lambda store: init.apply([a(store) for a in args_], store)
 
 
 class Matcher(abc.ABC):
