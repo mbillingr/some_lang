@@ -11,8 +11,17 @@ from eopl_explicit_refs import abstract_syntax as ast
 UNDEFINED = object()
 
 
+class Method:
+    def n_args(self) -> int:
+        return 0
+
+    def apply(self, args, store):
+        return UNDEFINED
+
+
 class Class:
-    pass
+    def get_method(self, name: str) -> Method:
+        return Method()
 
 
 class StaticContext:
@@ -25,25 +34,45 @@ class StaticContext:
         return StaticContext(self.lexical_env, self.class_env, tail)
 
     def lexical_extend(self, *vars: str) -> StaticContext:
-        return StaticContext(self.lexical_env.extend(*vars), self.class_env)
+        return StaticContext(self.lexical_env.extend(*vars), self.class_env, self.tail)
 
     def lexical_lookup(self, name: str) -> int:
         return self.lexical_env.lookup(name)
 
+    def extend_classes(self, *cls_names: str) -> StaticContext:
+        return StaticContext(
+            self.lexical_env,
+            self.class_env | {c: UNDEFINED for c in cls_names},
+            self.tail,
+        )
+
     def lookup_class(self, name: str) -> Class:
         return self.class_env[name]
+
+    def set_class(self, name: str, cls: Class):
+        self.class_env[name] = cls
 
 
 def analyze_program(pgm: ast.Program) -> Any:
     match pgm:
-        case ast.Program(exp):
-            prog = analyze_expr(exp, StaticContext())
+        case ast.Program(classes, exp):
+            ctx = StaticContext().extend_classes(*(c.name for c in classes))
+
+            for cls in classes:
+                cls_ = analyze_class_decl(cls, ctx)
+                ctx.set_class(cls.name, cls_)
+
+            prog = analyze_expr(exp, ctx)
 
             def program(store):
                 store.clear()
                 return prog(store)
 
             return program
+
+
+def analyze_class_decl(cls: ast.Class, ctx: StaticContext) -> Class:
+    return Class()
 
 
 def analyze_stmt(stmt: ast.Statement, ctx: StaticContext) -> Callable:
@@ -178,9 +207,16 @@ def analyze_application(fun, *args_, ctx: StaticContext):
 
 def analyze_newobj(ctx: StaticContext, cls: str, args_=()):
     cls_obj = ctx.lookup_class(cls)
+    assert cls_obj is not UNDEFINED
+
     init = cls_obj.get_method("init")
-    assert args_ == init.n_args()
-    return lambda store: init.apply([a(store) for a in args_], store)
+    assert len(args_) == init.n_args()
+
+    def newobj(store):
+        init.apply([a(store) for a in args_], store)
+        return []
+
+    return newobj
 
 
 class Matcher(abc.ABC):

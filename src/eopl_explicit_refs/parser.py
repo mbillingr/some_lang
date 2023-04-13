@@ -61,7 +61,7 @@ def parse_program(ts: TokenStream) -> ast.Program:
                 cld = parse_classdecl(ts)
                 classes.append(cld)
             case _: break
-    return ast.Program(parse_expr(ts))
+    return ast.Program(classes, parse_expr(ts))
 
 
 def parse_classdecl(ts: TokenStream) -> ast.Class:

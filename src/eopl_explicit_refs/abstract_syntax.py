@@ -19,11 +19,6 @@ class Pattern(AstNode):
     pass
 
 
-@dataclasses.dataclass
-class Program(AstNode):
-    exp: Expression
-
-
 class Symbol(str, AstNode):
     pass
 
@@ -31,6 +26,12 @@ class Symbol(str, AstNode):
 @dataclasses.dataclass
 class Class(AstNode):
     name: Symbol
+
+
+@dataclasses.dataclass
+class Program(AstNode):
+    classes: list[Class]
+    exp: Expression
 
 
 @dataclasses.dataclass
