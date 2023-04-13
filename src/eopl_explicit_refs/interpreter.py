@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import abc
 import dataclasses
-from typing import Any, Callable
+from typing import Any, Callable, Optional, Literal
 
 from eopl_explicit_refs.environment import EmptyEnv, Env
 from eopl_explicit_refs import abstract_syntax as ast
@@ -20,8 +20,25 @@ class Method:
 
 
 class Class:
+    def __init__(
+        self,
+        super_class: Optional[Class] | Literal["object"] = "object",
+        methods: Optional[dict[str, Method]] = None,
+    ):
+        if super_class == "object":
+            self.super = OBJECT
+        else:
+            self.super = super_class
+        self.methods = methods or {}
+
     def get_method(self, name: str) -> Method:
-        return Method()
+        try:
+            return self.methods[name]
+        except KeyError:
+            return self.super.get_method(name)
+
+
+OBJECT = Class(super_class=None, methods={"init": Method()})
 
 
 class StaticContext:
