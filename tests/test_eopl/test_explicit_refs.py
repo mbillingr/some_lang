@@ -71,7 +71,10 @@ from eopl_explicit_refs.store import PythonStore as Store
         # Classes
         (0, "class Foo { } let x = new Foo in 0"),
         (0, "class Foo { method init x y z => 123 } let x = new Foo 1 2 3 in 0"),
-        (0, "class Foo { method bar x => x } let foo = new Foo in send foo bar 0"),
+        (0, "class Foo { method bar x => x } let foo = new Foo in send foo Foo bar 0"),
+        (0, "class Foo { method bar => 0 } let foo = new Foo in send foo Foo bar"),
+        (1, "class A { method foo => 1 } class B extends A { method foo => 2 } let x = new A in send x A foo"),
+        (2, "class A { method foo => 1 } class B extends A { method foo => 2 } let x = new B in send x A foo"),
     ],
 )
 def test_literals(src, expect):

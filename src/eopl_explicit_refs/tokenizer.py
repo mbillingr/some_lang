@@ -28,6 +28,7 @@ KEYWORDS = (
     "method",
     "new",
     "newref",
+    "send",
     "set",
     "then",
     "true",

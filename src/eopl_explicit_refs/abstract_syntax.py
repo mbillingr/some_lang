@@ -101,6 +101,13 @@ class NewObj(Expression):
 
 
 @dataclasses.dataclass
+class Message(Expression):
+    obj: Expression
+    cls: Symbol
+    method: Symbol
+
+
+@dataclasses.dataclass
 class NewRef(Expression):
     val: Expression
 
@@ -150,6 +157,11 @@ class Function(Expression):
 class Application(Expression):
     fun: Expression
     arg: Expression
+
+
+@dataclasses.dataclass
+class NullaryPattern(Pattern):
+    """A pattern that expects no argument and always passes"""
 
 
 @dataclasses.dataclass

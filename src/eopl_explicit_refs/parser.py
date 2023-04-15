@@ -29,6 +29,7 @@ prefix_binding_power = {
     "if": (None, 1),
     "newref": (None, 5),
     "~": (None, 11),
+    "send": (None, 17),  # same as function call
     "deref": (None, 99),
 }
 
@@ -299,6 +300,11 @@ def parse_prefix_operator(rbp, ts):
             expect_token(ts, "else")
             rhs = parse_expr(ts, rbp)
             return spanned(span.merge(get_span(rhs)), ast.Conditional(cond, lhs, rhs))
+        case "send", _, span:
+            obj = parse_expr(ts, rbp, invisible_application=False)
+            cls = parse_symbol(ts)
+            method = parse_symbol(ts)
+            return spanned(span.merge(get_span(method)), ast.Message(obj, cls, method))
         case token:
             raise UnexpectedToken(token)
 
@@ -329,7 +335,12 @@ def parse_postfix_operator(lhs, ts):
 
 def parse_match_arms(ts) -> list[ast.MatchArm]:
     arms = [parse_match_arm(ts)]
-    while ts.peek()[0] == "|":
+    while True:
+        match ts.peek():
+            case "|", _, _:
+                pass
+            case _:
+                break
         ts.get_next()
         arms.append(parse_match_arm(ts))
     return arms
@@ -337,11 +348,14 @@ def parse_match_arms(ts) -> list[ast.MatchArm]:
 
 def parse_match_arm(ts) -> ast.MatchArm:
     patterns = []
-    while True:
-        pat = parse_pattern(ts)
-        patterns.append(pat)
-        if try_token(ts, "=>"):
-            break
+    if try_token(ts, "=>"):
+        patterns = [ast.NullaryPattern()]
+    else:
+        while True:
+            pat = parse_pattern(ts)
+            patterns.append(pat)
+            if try_token(ts, "=>"):
+                break
     body = parse_expr(ts)
     return spanned(
         get_span(patterns[0]).merge(get_span(body)), ast.MatchArm(patterns, body)

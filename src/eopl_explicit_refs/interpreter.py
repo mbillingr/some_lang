@@ -8,7 +8,12 @@ from eopl_explicit_refs.environment import EmptyEnv, Env
 from eopl_explicit_refs import abstract_syntax as ast
 
 
-UNDEFINED = object()
+class _Undefined:
+    def __repr__(self):
+        return "<undefined>"
+
+
+UNDEFINED = _Undefined()
 
 
 class Method:
@@ -114,7 +119,14 @@ class CustomMethod(Method):
         return self.match_bodies[0][0].n_args()
 
     def apply(self, args, store):
-        return UNDEFINED
+        preserved_env = store.env
+        try:
+            store.env = EmptyEnv()
+            match_bodies = self.match_bodies
+            assert len(args) == self.n_args()
+            return apply_pattern(match_bodies, args, store)
+        finally:
+            store.env = preserved_env
 
 
 def analyze_stmt(stmt: ast.Statement, ctx: StaticContext) -> Callable:
@@ -218,6 +230,9 @@ def analyze_expr(exp: ast.Expression, ctx: StaticContext) -> Callable:
         case ast.NewObj(cls):
             return analyze_newobj(ctx, cls)
 
+        case ast.Message(obj, cls, method):
+            return analyze_message(ctx, obj, cls, method)
+
         case _:
             raise NotImplementedError(exp)
 
@@ -239,6 +254,8 @@ def analyze_application(fun, *args_, ctx: StaticContext):
             return analyze_application(f, a_, *args_, ctx=ctx)
         case ast.NewObj(cls):
             return analyze_newobj(ctx, cls, args_)
+        case ast.Message(obj, cls, method):
+            return analyze_message(ctx, obj, cls, method, args_)
         case _:
             fun_ = analyze_expr(fun, ctx.in_tail(False))
 
@@ -266,6 +283,24 @@ def analyze_newobj(ctx: StaticContext, cls: str, args_=()):
     return newobj
 
 
+def analyze_message(
+    ctx: StaticContext, obj: ast.Expression, cls: str, method: str, args_=()
+):
+    cls_obj = ctx.lookup_class(cls)
+    assert cls_obj is not UNDEFINED
+
+    method = cls_obj.get_method(method)
+    assert len(args_) == method.n_args(), f"{len(args_)} == {method.n_args()}"
+
+    obj_ = analyze_expr(obj, ctx.in_tail(False))
+
+    def message(store):
+        _ = obj_(store)
+        return method.apply([a(store) for a in args_], store)
+
+    return message
+
+
 class Matcher(abc.ABC):
     @abc.abstractmethod
     def match(self, val) -> tuple[Any, ...]:
@@ -281,7 +316,11 @@ class Matcher(abc.ABC):
 
 
 def analyze_patterns(pats: list[ast.Pattern]) -> Matcher:
-    return NaryMatcher(list(map(analyze_pattern, pats)))
+    match pats:
+        case [ast.NullaryPattern()]:
+            return NaryMatcher([])
+        case _:
+            return NaryMatcher(list(map(analyze_pattern, pats)))
 
 
 def analyze_pattern(pat: ast.Pattern) -> Matcher:
@@ -376,6 +415,9 @@ class Closure:
         self.match_bodies = match_bodies
         self.saved_env = store.env
 
+    def n_args(self):
+        return self.match_bodies[0][0].n_args()
+
     def apply(self, args, store):
         preserved_stack = store.env
         try:
@@ -383,27 +425,30 @@ class Closure:
             match_bodies = self.match_bodies
             while True:
                 try:
-                    for matcher, body in match_bodies:
-                        if len(args) < matcher.n_args():
-                            return Partial(self, args)
-                        try:
-                            bindings = matcher.match(args)
-                        except MatcherError:
-                            continue
-                        store.push(*bindings)
-                        res = body(store)
-                        args = args[matcher.n_args() :]
-                        if not args:
-                            return res
-                        else:
-                            return res.apply(args, store)
-                    raise MatcherError("no pattern matched")
+                    if len(args) < self.n_args():
+                        return Partial(self, args)
+                    res = apply_pattern(match_bodies, args, store)
+                    if len(args) > self.n_args():
+                        return res.apply(args[self.n_args() :], store)
+                    else:
+                        return res
                 except TailCall as tc:
                     store.env = tc.func.saved_env
                     match_bodies = tc.func.match_bodies
                     args = tc.args
         finally:
             store.env = preserved_stack
+
+
+def apply_pattern(match_bodies, args, store):
+    for matcher, body in match_bodies:
+        try:
+            bindings = matcher.match(args)
+        except MatcherError:
+            continue
+        store.push(*bindings)
+        return body(store)
+    raise MatcherError("no pattern matched")
 
 
 class Partial:
