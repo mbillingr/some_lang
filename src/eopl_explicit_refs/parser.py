@@ -60,7 +60,8 @@ def parse_program(ts: TokenStream) -> ast.Program:
             case "class", _, span:
                 cld = parse_classdecl(ts)
                 classes.append(cld)
-            case _: break
+            case _:
+                break
     return ast.Program(classes, parse_expr(ts))
 
 
@@ -68,10 +69,31 @@ def parse_classdecl(ts: TokenStream) -> ast.Class:
     _, _, begin = expect_token(ts, "class")
     cls_name = parse_symbol(ts)
 
+    methods = []
+
     expect_token(ts, "{")
+    while True:
+        match ts.peek():
+            case "}", _, _:
+                break
+            case "method", _, _:
+                methods.append(parse_methoddecl(ts))
+            case other:
+                raise UnexpectedToken(other)
     _, _, end = expect_token(ts, "}")
 
-    return ast.Class(cls_name)
+    return ast.Class(cls_name, methods)
+
+
+def parse_methoddecl(ts: TokenStream) -> ast.Method:
+    _, _, begin = expect_token(ts, "method")
+    method_name = parse_symbol(ts)
+
+    arms = parse_match_arms(ts)
+
+    span = begin.merge(get_span(arms))
+
+    return spanned(span, ast.Method(method_name, spanned(span, ast.Function(arms))))
 
 
 def parse_statement(ts: TokenStream) -> ast.Statement:

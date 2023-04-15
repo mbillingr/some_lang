@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import abc
 import dataclasses
 from typing import Any
@@ -24,8 +26,15 @@ class Symbol(str, AstNode):
 
 
 @dataclasses.dataclass
+class Method(AstNode):
+    name: Symbol
+    func: Function
+
+
+@dataclasses.dataclass
 class Class(AstNode):
     name: Symbol
+    methods: list[Method]
 
 
 @dataclasses.dataclass

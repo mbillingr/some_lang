@@ -13,10 +13,10 @@ UNDEFINED = object()
 
 class Method:
     def n_args(self) -> int:
-        return 0
+        raise NotImplementedError()
 
     def apply(self, args, store):
-        return UNDEFINED
+        raise NotImplementedError()
 
 
 class Class:
@@ -38,7 +38,15 @@ class Class:
             return self.super.get_method(name)
 
 
-OBJECT = Class(super_class=None, methods={"init": Method()})
+class ObjectInitMethod(Method):
+    def n_args(self) -> int:
+        return 0
+
+    def apply(self, args, store):
+        return UNDEFINED
+
+
+OBJECT = Class(super_class=None, methods={"init": ObjectInitMethod()})
 
 
 class StaticContext:
@@ -89,7 +97,24 @@ def analyze_program(pgm: ast.Program) -> Any:
 
 
 def analyze_class_decl(cls: ast.Class, ctx: StaticContext) -> Class:
-    return Class()
+    methods = {m.name: analyze_method(m, ctx) for m in cls.methods}
+    return Class(super_class="object", methods=methods)
+
+
+def analyze_method(method: ast.Method, ctx: StaticContext) -> Method:
+    match_bodies = analyze_matcharms(method.func.patterns, ctx)
+    return CustomMethod(match_bodies)
+
+
+class CustomMethod(Method):
+    def __init__(self, match_bodies: list):
+        self.match_bodies = match_bodies
+
+    def n_args(self) -> int:
+        return self.match_bodies[0][0].n_args()
+
+    def apply(self, args, store):
+        return UNDEFINED
 
 
 def analyze_stmt(stmt: ast.Statement, ctx: StaticContext) -> Callable:
@@ -180,12 +205,7 @@ def analyze_expr(exp: ast.Expression, ctx: StaticContext) -> Callable:
             return let
 
         case ast.Function(arms):
-            match_bodies = []
-            for arm in arms:
-                matcher = analyze_patterns(arm.pats)
-                bdy_ctx = ctx.lexical_extend(*matcher.bindings())
-                bdy_ = analyze_expr(arm.body, bdy_ctx.in_tail(True))
-                match_bodies.append((matcher, bdy_))
+            match_bodies = analyze_matcharms(arms, ctx)
 
             def the_function(store):
                 return Closure(store, match_bodies)
@@ -200,6 +220,16 @@ def analyze_expr(exp: ast.Expression, ctx: StaticContext) -> Callable:
 
         case _:
             raise NotImplementedError(exp)
+
+
+def analyze_matcharms(arms, ctx) -> list:
+    match_bodies = []
+    for arm in arms:
+        matcher = analyze_patterns(arm.pats)
+        bdy_ctx = ctx.lexical_extend(*matcher.bindings())
+        bdy_ = analyze_expr(arm.body, bdy_ctx.in_tail(True))
+        match_bodies.append((matcher, bdy_))
+    return match_bodies
 
 
 def analyze_application(fun, *args_, ctx: StaticContext):
