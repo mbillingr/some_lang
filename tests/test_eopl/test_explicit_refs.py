@@ -7,12 +7,20 @@ from eopl_explicit_refs.store import PythonStore as Store
 @pytest.mark.parametrize(
     "expect, src",
     [
-        # Literals
         (False, "false"),
         (True, "true"),
         (0, "0"),
         (42, "42"),
         (-123, "-123"),
+    ],
+)
+def test_literals(src, expect):
+    assert evaluate(src) == expect
+
+
+@pytest.mark.parametrize(
+    "expect, src",
+    [
         # Operators
         (3, "1 + 2"),
         (-1, "1 - 2"),
@@ -20,6 +28,15 @@ from eopl_explicit_refs.store import PythonStore as Store
         (3, "6 / 2"),
         (11, "1 + 2 * 3 + 4"),
         (21, "(1 + 2) * (3 + 4)"),
+    ],
+)
+def test_operators(src, expect):
+    assert evaluate(src) == expect
+
+
+@pytest.mark.parametrize(
+    "expect, src",
+    [
         # Lists
         ((), "[]"),
         ((1, (2, (3, ()))), "[1 2 3]"),
@@ -32,9 +49,27 @@ from eopl_explicit_refs.store import PythonStore as Store
         (0, "let len = fn [] => 0 | x::xs => 1 + len xs in len []"),
         (1, "let len = fn [] => 0 | x::xs => 1 + len xs in len [0]"),
         (3, "let len = fn [] => 0 | x::xs => 1 + len xs in len [0 0 0]"),
+    ],
+)
+def test_lists(src, expect):
+    assert evaluate(src) == expect
+
+
+@pytest.mark.parametrize(
+    "expect, src",
+    [
         # Sequence
         (0, "{ 0 }"),
         (3, "{ 1; 2; 3 }"),
+    ],
+)
+def test_sequence(src, expect):
+    assert evaluate(src) == expect
+
+
+@pytest.mark.parametrize(
+    "expect, src",
+    [
         # Conditional Expression
         (1, "if true then 1 else 2"),
         (2, "if false then 1 else 2"),
@@ -43,6 +78,15 @@ from eopl_explicit_refs.store import PythonStore as Store
         (2, "let x = newref 0 in {if false then set x = 1 else set x = 2; deref x}"),
         (1, "let x = newref 0 in {if true then set x = 1; deref x}"),
         (0, "let x = newref 0 in {if false then set x = 1; deref x}"),
+    ],
+)
+def test_conditional(src, expect):
+    assert evaluate(src) == expect
+
+
+@pytest.mark.parametrize(
+    "expect, src",
+    [
         # Binding
         (0, "let x = 0 in x"),
         (1, "let x = 0 in let x = 1 in x"),
@@ -52,6 +96,15 @@ from eopl_explicit_refs.store import PythonStore as Store
         (Store.Ref(1), "newref 1"),
         (2, "let x = newref 2 in deref x"),
         (42, "let x = newref 0 in {set x = 42; deref x}"),
+    ],
+)
+def test_bindings(src, expect):
+    assert evaluate(src) == expect
+
+
+@pytest.mark.parametrize(
+    "expect, src",
+    [
         # Anonymous Functions
         (0, "let foo = fn x => x in foo 0"),
         (1, "let zzz = fn 0 => 1 in zzz 0"),
@@ -70,7 +123,7 @@ from eopl_explicit_refs.store import PythonStore as Store
         (6, "let part = (fn a b c => a + b + c) 1 2 in part 3"),
     ],
 )
-def test_literals(src, expect):
+def test_functions(src, expect):
     assert evaluate(src) == expect
 
 
