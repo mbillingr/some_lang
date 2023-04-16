@@ -24,6 +24,7 @@ KEYWORDS = (
     "extends",
     "false",
     "field",
+    "getfield",
     "if",
     "in",
     "let",
@@ -32,6 +33,7 @@ KEYWORDS = (
     "newref",
     "send",
     "set",
+    "setfield",
     "then",
     "true",
 )

@@ -140,7 +140,7 @@ def test_functions(src, expect):
         (0, "class Foo { field f } let x = new Foo in 0"),
         (
             0,
-            "class Foo { field f method init => setfield f 0 method get => getfield f }"
+            "class Foo { field f method init => {setfield f = 0} method get => getfield f }"
             "let x = new Foo in send x Foo get",
         ),
     ],

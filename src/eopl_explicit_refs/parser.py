@@ -31,6 +31,7 @@ prefix_binding_power = {
     "~": (None, 11),
     "send": (None, 17),  # same as function call
     "deref": (None, 99),
+    "getfield": (None, 99),
 }
 
 postfix_binding_power = {
@@ -121,6 +122,12 @@ def parse_statement(ts: TokenStream) -> ast.Statement:
             expect_token(ts, "=")
             rhs = parse_expr(ts)
             return spanned(span.merge(get_span(rhs)), ast.Assignment(lhs, rhs))
+        case "setfield", _, span:
+            ts.get_next()
+            field = parse_symbol(ts)
+            expect_token(ts, "=")
+            rhs = parse_expr(ts)
+            return spanned(span.merge(get_span(rhs)), ast.SetField(field, rhs))
         case _:
             expr = parse_expr(ts)
             return spanned(get_span(expr), ast.ExprStmt(expr))

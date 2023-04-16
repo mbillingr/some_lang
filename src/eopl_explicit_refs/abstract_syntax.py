@@ -62,6 +62,12 @@ class Assignment(Statement):
 
 
 @dataclasses.dataclass
+class SetField(Statement):
+    field: Symbol
+    rhs: Expression
+
+
+@dataclasses.dataclass
 class IfStatement(Statement):
     condition: Expression
     consequence: Statement
