@@ -70,6 +70,8 @@ def parse_classdecl(ts: TokenStream) -> ast.Class:
     _, _, begin = expect_token(ts, "class")
     cls_name = parse_symbol(ts)
 
+    cls_super = try_token(ts, "extends") and parse_symbol(ts) or None
+
     methods = []
 
     expect_token(ts, "{")
@@ -83,7 +85,7 @@ def parse_classdecl(ts: TokenStream) -> ast.Class:
                 raise UnexpectedToken(other)
     _, _, end = expect_token(ts, "}")
 
-    return ast.Class(cls_name, methods)
+    return ast.Class(cls_name, cls_super, methods)
 
 
 def parse_methoddecl(ts: TokenStream) -> ast.Method:

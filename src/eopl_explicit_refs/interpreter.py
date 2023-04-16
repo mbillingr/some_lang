@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import abc
 import dataclasses
-from typing import Any, Callable, Optional, Literal
+from typing import Any, Callable, Optional, Literal, Iterator
 
 from eopl_explicit_refs.environment import EmptyEnv, Env
 from eopl_explicit_refs import abstract_syntax as ast
@@ -34,13 +34,57 @@ class Class:
             self.super = OBJECT
         else:
             self.super = super_class
-        self.methods = methods or {}
+
+        self.method_names = {}
+        self.methods = {}
+        if methods:
+            i = 0
+            if self.super:
+                for i, name in enumerate(self.super.iter_methods()):
+                    if name in methods:
+                        self.methods[i] = methods[name]
+                        del methods[name]
+                else:
+                    i += 1
+            for name, m in methods.items():
+                self.method_names[name] = i
+                self.methods[i] = m
+                i = i + 1
 
     def get_method(self, name: str) -> Method:
+        idx = self.get_method_idx(name)
+        return self.get_method_by_idx(idx)
+
+    def get_method_idx(self, name: str) -> int:
         try:
-            return self.methods[name]
+            return self.method_names[name]
         except KeyError:
-            return self.super.get_method(name)
+            return self.super.get_method_idx(name)
+
+    def get_method_by_idx(self, idx: int) -> Method:
+        try:
+            return self.methods[idx]
+        except KeyError:
+            return self.super.get_method_by_idx(idx)
+
+    def iter_methods(self) -> Iterator[str]:
+        if self.super:
+            yield from self.super.iter_methods()
+        yield from self.method_names.keys()
+
+    def instantiate(self) -> Object:
+        vtable = []
+        for i, _ in enumerate(self.iter_methods()):
+            vtable.append(self.get_method_by_idx(i))
+
+        fields = []
+        return Object(vtable, fields)
+
+
+@dataclasses.dataclass
+class Object:
+    vtable: list
+    fields: list
 
 
 class ObjectInitMethod(Method):
@@ -102,8 +146,9 @@ def analyze_program(pgm: ast.Program) -> Any:
 
 
 def analyze_class_decl(cls: ast.Class, ctx: StaticContext) -> Class:
+    super_cls = cls.super and ctx.lookup_class(cls.super) or "object"
     methods = {m.name: analyze_method(m, ctx) for m in cls.methods}
-    return Class(super_class="object", methods=methods)
+    return Class(super_class=super_cls, methods=methods)
 
 
 def analyze_method(method: ast.Method, ctx: StaticContext) -> Method:
@@ -277,25 +322,26 @@ def analyze_newobj(ctx: StaticContext, cls: str, args_=()):
     assert len(args_) == init.n_args()
 
     def newobj(store):
+        obj = cls_obj.instantiate()
         init.apply([a(store) for a in args_], store)
-        return []
+        return obj
 
     return newobj
 
 
-def analyze_message(
-    ctx: StaticContext, obj: ast.Expression, cls: str, method: str, args_=()
-):
+def analyze_message(ctx: StaticContext, obj: ast.Expression, cls: str, method: str, args_=()):
     cls_obj = ctx.lookup_class(cls)
     assert cls_obj is not UNDEFINED
 
-    method = cls_obj.get_method(method)
+    method_idx = cls_obj.get_method_idx(method)
+    method = cls_obj.get_method_by_idx(method_idx)
     assert len(args_) == method.n_args(), f"{len(args_)} == {method.n_args()}"
 
     obj_ = analyze_expr(obj, ctx.in_tail(False))
 
     def message(store):
-        _ = obj_(store)
+        the_obj = obj_(store)
+        method = the_obj.vtable[method_idx]
         return method.apply([a(store) for a in args_], store)
 
     return message

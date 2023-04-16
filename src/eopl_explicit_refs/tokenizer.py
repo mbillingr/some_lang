@@ -21,6 +21,7 @@ KEYWORDS = (
     "class",
     "deref",
     "else",
+    "extends",
     "false",
     "if",
     "in",

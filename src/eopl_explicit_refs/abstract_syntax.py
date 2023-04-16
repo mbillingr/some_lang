@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import abc
 import dataclasses
-from typing import Any
+from typing import Any, Optional
 
 
 class AstNode(abc.ABC):
@@ -34,6 +34,7 @@ class Method(AstNode):
 @dataclasses.dataclass
 class Class(AstNode):
     name: Symbol
+    super: Optional[Class]
     methods: list[Method]
 
 
