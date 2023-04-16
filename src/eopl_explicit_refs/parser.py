@@ -84,6 +84,8 @@ def parse_classdecl(ts: TokenStream) -> ast.Class:
             case "field", _, _:
                 ts.get_next()
                 fields.append(parse_symbol(ts))
+            case "initializer", _, _:
+                methods.append(parse_initializer(ts))
             case "method", _, _:
                 methods.append(parse_methoddecl(ts))
             case other:
@@ -91,6 +93,22 @@ def parse_classdecl(ts: TokenStream) -> ast.Class:
     _, _, end = expect_token(ts, "}")
 
     return ast.Class(cls_name, cls_super, methods, fields)
+
+
+def parse_initializer(ts: TokenStream) -> ast.Method:
+    _, _, begin = expect_token(ts, "initializer")
+    method_name = ast.Symbol("__init__")
+
+    arms = []
+    for arm in parse_match_arms(ts, body_parser=parse_statement):
+        match arm.body:
+            case stmt:
+                body_expr = ast.BlockExpression(stmt, ast.Literal(0))
+        arms.append(ast.MatchArm(arm.pats, body_expr))
+
+    span = begin.merge(get_span(arms))
+
+    return spanned(span, ast.Method(method_name, spanned(span, ast.Function(arms))))
 
 
 def parse_methoddecl(ts: TokenStream) -> ast.Method:
@@ -133,9 +151,7 @@ def parse_statement(ts: TokenStream) -> ast.Statement:
             return spanned(get_span(expr), ast.ExprStmt(expr))
 
 
-def parse_expr(
-    ts: TokenStream, min_bp: int = 0, invisible_application=True
-) -> ast.Expression:
+def parse_expr(ts: TokenStream, min_bp: int = 0, invisible_application=True) -> ast.Expression:
     match ts.peek():
         case op, _, _ if op in prefix_binding_power:
             _, rbp = prefix_binding_power[op]
@@ -165,9 +181,7 @@ def parse_expr(
                 if lbp < min_bp:
                     break
                 arg = parse_expr(ts, rbp)
-                lhs = spanned(
-                    get_span(lhs).merge(get_span(arg)), ast.Application(lhs, arg)
-                )
+                lhs = spanned(get_span(lhs).merge(get_span(arg)), ast.Application(lhs, arg))
             case _:
                 break
 
@@ -279,9 +293,7 @@ def parse_list_expression(ts, skip_opening: bool):
         case _:
             first = parse_expr(ts, invisible_application=False)
             rest = parse_list_expression(ts, skip_opening=True)
-            result = spanned(
-                get_span(first).merge(get_span(rest)), ast.BinOp(first, rest, "::")
-            )
+            result = spanned(get_span(first).merge(get_span(rest)), ast.BinOp(first, rest, "::"))
 
     if span0 is not None:
         return spanned(span0.merge(get_span(result)), result)
@@ -346,7 +358,7 @@ def parse_postfix_operator(lhs, ts):
             raise UnexpectedToken(token)
 
 
-def parse_match_arms(ts) -> list[ast.MatchArm]:
+def parse_match_arms(ts, body_parser=parse_expr) -> list[ast.MatchArm]:
     arms = [parse_match_arm(ts)]
     while True:
         match ts.peek():
@@ -355,11 +367,11 @@ def parse_match_arms(ts) -> list[ast.MatchArm]:
             case _:
                 break
         ts.get_next()
-        arms.append(parse_match_arm(ts))
+        arms.append(parse_match_arm(ts, body_parser))
     return arms
 
 
-def parse_match_arm(ts) -> ast.MatchArm:
+def parse_match_arm(ts, body_parser=parse_expr) -> ast.MatchArm:
     patterns = []
     if try_token(ts, "=>"):
         patterns = [ast.NullaryPattern()]
@@ -369,10 +381,8 @@ def parse_match_arm(ts) -> ast.MatchArm:
             patterns.append(pat)
             if try_token(ts, "=>"):
                 break
-    body = parse_expr(ts)
-    return spanned(
-        get_span(patterns[0]).merge(get_span(body)), ast.MatchArm(patterns, body)
-    )
+    body = body_parser(ts)
+    return spanned(get_span(patterns[0]).merge(get_span(body)), ast.MatchArm(patterns, body))
 
 
 def parse_pattern(ts) -> ast.Pattern:
@@ -381,9 +391,7 @@ def parse_pattern(ts) -> ast.Pattern:
         case "::", _, span:
             ts.get_next()
             rhs = parse_pattern(ts)
-            return spanned(
-                get_span(lhs).merge(get_span(rhs)), ast.ListConsPattern(lhs, rhs)
-            )
+            return spanned(get_span(lhs).merge(get_span(rhs)), ast.ListConsPattern(lhs, rhs))
         case _:
             return lhs
 

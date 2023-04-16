@@ -27,6 +27,7 @@ KEYWORDS = (
     "getfield",
     "if",
     "in",
+    "initializer",
     "let",
     "method",
     "new",
