@@ -73,19 +73,23 @@ def parse_classdecl(ts: TokenStream) -> ast.Class:
     cls_super = try_token(ts, "extends") and parse_symbol(ts) or None
 
     methods = []
+    fields = []
 
     expect_token(ts, "{")
     while True:
         match ts.peek():
             case "}", _, _:
                 break
+            case "field", _, _:
+                ts.get_next()
+                fields.append(parse_symbol(ts))
             case "method", _, _:
                 methods.append(parse_methoddecl(ts))
             case other:
                 raise UnexpectedToken(other)
     _, _, end = expect_token(ts, "}")
 
-    return ast.Class(cls_name, cls_super, methods)
+    return ast.Class(cls_name, cls_super, methods, fields)
 
 
 def parse_methoddecl(ts: TokenStream) -> ast.Method:

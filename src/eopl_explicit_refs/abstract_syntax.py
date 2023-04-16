@@ -36,6 +36,7 @@ class Class(AstNode):
     name: Symbol
     super: Optional[Class]
     methods: list[Method]
+    fields: list[Symbol]
 
 
 @dataclasses.dataclass

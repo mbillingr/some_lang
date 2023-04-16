@@ -23,6 +23,7 @@ KEYWORDS = (
     "else",
     "extends",
     "false",
+    "field",
     "if",
     "in",
     "let",

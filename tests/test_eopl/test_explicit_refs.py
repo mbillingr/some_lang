@@ -138,6 +138,11 @@ def test_functions(src, expect):
         (1, "class A { method foo => 1 } class B extends A { } let x = new B in send x B foo"),
         (2, "class A { method foo => 1 } class B extends A { method foo => 2 } let x = new B in send x A foo"),
         (0, "class Foo { field f } let x = new Foo in 0"),
+        (
+            0,
+            "class Foo { field f method init => setfield f 0 method get => getfield f }"
+            "let x = new Foo in send x Foo get",
+        ),
     ],
 )
 def test_classes(src, expect):
