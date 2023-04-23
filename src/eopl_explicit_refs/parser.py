@@ -124,6 +124,9 @@ def parse_methoddecl(ts: TokenStream) -> ast.Method:
 
 def parse_statement(ts: TokenStream) -> ast.Statement:
     match ts.peek():
+        case "pass", _, span:
+            ts.get_next()
+            return spanned(span, ast.NopStatement())
         case "if", _, span:
             ts.get_next()
             cond = parse_expr(ts)
@@ -359,7 +362,7 @@ def parse_postfix_operator(lhs, ts):
 
 
 def parse_match_arms(ts, body_parser=parse_expr) -> list[ast.MatchArm]:
-    arms = [parse_match_arm(ts)]
+    arms = [parse_match_arm(ts, body_parser)]
     while True:
         match ts.peek():
             case "|", _, _:

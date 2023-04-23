@@ -32,6 +32,7 @@ KEYWORDS = (
     "method",
     "new",
     "newref",
+    "pass",
     "send",
     "set",
     "setfield",
