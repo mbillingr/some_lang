@@ -1,6 +1,6 @@
 import pytest
 
-from eopl_explicit_refs import tokenizer, parser, interpreter
+from eopl_explicit_refs import tokenizer, parser, interpreter, type_checker
 from eopl_explicit_refs.store import PythonStore as Store
 
 
@@ -141,5 +141,6 @@ def test_type_annotations(src, expect):
 def evaluate(src):
     token_stream = tokenizer.default_tokenizer(src)
     program = parser.parse_program(token_stream)
-    runner = interpreter.analyze_program(program)
+    checked = type_checker.check_program(program)
+    runner = interpreter.analyze_program(checked)
     return runner(Store())
