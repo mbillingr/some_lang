@@ -80,9 +80,7 @@ def parse_statement(ts: TokenStream) -> ast.Statement:
             return spanned(get_span(expr), ast.ExprStmt(expr))
 
 
-def parse_expr(
-    ts: TokenStream, min_bp: int = 0, invisible_application=True
-) -> ast.Expression:
+def parse_expr(ts: TokenStream, min_bp: int = 0, invisible_application=True) -> ast.Expression:
     match ts.peek():
         case op, _, _ if op in prefix_binding_power:
             _, rbp = prefix_binding_power[op]
@@ -112,9 +110,7 @@ def parse_expr(
                 if lbp < min_bp:
                     break
                 arg = parse_expr(ts, rbp)
-                lhs = spanned(
-                    get_span(lhs).merge(get_span(arg)), ast.Application(lhs, arg)
-                )
+                lhs = spanned(get_span(lhs).merge(get_span(arg)), ast.Application(lhs, arg))
             case _:
                 break
 
@@ -153,6 +149,8 @@ def parse_atom(ts: TokenStream):
             return spanned(span.merge(get_span(expr)), expr)
         case "let", _, span:
             var = parse_symbol(ts)
+            if try_token(ts, ":"):
+                _ = parse_type(ts)
             expect_token(ts, "=")
             val = parse_expr(ts)
             expect_token(ts, "in")
@@ -223,9 +221,7 @@ def parse_list_expression(ts, skip_opening: bool):
         case _:
             first = parse_expr(ts, invisible_application=False)
             rest = parse_list_expression(ts, skip_opening=True)
-            result = spanned(
-                get_span(first).merge(get_span(rest)), ast.BinOp(first, rest, "::")
-            )
+            result = spanned(get_span(first).merge(get_span(rest)), ast.BinOp(first, rest, "::"))
 
     if span0 is not None:
         return spanned(span0.merge(get_span(result)), result)
@@ -301,9 +297,7 @@ def parse_match_arm(ts) -> ast.MatchArm:
         if try_token(ts, "=>"):
             break
     body = parse_expr(ts)
-    return spanned(
-        get_span(patterns[0]).merge(get_span(body)), ast.MatchArm(patterns, body)
-    )
+    return spanned(get_span(patterns[0]).merge(get_span(body)), ast.MatchArm(patterns, body))
 
 
 def parse_pattern(ts) -> ast.Pattern:
@@ -312,9 +306,7 @@ def parse_pattern(ts) -> ast.Pattern:
         case "::", _, span:
             ts.get_next()
             rhs = parse_pattern(ts)
-            return spanned(
-                get_span(lhs).merge(get_span(rhs)), ast.ListConsPattern(lhs, rhs)
-            )
+            return spanned(get_span(lhs).merge(get_span(rhs)), ast.ListConsPattern(lhs, rhs))
         case _:
             return lhs
 
@@ -323,6 +315,8 @@ def parse_atomic_pattern(ts) -> ast.Pattern:
     match ts.peek():
         case ident, TokenKind.IDENTIFIER, span:
             ts.get_next()
+            if try_token(ts, ":"):
+                _ = parse_type(ts)
             return spanned(span, ast.BindingPattern(ident))
         case value, TokenKind.LITERAL_BOOL | TokenKind.LITERAL_INT, span:
             ts.get_next()
@@ -343,6 +337,14 @@ def parse_list_pattern(ts) -> ast.Pattern:
             return spanned(span0.merge(span), ast.EmptyListPattern())
         case _:
             raise NotImplementedError()
+
+
+def parse_type(ts) -> ast.Type:
+    match ts.get_next():
+        case "Int", _, span:
+            return spanned(span, ast.IntType)
+        case other:
+            raise UnexpectedToken(other)
 
 
 def parse_symbol(ts) -> ast.Symbol:

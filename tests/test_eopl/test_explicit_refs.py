@@ -127,6 +127,17 @@ def test_functions(src, expect):
     assert evaluate(src) == expect
 
 
+@pytest.mark.parametrize(
+    "expect, src",
+    [
+        (0, "let x: Int = 0 in x"),
+        (0, "(fn x: Int => x) 0"),
+    ],
+)
+def test_type_annotations(src, expect):
+    assert evaluate(src) == expect
+
+
 def evaluate(src):
     token_stream = tokenizer.default_tokenizer(src)
     program = parser.parse_program(token_stream)

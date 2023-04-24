@@ -7,6 +7,10 @@ class AstNode(abc.ABC):
     pass
 
 
+class Type(AstNode):
+    pass
+
+
 class Expression(AstNode):
     pass
 
@@ -151,6 +155,11 @@ class EmptyListPattern(Pattern):
 class ListConsPattern(Pattern):
     car: Pattern
     cdr: Pattern
+
+
+@dataclasses.dataclass
+class IntType(Type):
+    pass
 
 
 def stmt_to_expr(stmt: Statement) -> Expression:
