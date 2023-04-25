@@ -366,6 +366,8 @@ def parse_type(ts) -> ast.Type:
 
 def parse_atomic_type(ts) -> ast.Type:
     match ts.get_next():
+        case "Bool", _, span:
+            return spanned(span, ast.BoolType)
         case "Int", _, span:
             return spanned(span, ast.IntType)
         case "[", _, span:

@@ -170,6 +170,11 @@ class IntType(Type):
 
 
 @dataclasses.dataclass
+class BoolType(Type):
+    pass
+
+
+@dataclasses.dataclass
 class ListType(Type):
     item: Type
 

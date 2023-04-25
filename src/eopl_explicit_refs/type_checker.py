@@ -228,6 +228,8 @@ def check_pattern(pat: ast.Pattern, typ: Type, env: TEnv) -> dict[str, Type]:
 
 def eval_type(tx: ast.Type) -> Type:
     match tx:
+        case ast.BoolType:
+            return t.BoolType()
         case ast.IntType:
             return t.IntType()
         case ast.ListType(item_t):
