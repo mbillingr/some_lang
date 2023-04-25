@@ -131,7 +131,7 @@ def test_functions(src, expect):
     "expect, src",
     [
         (0, "let x: Int = 0 in x"),
-        (0, "(fn x: Int => x) 0"),
+        (0, "(the Int -> Int fn x => x) 0"),
     ],
 )
 def test_type_annotations(src, expect):
