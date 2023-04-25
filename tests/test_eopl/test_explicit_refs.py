@@ -38,7 +38,7 @@ def test_operators(src, expect):
     "expect, src",
     [
         # Lists
-        #((), "[]"),
+        # ((), "[]"),
         ((1, (2, (3, ()))), "[1 2 3]"),
         ((1, (2, (3, ()))), "1 :: [2 3]"),
         ((1, (2, (3, ()))), "1::2::3::[]"),
@@ -109,18 +109,18 @@ def test_bindings(src, expect):
         (0, "let foo: Int -> Int = fn x => x in foo 0"),
         (1, "let zzz: Int -> Int = fn 0 => 1 in zzz 0"),
         (1, "let zzz: Bool -> Int = fn true => 1 in zzz true"),
-        (11, "let foo = fn 0 => 11 | x => x in foo 0"),
-        (99, "let foo = fn 0 => 11 | x => x in foo 99"),
+        (11, "let foo: Int -> Int = fn 0 => 11 | x => x in foo 0"),
+        (99, "let foo: Int -> Int = fn 0 => 11 | x => x in foo 99"),
         # Closure
-        (1, "(let x = 1 in (fn y => x)) 0"),
+        (1, "(let x = 1 in (the Int -> Int fn y => x)) 0"),
         # Recursive Functions
-        (10, "let sum = fn 0 => 0 | n => n + (sum (n - 1)) in sum 4"),
-        (0, "let red = fn 0 => 0 | n => red (n - 1) in red 10000"),
+        (10, "let sum: Int -> Int = fn 0 => 0 | n => n + (sum (n - 1)) in sum 4"),
+        (0, "let red: Int -> Int = fn 0 => 0 | n => red (n - 1) in red 10000"),
         # Multiple Arguments & Partial Application
-        (6, "(fn a => fn b => fn c => a + b + c) 1 2 3"),
-        (6, "(((fn a => fn b => fn c => a + b + c) 1) 2) 3"),
-        (6, "(fn a b c => a + b + c) 1 2 3"),
-        (6, "let part = (fn a b c => a + b + c) 1 2 in part 3"),
+        (6, "(the Int -> Int -> Int -> Int fn a => fn b => fn c => a + b + c) 1 2 3"),
+        (5, "((the Int -> Int -> Int fn a => fn b => a + b) 2) 3"),
+        (6, "(the Int -> Int -> Int -> Int fn a b c => a + b + c) 1 2 3"),
+        (5, "let part = (the Int -> Int -> Int fn a b => a + b) 2 in part 3"),
     ],
 )
 def test_functions(src, expect):

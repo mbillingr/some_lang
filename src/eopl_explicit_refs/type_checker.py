@@ -113,7 +113,7 @@ def infer_expr(exp: ast.Expression, env: TEnv) -> (ast.Expression, Type):
 
         case ast.Function(patterns):
             raise InferenceError(
-                "can't infer function signatures. Please provide a type hint."
+                f"can't infer function signature for {exp}. Please provide a type hint."
             )
 
         case ast.Application(fun, arg):
