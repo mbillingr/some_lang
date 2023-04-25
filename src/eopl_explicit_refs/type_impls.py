@@ -19,6 +19,14 @@ class IntType(Type):
 
 
 @dataclasses.dataclass
+class BoxType(Type):
+    item_t: Type
+
+    def __str__(self):
+        return f"@{self.item_t}"
+
+
+@dataclasses.dataclass
 class ListType(Type):
     item_t: Type
 

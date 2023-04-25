@@ -106,9 +106,9 @@ def test_bindings(src, expect):
     "expect, src",
     [
         # Anonymous Functions
-        (0, "let foo = fn x => x in foo 0"),
-        (1, "let zzz = fn 0 => 1 in zzz 0"),
-        (1, "let zzz = fn true => 1 in zzz true"),
+        (0, "let foo: Int -> Int = fn x => x in foo 0"),
+        (1, "let zzz: Int -> Int = fn 0 => 1 in zzz 0"),
+        (1, "let zzz: Bool -> Int = fn true => 1 in zzz true"),
         (11, "let foo = fn 0 => 11 | x => x in foo 0"),
         (99, "let foo = fn 0 => 11 | x => x in foo 99"),
         # Closure

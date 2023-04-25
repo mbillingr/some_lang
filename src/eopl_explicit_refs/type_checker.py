@@ -57,7 +57,7 @@ def check_expr(exp: ast.Expression, typ: Type, env: TEnv) -> ast.Expression:
                 ]
             )
 
-        case typ, ast.Application(fun, arg):
+        case _, ast.Application(fun, arg):
             fun, fun_t = infer_expr(fun, env)
             match fun_t:
                 case t.FuncType(arg_t, ret_t):
@@ -68,10 +68,20 @@ def check_expr(exp: ast.Expression, typ: Type, env: TEnv) -> ast.Expression:
                 raise TypeError(f"Function returns {ret_t} but expected {typ}")
             return ast.Application(fun, check_expr(arg, arg_t, env))
 
+        case _, ast.Conditional(c, a, b):
+            c_out = check_expr(c, t.BoolType(), env)
+            a_out = check_expr(a, typ, env)
+            b_out = check_expr(b, typ, env)
+            return ast.Conditional(c_out, a_out, b_out)
+
         case _:
             actual_t = infer_expr(exp, env)
             if actual_t != typ:
                 raise TypeError(actual_t, typ)
+
+
+class InferenceError(Exception):
+    pass
 
 
 def infer_expr(exp: ast.Expression, env: TEnv) -> (ast.Expression, Type):
@@ -84,7 +94,7 @@ def infer_expr(exp: ast.Expression, env: TEnv) -> (ast.Expression, Type):
             return exp, env.lookup(name)
 
         case ast.EmptyList():
-            raise TypeError("can't infer empty list type")
+            raise InferenceError("can't infer empty list type")
 
         case ast.TypeAnnotation(tx, expr):
             ty = eval_type(tx)
@@ -102,7 +112,7 @@ def infer_expr(exp: ast.Expression, env: TEnv) -> (ast.Expression, Type):
             return ast.BinOp(lhs, rhs, op), t.IntType
 
         case ast.Function(patterns):
-            raise TypeError(
+            raise InferenceError(
                 "can't infer function signatures. Please provide a type hint."
             )
 
@@ -128,8 +138,62 @@ def infer_expr(exp: ast.Expression, env: TEnv) -> (ast.Expression, Type):
             body, out_t = infer_expr(bdy, let_env)
             return ast.Let(var, val, body, var_t), out_t
 
+        case ast.BlockExpression(fst, snd):
+            fst = check_stmt(fst, env)
+            snd, out_t = infer_expr(snd, env)
+            return ast.BlockExpression(fst, snd), out_t
+
+        case ast.Conditional(_, a, b):
+            try:
+                _, out_t = infer_expr(a, env)
+            except InferenceError:
+                _, out_t = infer_expr(b, env)
+            return check_expr(exp, out_t, env), out_t
+
+        case ast.NewRef(val):
+            v_out, v_t = infer_expr(val, env)
+            return ast.NewRef(v_out), t.BoxType(v_t)
+
+        case ast.DeRef(box):
+            b_out, box_t = infer_expr(box, env)
+            if not isinstance(box_t, t.BoxType):
+                raise TypeError(f"Cannot deref a {box_t}")
+            return ast.DeRef(b_out), box_t
+
         case _:
             raise NotImplementedError(exp)
+
+
+def check_stmt(stmt: ast.Statement, env: TEnv) -> ast.Statement:
+    match stmt:
+        case ast.NopStatement():
+            return stmt
+
+        case ast.ExprStmt(expr):
+            expr, _ = infer_expr(expr, env)
+            return ast.ExprStmt(expr)
+
+        case ast.IfStatement(c, a, b):
+            c_out = check_expr(c, t.BoolType(), env)
+            a_out = check_stmt(a, env)
+            b_out = check_stmt(b, env)
+            return ast.IfStatement(c_out, a_out, b_out)
+
+        case ast.Assignment(lhs, rhs):
+            try:
+                l_out, l_t = infer_expr(lhs, env)
+                if not isinstance(l_t, t.BoxType):
+                    raise TypeError(f"Cannot assign to a {l_t}")
+                r_out = check_expr(rhs, l_t.item_t, env)
+                return ast.Assignment(l_out, r_out)
+            except InferenceError:
+                pass
+            r_out, r_t = infer_expr(rhs, env)
+            l_out = check_expr(lhs, t.BoxType(r_t), env)
+            return ast.Assignment(l_out, r_out)
+
+        case _:
+            raise NotImplementedError(stmt)
 
 
 def check_matcharm(
