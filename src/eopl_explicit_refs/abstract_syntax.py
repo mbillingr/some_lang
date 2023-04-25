@@ -1,6 +1,6 @@
 import abc
 import dataclasses
-from typing import Any
+from typing import Any, Optional
 
 
 class AstNode(abc.ABC):
@@ -62,6 +62,12 @@ class BlockStatement(Statement):
 
 
 @dataclasses.dataclass
+class TypeAnnotation(Expression):
+    type: Type
+    expr: Expression
+
+
+@dataclasses.dataclass
 class BlockExpression(Expression):
     pre: Statement
     exp: Expression
@@ -106,6 +112,7 @@ class Let(Expression):
     var: Identifier
     val: Expression
     bdy: Expression
+    var_t: Optional[Type]
 
 
 @dataclasses.dataclass
@@ -160,6 +167,17 @@ class ListConsPattern(Pattern):
 @dataclasses.dataclass
 class IntType(Type):
     pass
+
+
+@dataclasses.dataclass
+class ListType(Type):
+    item: Type
+
+
+@dataclasses.dataclass
+class FuncType(Type):
+    arg: Type
+    ret: Type
 
 
 def stmt_to_expr(stmt: Statement) -> Expression:

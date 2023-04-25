@@ -29,8 +29,6 @@ class Entry(Env[T]):
         self.nxt = nxt
 
     def lookup(self, var: str) -> T:
-        this = self
-        while True:
-            if this.var == var:
-                return this.val
-            this = self.nxt
+        if self.var == var:
+            return self.val
+        return self.nxt.lookup(var)

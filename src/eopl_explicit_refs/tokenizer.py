@@ -26,6 +26,7 @@ KEYWORDS = (
     "let",
     "newref",
     "set",
+    "the",
     "then",
     "true",
 )

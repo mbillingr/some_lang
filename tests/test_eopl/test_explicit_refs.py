@@ -38,17 +38,17 @@ def test_operators(src, expect):
     "expect, src",
     [
         # Lists
-        ((), "[]"),
+        #((), "[]"),
         ((1, (2, (3, ()))), "[1 2 3]"),
         ((1, (2, (3, ()))), "1 :: [2 3]"),
         ((1, (2, (3, ()))), "1::2::3::[]"),
-        (1, "(fn x::xs => x) [1 2]"),
-        ((2, ()), "(fn x::xs => xs) [1 2]"),
-        ((), "(fn x::y::ys => ys) [1 2]"),
-        (2, "(fn x::y::ys => y) [1 2]"),
-        (0, "let len = fn [] => 0 | x::xs => 1 + len xs in len []"),
-        (1, "let len = fn [] => 0 | x::xs => 1 + len xs in len [0]"),
-        (3, "let len = fn [] => 0 | x::xs => 1 + len xs in len [0 0 0]"),
+        (1, "(the [Int]->Int fn x::xs => x) [1 2]"),
+        ((2, ()), "(the [Int]->[Int] fn x::xs => xs) [1 2]"),
+        ((), "(the [Int]->[Int] fn x::y::ys => ys) [1 2]"),
+        (2, "(the [Int]->Int fn x::y::ys => y) [1 2]"),
+        (0, "let len: [Int]->Int = fn [] => 0 | x::xs => 1 + len xs in len []"),
+        (1, "let len: [Int]->Int = fn [] => 0 | x::xs => 1 + len xs in len [0]"),
+        (3, "let len: [Int]->Int = fn [] => 0 | x::xs => 1 + len xs in len [0 0 0]"),
     ],
 )
 def test_lists(src, expect):

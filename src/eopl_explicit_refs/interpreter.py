@@ -126,6 +126,7 @@ def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
 
         case ast.Application():
             return analyze_application(exp, env=env, tail=tail)
+
         case _:
             raise NotImplementedError(exp)
 
