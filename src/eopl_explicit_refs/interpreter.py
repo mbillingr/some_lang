@@ -127,6 +127,10 @@ def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
         case ast.Application():
             return analyze_application(exp, env=env, tail=tail)
 
+        case ast.RecordExpr(fields):
+            fields_ = {n: analyze_expr(v, env, tail=False) for n, v in fields.items()}
+            return lambda store: {n: v(store) for n, v in fields_.items()}
+
         case _:
             raise NotImplementedError(exp)
 

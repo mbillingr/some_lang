@@ -127,6 +127,11 @@ class ListCons(Expression):
 
 
 @dataclasses.dataclass
+class RecordExpr(Expression):
+    fields: dict[Symbol, Expression]
+
+
+@dataclasses.dataclass
 class MatchArm(AstNode):
     pats: list[Pattern]
     body: Expression
@@ -177,6 +182,11 @@ class BoolType(Type):
 @dataclasses.dataclass
 class ListType(Type):
     item: Type
+
+
+@dataclasses.dataclass
+class RecordType(Type):
+    fields: dict[Symbol, Type]
 
 
 @dataclasses.dataclass

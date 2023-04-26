@@ -1,6 +1,8 @@
 import abc
 import dataclasses
 
+from eopl_explicit_refs.abstract_syntax import Symbol
+
 
 class Type(abc.ABC):
     pass
@@ -32,6 +34,14 @@ class ListType(Type):
 
     def __str__(self):
         return f"[{self.item_t}]"
+
+
+@dataclasses.dataclass
+class RecordType(Type):
+    fields: dict[Symbol, Type]
+
+    def __str__(self):
+        return f"[{', '.join(f'{n}: {t}' for n, t in self.fields.items())}]"
 
 
 @dataclasses.dataclass

@@ -75,9 +75,10 @@ def check_expr(exp: ast.Expression, typ: Type, env: TEnv) -> ast.Expression:
             return ast.Conditional(c_out, a_out, b_out)
 
         case _:
-            actual_t = infer_expr(exp, env)
+            e_out, actual_t = infer_expr(exp, env)
             if actual_t != typ:
                 raise TypeError(actual_t, typ)
+            return e_out
 
 
 class InferenceError(Exception):
@@ -160,6 +161,15 @@ def infer_expr(exp: ast.Expression, env: TEnv) -> (ast.Expression, Type):
                 raise TypeError(f"Cannot deref a {box_t}")
             return ast.DeRef(b_out), box_t
 
+        case ast.RecordExpr(fields):
+            field_values = {}
+            field_types = {}
+            for name, val in fields.items():
+                v_out, val_t = infer_expr(val, env)
+                field_values[name] = v_out
+                field_types[name] = val_t
+            return ast.RecordExpr(field_values), t.RecordType(field_types)
+
         case _:
             raise NotImplementedError(exp)
 
@@ -234,6 +244,8 @@ def eval_type(tx: ast.Type) -> Type:
             return t.IntType()
         case ast.ListType(item_t):
             return t.ListType(eval_type(item_t))
+        case ast.RecordType(fields):
+            return t.RecordType({n: eval_type(t) for n, t in fields.items()})
         case ast.FuncType(arg_t, ret_t):
             return t.FuncType(eval_type(arg_t), eval_type(ret_t))
         case _:

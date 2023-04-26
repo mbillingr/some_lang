@@ -126,7 +126,7 @@ def is_delimiter(t, k) -> bool:
     match t, k:
         case "true" | "false", _:
             return False
-        case "=" | ";", _:
+        case "=" | ";" | ",", _:
             return True
         case _, TokenKind.RPAREN | TokenKind.KEYWORD:
             return True
@@ -150,8 +150,13 @@ def parse_atom(ts: TokenStream):
             expr = parse_block_expression(ts, skip_opening=True)
             return spanned(span.merge(get_span(expr)), expr)
         case "[", _, span:
-            expr = parse_list_expression(ts, skip_opening=True)
-            return spanned(span.merge(get_span(expr)), expr)
+            match ts.peek(1):
+                case "=", _, _:
+                    expr = parse_record_expression(ts, skip_opening=True)
+                    return spanned(span.merge(get_span(expr)), expr)
+                case other:
+                    expr = parse_list_expression(ts, skip_opening=True)
+                    return spanned(span.merge(get_span(expr)), expr)
         case "let", _, span:
             var = parse_symbol(ts)
             if try_token(ts, ":"):
@@ -162,7 +167,9 @@ def parse_atom(ts: TokenStream):
             val = parse_expr(ts)
             expect_token(ts, "in")
             body = parse_expr(ts)
-            return spanned(span.merge(get_span(body)), ast.Let(var, val, body, var_t=typ))
+            return spanned(
+                span.merge(get_span(body)), ast.Let(var, val, body, var_t=typ)
+            )
         case token:
             raise UnexpectedToken(token)
 
@@ -234,6 +241,32 @@ def parse_list_expression(ts, skip_opening: bool):
 
     if span0 is not None:
         return spanned(span0.merge(get_span(result)), result)
+    else:
+        return result
+
+
+def parse_record_expression(ts, skip_opening: bool):
+    span0 = None
+    if not skip_opening:
+        _, _, span0 = expect_token(ts, "[")
+
+    fields = {}
+    while True:
+        field_name = parse_symbol(ts)
+        expect_token(ts, "=")
+        field_value = parse_expr(ts)
+        fields[field_name] = field_value
+        if try_token(ts, ","):
+            continue
+        else:
+            break
+
+    _, _, span1 = expect_token(ts, "]")
+
+    result = ast.RecordExpr(fields)
+
+    if span0 is not None:
+        return spanned(span0.merge(span1), result)
     else:
         return result
 
@@ -371,9 +404,24 @@ def parse_atomic_type(ts) -> ast.Type:
         case "Int", _, span:
             return spanned(span, ast.IntType)
         case "[", _, span:
-            item_t = parse_type(ts)
-            expect_token(ts, "]")
-            return spanned(span, ast.ListType(item_t))
+            match ts.peek(0), ts.peek(1):
+                case (_, TokenKind.IDENTIFIER, _), (":", _, _):
+                    fields = {}
+                    while True:
+                        field_name = parse_symbol(ts)
+                        expect_token(ts, ":")
+                        field_type = parse_type(ts)
+                        fields[field_name] = field_type
+                        if try_token(ts, ","):
+                            continue
+                        else:
+                            break
+                    expect_token(ts, "]")
+                    return spanned(span, ast.RecordType(fields))
+                case _:
+                    item_t = parse_type(ts)
+                    expect_token(ts, "]")
+                    return spanned(span, ast.ListType(item_t))
         case other:
             raise UnexpectedToken(other)
 

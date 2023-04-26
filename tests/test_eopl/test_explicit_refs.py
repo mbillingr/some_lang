@@ -138,6 +138,16 @@ def test_type_annotations(src, expect):
     assert evaluate(src) == expect
 
 
+@pytest.mark.parametrize(
+    "expect, src",
+    [
+        ({"x": 1, "y": 2}, "the [x: Int, y: Int] [y = 2, x = 1]"),
+    ],
+)
+def test_records(src, expect):
+    assert evaluate(src) == expect
+
+
 def evaluate(src):
     token_stream = tokenizer.default_tokenizer(src)
     program = parser.parse_program(token_stream)
