@@ -233,7 +233,10 @@ def parse_list_expression(ts, skip_opening: bool):
             ts.get_next()
             result = spanned(span, ast.EmptyList())
         case _:
-            first = parse_expr(ts, invisible_application=False)
+            first = parse_expr(ts)
+            # Support trailing comma by making it optional everywhere. An omitted
+            # comma between two elements would be correctly parsed as application.
+            try_token(ts, ",")
             rest = parse_list_expression(ts, skip_opening=True)
             result = spanned(
                 get_span(first).merge(get_span(rest)), ast.BinOp(first, rest, "::")

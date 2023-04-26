@@ -39,16 +39,17 @@ def test_operators(src, expect):
     [
         # Lists
         # ((), "[]"),
-        ((1, (2, (3, ()))), "[1 2 3]"),
-        ((1, (2, (3, ()))), "1 :: [2 3]"),
+        ((1, ()), "[1,]"),
+        ((1, (2, (3, ()))), "[1, 2, 3]"),
+        ((1, (2, (3, ()))), "1 :: [2, 3]"),
         ((1, (2, (3, ()))), "1::2::3::[]"),
-        (1, "(the [Int]->Int fn x::xs => x) [1 2]"),
-        ((2, ()), "(the [Int]->[Int] fn x::xs => xs) [1 2]"),
-        ((), "(the [Int]->[Int] fn x::y::ys => ys) [1 2]"),
-        (2, "(the [Int]->Int fn x::y::ys => y) [1 2]"),
+        (1, "(the [Int]->Int fn x::xs => x) [1, 2]"),
+        ((2, ()), "(the [Int]->[Int] fn x::xs => xs) [1, 2]"),
+        ((), "(the [Int]->[Int] fn x::y::ys => ys) [1, 2]"),
+        (2, "(the [Int]->Int fn x::y::ys => y) [1, 2]"),
         (0, "let len: [Int]->Int = fn [] => 0 | x::xs => 1 + len xs in len []"),
         (1, "let len: [Int]->Int = fn [] => 0 | x::xs => 1 + len xs in len [0]"),
-        (3, "let len: [Int]->Int = fn [] => 0 | x::xs => 1 + len xs in len [0 0 0]"),
+        (3, "let len: [Int]->Int = fn [] => 0 | x::xs => 1 + len xs in len [0, 0, 0]"),
     ],
 )
 def test_lists(src, expect):
@@ -141,6 +142,8 @@ def test_type_annotations(src, expect):
 @pytest.mark.parametrize(
     "expect, src",
     [
+        # anonymous
+        ({"x": 1, "y": 2}, " [x=1,y=2]"),
         ({"x": 1, "y": 2}, "the [x: Int, y: Int] [y = 2, x = 1]"),
     ],
 )

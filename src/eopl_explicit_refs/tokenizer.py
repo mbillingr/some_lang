@@ -33,8 +33,8 @@ KEYWORDS = (
 )
 DIGITS = "0123456789"
 LETTERS = "abcdefghijklmnopqrstuvwxyz"
-IDENT_SYMS = "+-*/<>@$~&%=!?^\\'\""
-OP_SYMBOLS = IDENT_SYMS + ".:"
+IDENT_SYMS = "+-*/<>@$~&%!?^\\'\""
+OP_SYMBOLS = IDENT_SYMS + ".:="
 LPARENS = "([{"
 RPARENS = ")]}"
 
