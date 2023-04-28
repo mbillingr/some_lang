@@ -145,6 +145,8 @@ def test_type_annotations(src, expect):
         # anonymous
         ((1, 2), "[x=1,y=2]"),
         ((1, 2), "the [x: Int, y: Int] [y = 2, x = 1]"),  # anonymous record fields sorted alphabetically
+        ((1,), "let foo: [x: Int] = [x=1] in foo"),
+        ((1,), "(the [x:Int]->[x:Int] fn x => x) [x=1]"),
         # named
         (0, "struct Foo [] 0"),
         ((4, 3), "struct Foo [y: Int, x: Int] the Foo [x = 3, y = 4]"),  # named record fields in declaration order
@@ -156,6 +158,7 @@ def test_type_annotations(src, expect):
         (10, "[y=10, x=1, z=100].y"),
         (100, "[y=10, x=1, z=100].z"),
         (3, "struct Foo [x: Int] let bar: Foo = [x = 3] in bar.x"),
+        (0, "struct Foo [x: Int] (the Foo -> Int fn x => x.x) [x = 0]"),
     ],
 )
 def test_records(src, expect):
