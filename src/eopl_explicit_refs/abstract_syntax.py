@@ -141,6 +141,12 @@ class RecordExpr(Expression):
 
 
 @dataclasses.dataclass
+class GetField(Expression):
+    record: Expression
+    fname: Symbol
+
+
+@dataclasses.dataclass
 class MatchArm(AstNode):
     pats: list[Pattern]
     body: Expression

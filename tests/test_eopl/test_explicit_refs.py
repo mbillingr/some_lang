@@ -151,6 +151,8 @@ def test_type_annotations(src, expect):
         ({"x": 3}, "struct Foo [x: Int] let bar: Foo = [x = 3] in bar"),
         ({"x": 3}, "struct Foo [x: Int] (the Foo -> Foo fn x => x) [x = 3]"),
         ({"x": 3}, "struct Foo [x: Int] let bar: Foo = (the Foo [x = 3]) in bar"),
+        # field access
+        (0, "[x=0].x"),
     ],
 )
 def test_records(src, expect):

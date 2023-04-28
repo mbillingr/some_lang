@@ -189,6 +189,14 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
                 field_types[name] = val_t
             return ast.RecordExpr(field_values), t.RecordType(field_types)
 
+        case ast.GetField(rec, fld):
+            rec, rec_t = infer_expr(rec, ctx)
+            if not isinstance(rec_t, t.RecordType):
+                raise TypeError("Expected record type")
+            if not fld in rec_t.fields:
+                raise TypeError(f"Record has no field {fld}")
+            return ast.GetField(rec, fld), rec_t.fields[fld]
+
         case _:
             raise NotImplementedError(exp)
 

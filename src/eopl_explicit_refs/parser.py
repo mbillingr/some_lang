@@ -30,11 +30,12 @@ prefix_binding_power = {
     "newref": (None, 5),
     "~": (None, 11),
     "the": (None, 19),
-    "deref": (None, 99),
+    "deref": (None, 97),
 }
 
 postfix_binding_power = {
     "!": (13, None),
+    ".": (99, None),
 }
 
 op_types = {
@@ -319,6 +320,9 @@ def parse_infix_operator(lhs, rbp, ts):
 
 def parse_postfix_operator(lhs, ts):
     match ts.get_next():
+        case ".", _, _:
+            fieldname = parse_symbol(ts)
+            return spanned(get_span(lhs).merge(get_span(fieldname)), ast.GetField(lhs, fieldname))
         case op, TokenKind.OPERATOR, span:
             return spanned(
                 make_operator_span(span, get_span(lhs)),

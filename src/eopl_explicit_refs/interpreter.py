@@ -131,6 +131,10 @@ def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
             fields_ = {n: analyze_expr(v, env, tail=False) for n, v in fields.items()}
             return lambda store: {n: v(store) for n, v in fields_.items()}
 
+        case ast.GetField(obj, fld):
+            obj_ = analyze_expr(obj, env, tail=False)
+            return lambda store: obj_(store)[fld]
+
         case _:
             raise NotImplementedError(exp)
 
