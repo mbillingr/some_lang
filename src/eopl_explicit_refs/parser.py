@@ -330,8 +330,12 @@ def parse_postfix_operator(lhs, ts):
 
 def parse_match_arms(ts) -> list[ast.MatchArm]:
     arms = [parse_match_arm(ts)]
-    while ts.peek()[0] == "|":
-        ts.get_next()
+    while True:
+        match ts.peek():
+            case "|", _, _:
+                ts.get_next()
+            case _:
+                break
         arms.append(parse_match_arm(ts))
     return arms
 

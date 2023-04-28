@@ -148,10 +148,18 @@ def test_type_annotations(src, expect):
         # named
         (0, "struct Foo [] 0"),
         ({"x": 3}, "struct Foo [x: Int] the Foo [x = 3]"),
+        ({"x": 3}, "struct Foo [x: Int] let bar: Foo = [x = 3] in bar"),
+        ({"x": 3}, "struct Foo [x: Int] (the Foo -> Foo fn x => x) [x = 3]"),
+        ({"x": 3}, "struct Foo [x: Int] let bar: Foo = (the Foo [x = 3]) in bar"),
     ],
 )
 def test_records(src, expect):
     assert evaluate(src) == expect
+
+
+def test_two_similar_records_are_not_equal():
+    with pytest.raises(TypeError):
+        evaluate("struct Foo [x: Int] struct Bar [x: Int] let bar: Bar = (the Foo [x = 3]) in bar")
 
 
 def evaluate(src):
