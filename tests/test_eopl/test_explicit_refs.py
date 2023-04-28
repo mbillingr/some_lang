@@ -155,6 +155,7 @@ def test_type_annotations(src, expect):
         (1, "[x=1, y=10, z=100].x"),
         (10, "[y=10, x=1, z=100].y"),
         (100, "[y=10, x=1, z=100].z"),
+        (3, "struct Foo [x: Int] let bar: Foo = [x = 3] in bar.x"),
     ],
 )
 def test_records(src, expect):

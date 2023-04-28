@@ -193,8 +193,9 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
 
         case ast.GetField(rec, fld):
             rec, rec_t = infer_expr(rec, ctx)
+            rec_t = resolve_type(rec_t)
             if not isinstance(rec_t, t.RecordType):
-                raise TypeError("Expected record type")
+                raise TypeError(f"Expected record type, got {rec_t}")
             if fld not in rec_t.fields:
                 raise TypeError(f"Record has no field {fld}")
             idx = list(rec_t.fields.keys()).index(fld)
@@ -280,3 +281,11 @@ def eval_type(tx: ast.Type, ctx: Context) -> Type:
             return t.FuncType(eval_type(arg_t, ctx), eval_type(ret_t, ctx))
         case _:
             raise NotImplementedError(tx)
+
+
+def resolve_type(ty: t.Type) -> t.Type:
+    match ty:
+        case t.NamedType(_, tt):
+            return tt
+        case _:
+            return ty
