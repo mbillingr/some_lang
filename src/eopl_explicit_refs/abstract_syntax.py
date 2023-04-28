@@ -147,6 +147,17 @@ class GetField(Expression):
 
 
 @dataclasses.dataclass
+class TupleExpr(Expression):
+    slots: list[Expression]
+
+
+@dataclasses.dataclass
+class GetSlot(Expression):
+    tuple: Expression
+    index: int
+
+
+@dataclasses.dataclass
 class MatchArm(AstNode):
     pats: list[Pattern]
     body: Expression

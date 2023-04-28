@@ -91,9 +91,9 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
             if extra_fields or missing_fields:
                 raise TypeError(f"extra fields: {extra_fields}, missing fields: {missing_fields}")
 
-            fields_out = {f: check_expr(v_fields[f], t_fields[f], ctx) for f in t_fields}
+            slots = [check_expr(v_fields[f], t_fields[f], ctx) for f in t_fields]
 
-            return ast.RecordExpr(fields_out)
+            return ast.TupleExpr(slots)
 
         case _:
             e_out, actual_t = infer_expr(exp, ctx)
@@ -181,21 +181,24 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
             return ast.DeRef(b_out), box_t
 
         case ast.RecordExpr(fields):
-            field_values = {}
+            field_values = []
             field_types = {}
-            for name, val in fields.items():
-                v_out, val_t = infer_expr(val, ctx)
-                field_values[name] = v_out
+            # sort anonymous record fields, to achieve structural equivalence
+            field_names = sorted(fields.keys())
+            for name in field_names:
+                v_out, val_t = infer_expr(fields[name], ctx)
+                field_values.append(v_out)
                 field_types[name] = val_t
-            return ast.RecordExpr(field_values), t.RecordType(field_types)
+            return ast.TupleExpr(field_values), t.RecordType(field_types)
 
         case ast.GetField(rec, fld):
             rec, rec_t = infer_expr(rec, ctx)
             if not isinstance(rec_t, t.RecordType):
                 raise TypeError("Expected record type")
-            if not fld in rec_t.fields:
+            if fld not in rec_t.fields:
                 raise TypeError(f"Record has no field {fld}")
-            return ast.GetField(rec, fld), rec_t.fields[fld]
+            idx = list(rec_t.fields.keys()).index(fld)
+            return ast.GetSlot(rec, idx), rec_t.fields[fld]
 
         case _:
             raise NotImplementedError(exp)

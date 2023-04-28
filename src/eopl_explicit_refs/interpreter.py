@@ -135,6 +135,14 @@ def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
             obj_ = analyze_expr(obj, env, tail=False)
             return lambda store: obj_(store)[fld]
 
+        case ast.TupleExpr(slots):
+            slots_ = [analyze_expr(v, env, tail=False) for v in slots]
+            return lambda store: tuple(v(store) for v in slots_)
+
+        case ast.GetSlot(obj, idx):
+            obj_ = analyze_expr(obj, env, tail=False)
+            return lambda store: obj_(store)[idx]
+
         case _:
             raise NotImplementedError(exp)
 

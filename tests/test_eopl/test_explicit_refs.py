@@ -143,16 +143,18 @@ def test_type_annotations(src, expect):
     "expect, src",
     [
         # anonymous
-        ({"x": 1, "y": 2}, "[x=1,y=2]"),
-        ({"x": 1, "y": 2}, "the [x: Int, y: Int] [y = 2, x = 1]"),
+        ((1, 2), "[x=1,y=2]"),
+        ((1, 2), "the [x: Int, y: Int] [y = 2, x = 1]"),  # anonymous record fields sorted alphabetically
         # named
         (0, "struct Foo [] 0"),
-        ({"x": 3}, "struct Foo [x: Int] the Foo [x = 3]"),
-        ({"x": 3}, "struct Foo [x: Int] let bar: Foo = [x = 3] in bar"),
-        ({"x": 3}, "struct Foo [x: Int] (the Foo -> Foo fn x => x) [x = 3]"),
-        ({"x": 3}, "struct Foo [x: Int] let bar: Foo = (the Foo [x = 3]) in bar"),
+        ((4, 3), "struct Foo [y: Int, x: Int] the Foo [x = 3, y = 4]"),  # named record fields in declaration order
+        ((3,), "struct Foo [x: Int] let bar: Foo = [x = 3] in bar"),
+        ((3,), "struct Foo [x: Int] (the Foo -> Foo fn x => x) [x = 3]"),
+        ((3,), "struct Foo [x: Int] let bar: Foo = (the Foo [x = 3]) in bar"),
         # field access
-        (0, "[x=0].x"),
+        (1, "[x=1, y=10, z=100].x"),
+        (10, "[y=10, x=1, z=100].y"),
+        (100, "[y=10, x=1, z=100].z"),
     ],
 )
 def test_records(src, expect):
