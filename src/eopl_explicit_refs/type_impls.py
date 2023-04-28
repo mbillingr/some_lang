@@ -1,5 +1,6 @@
 import abc
 import dataclasses
+from typing import Optional
 
 from eopl_explicit_refs.abstract_syntax import Symbol
 
@@ -38,6 +39,7 @@ class ListType(Type):
 
 @dataclasses.dataclass
 class RecordType(Type):
+    name: Optional[Symbol]
     fields: dict[Symbol, Type]
 
     def __str__(self):

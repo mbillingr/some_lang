@@ -146,9 +146,8 @@ def test_type_annotations(src, expect):
         ({"x": 1, "y": 2}, "[x=1,y=2]"),
         ({"x": 1, "y": 2}, "the [x: Int, y: Int] [y = 2, x = 1]"),
         # named
-        (0, "struct Foo {} 0"),
-        (0, "0 struct Foo {}"),
-        (0, "struct Foo {x: Int, y: Int} 0"),
+        (0, "struct Foo [] 0"),
+        ({"x": 3}, "struct Foo [x: Int] the Foo [x = 3]"),
     ],
 )
 def test_records(src, expect):

@@ -27,6 +27,7 @@ KEYWORDS = (
     "let",
     "newref",
     "set",
+    "struct",
     "the",
     "then",
     "true",

@@ -14,9 +14,9 @@ def init_env() -> TEnv:
 
 def check_program(pgm: ast.Program) -> ast.Program:
     match pgm:
-        case ast.Program(exp):
+        case ast.Program(exp, records):
             prog, _ = infer_expr(exp, init_env())
-            return ast.Program(prog)
+            return ast.Program(prog, records)
 
 
 def check_expr(exp: ast.Expression, typ: Type, env: TEnv) -> ast.Expression:
@@ -50,12 +50,7 @@ def check_expr(exp: ast.Expression, typ: Type, env: TEnv) -> ast.Expression:
             return ast.BinOp(lhs, rhs, op)
 
         case t.FuncType(_, _), ast.Function(arms):
-            return ast.Function(
-                [
-                    ast.MatchArm(arm.pats, check_matcharm(arm.pats, arm.body, typ, env))
-                    for arm in arms
-                ]
-            )
+            return ast.Function([ast.MatchArm(arm.pats, check_matcharm(arm.pats, arm.body, typ, env)) for arm in arms])
 
         case _, ast.Application(fun, arg):
             fun, fun_t = infer_expr(fun, env)
@@ -113,9 +108,7 @@ def infer_expr(exp: ast.Expression, env: TEnv) -> (ast.Expression, Type):
             return ast.BinOp(lhs, rhs, op), t.IntType
 
         case ast.Function(patterns):
-            raise InferenceError(
-                f"can't infer function signature for {exp}. Please provide a type hint."
-            )
+            raise InferenceError(f"can't infer function signature for {exp}. Please provide a type hint.")
 
         case ast.Application(fun, arg):
             fun, fun_t = infer_expr(fun, env)
@@ -168,7 +161,7 @@ def infer_expr(exp: ast.Expression, env: TEnv) -> (ast.Expression, Type):
                 v_out, val_t = infer_expr(val, env)
                 field_values[name] = v_out
                 field_types[name] = val_t
-            return ast.RecordExpr(field_values), t.RecordType(field_types)
+            return ast.RecordExpr(field_values), t.RecordType(None, field_types)
 
         case _:
             raise NotImplementedError(exp)
@@ -206,9 +199,7 @@ def check_stmt(stmt: ast.Statement, env: TEnv) -> ast.Statement:
             raise NotImplementedError(stmt)
 
 
-def check_matcharm(
-    patterns: list[ast.Pattern], body: ast.Expression, typ: Type, env: TEnv
-) -> ast.Expression:
+def check_matcharm(patterns: list[ast.Pattern], body: ast.Expression, typ: Type, env: TEnv) -> ast.Expression:
     match typ, patterns:
         case t.FuncType(arg_t, res_t), [p0, *p_rest]:
             bindings = check_pattern(p0, arg_t, env)
@@ -244,8 +235,8 @@ def eval_type(tx: ast.Type) -> Type:
             return t.IntType()
         case ast.ListType(item_t):
             return t.ListType(eval_type(item_t))
-        case ast.RecordType(fields):
-            return t.RecordType({n: eval_type(t) for n, t in fields.items()})
+        case ast.RecordType(name, fields):
+            return t.RecordType(name, {n: eval_type(t) for n, t in fields.items()})
         case ast.FuncType(arg_t, ret_t):
             return t.FuncType(eval_type(arg_t), eval_type(ret_t))
         case _:

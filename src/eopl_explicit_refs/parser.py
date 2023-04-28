@@ -55,7 +55,13 @@ op_types = {
 
 
 def parse_program(ts: TokenStream) -> ast.Program:
-    return ast.Program(parse_expr(ts))
+    records = []
+    while True:
+        match ts.peek():
+            case "struct", _, _:
+                records.append(parse_struct_decl(ts))
+            case _:
+                return ast.Program(parse_expr(ts), records)
 
 
 def parse_statement(ts: TokenStream) -> ast.Statement:
@@ -81,9 +87,7 @@ def parse_statement(ts: TokenStream) -> ast.Statement:
             return spanned(get_span(expr), ast.ExprStmt(expr))
 
 
-def parse_expr(
-    ts: TokenStream, min_bp: int = 0, invisible_application=True
-) -> ast.Expression:
+def parse_expr(ts: TokenStream, min_bp: int = 0, invisible_application=True) -> ast.Expression:
     match ts.peek():
         case op, _, _ if op in prefix_binding_power:
             _, rbp = prefix_binding_power[op]
@@ -113,9 +117,7 @@ def parse_expr(
                 if lbp < min_bp:
                     break
                 arg = parse_expr(ts, rbp)
-                lhs = spanned(
-                    get_span(lhs).merge(get_span(arg)), ast.Application(lhs, arg)
-                )
+                lhs = spanned(get_span(lhs).merge(get_span(arg)), ast.Application(lhs, arg))
             case _:
                 break
 
@@ -167,9 +169,7 @@ def parse_atom(ts: TokenStream):
             val = parse_expr(ts)
             expect_token(ts, "in")
             body = parse_expr(ts)
-            return spanned(
-                span.merge(get_span(body)), ast.Let(var, val, body, var_t=typ)
-            )
+            return spanned(span.merge(get_span(body)), ast.Let(var, val, body, var_t=typ))
         case token:
             raise UnexpectedToken(token)
 
@@ -238,9 +238,7 @@ def parse_list_expression(ts, skip_opening: bool):
             # comma between two elements would be correctly parsed as application.
             try_token(ts, ",")
             rest = parse_list_expression(ts, skip_opening=True)
-            result = spanned(
-                get_span(first).merge(get_span(rest)), ast.BinOp(first, rest, "::")
-            )
+            result = spanned(get_span(first).merge(get_span(rest)), ast.BinOp(first, rest, "::"))
 
     if span0 is not None:
         return spanned(span0.merge(get_span(result)), result)
@@ -346,9 +344,7 @@ def parse_match_arm(ts) -> ast.MatchArm:
         if try_token(ts, "=>"):
             break
     body = parse_expr(ts)
-    return spanned(
-        get_span(patterns[0]).merge(get_span(body)), ast.MatchArm(patterns, body)
-    )
+    return spanned(get_span(patterns[0]).merge(get_span(body)), ast.MatchArm(patterns, body))
 
 
 def parse_pattern(ts) -> ast.Pattern:
@@ -357,9 +353,7 @@ def parse_pattern(ts) -> ast.Pattern:
         case "::", _, span:
             ts.get_next()
             rhs = parse_pattern(ts)
-            return spanned(
-                get_span(lhs).merge(get_span(rhs)), ast.ListConsPattern(lhs, rhs)
-            )
+            return spanned(get_span(lhs).merge(get_span(rhs)), ast.ListConsPattern(lhs, rhs))
         case _:
             return lhs
 
@@ -409,24 +403,39 @@ def parse_atomic_type(ts) -> ast.Type:
         case "[", _, span:
             match ts.peek(0), ts.peek(1):
                 case (_, TokenKind.IDENTIFIER, _), (":", _, _):
-                    fields = {}
-                    while True:
-                        field_name = parse_symbol(ts)
-                        expect_token(ts, ":")
-                        field_type = parse_type(ts)
-                        fields[field_name] = field_type
-                        if try_token(ts, ","):
-                            continue
-                        else:
-                            break
+                    fields = parse_record_fields(ts)
                     expect_token(ts, "]")
-                    return spanned(span, ast.RecordType(fields))
+                    return spanned(span, ast.RecordType(None, fields))
                 case _:
                     item_t = parse_type(ts)
                     expect_token(ts, "]")
                     return spanned(span, ast.ListType(item_t))
         case other:
             raise UnexpectedToken(other)
+
+
+def parse_struct_decl(ts) -> ast.RecordDecl:
+    _, _, span0 = expect_token(ts, "struct")
+    name = parse_symbol(ts)
+    expect_token(ts, "[")
+    fields = parse_record_fields(ts)
+    expect_token(ts, "]")
+    return ast.RecordType(name, fields)
+
+
+def parse_record_fields(ts) -> dict[ast.Symbol, ast.Type]:
+    fields = {}
+    while True:
+        if try_token(ts, "]", consume=False):
+            break
+        field_name = parse_symbol(ts)
+        expect_token(ts, ":")
+        field_type = parse_type(ts)
+        fields[field_name] = field_type
+        if try_token(ts, ","):
+            continue
+        else:
+            return fields
 
 
 def parse_symbol(ts) -> ast.Symbol:
@@ -452,13 +461,15 @@ def expect_token(ts, expect):
             return tok, kind, span
 
 
-def try_token(ts, expect) -> Token | bool:
+def try_token(ts, expect, consume=True) -> Token | bool:
     match ts.peek(), expect:
         case (tok, kind, span), TokenKind() if kind == expect:
-            ts.get_next()
+            if consume:
+                ts.get_next()
             return tok, kind, span
         case (tok, kind, span), _ if tok == expect:
-            ts.get_next()
+            if consume:
+                ts.get_next()
             return tok, kind, span
         case _:
             return False

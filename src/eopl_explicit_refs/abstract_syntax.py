@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import abc
 import dataclasses
 from typing import Any, Optional
@@ -26,6 +28,12 @@ class Pattern(AstNode):
 @dataclasses.dataclass
 class Program(AstNode):
     exp: Expression
+    records: list[RecordDecl]
+
+
+@dataclasses.dataclass
+class RecordDecl(AstNode):
+    pass
 
 
 class Symbol(str, AstNode):
@@ -186,6 +194,7 @@ class ListType(Type):
 
 @dataclasses.dataclass
 class RecordType(Type):
+    name: Optional[Symbol]
     fields: dict[Symbol, Type]
 
 
