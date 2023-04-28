@@ -10,6 +10,8 @@ class Type(abc.ABC):
 
 
 class NamedType(Type):
+    __match_args__ = ("name", "type")
+
     def __init__(self, name: str, ty: Type):
         self.name = name
         self.type = ty

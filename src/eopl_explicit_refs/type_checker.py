@@ -84,6 +84,17 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
             b_out = check_expr(b, typ, ctx)
             return ast.Conditional(c_out, a_out, b_out)
 
+        # initializing a named record type with a record expression
+        case t.NamedType(_, t.RecordType(t_fields)), ast.RecordExpr(v_fields):
+            extra_fields = v_fields.keys() - t_fields.keys()
+            missing_fields = t_fields.keys() - v_fields.keys()
+            if extra_fields or missing_fields:
+                raise TypeError(f"extra fields: {extra_fields}, missing fields: {missing_fields}")
+
+            fields_out = {f: check_expr(v_fields[f], t_fields[f], ctx) for f in t_fields}
+
+            return ast.RecordExpr(fields_out)
+
         case _:
             e_out, actual_t = infer_expr(exp, ctx)
             if actual_t != typ:
