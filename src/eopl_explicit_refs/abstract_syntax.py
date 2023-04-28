@@ -33,7 +33,8 @@ class Program(AstNode):
 
 @dataclasses.dataclass
 class RecordDecl(AstNode):
-    pass
+    name: Symbol
+    fields: dict[Symbol, Type]
 
 
 class Symbol(str, AstNode):
@@ -178,6 +179,11 @@ class ListConsPattern(Pattern):
 
 
 @dataclasses.dataclass
+class TypeRef(Type):
+    name: str
+
+
+@dataclasses.dataclass
 class IntType(Type):
     pass
 
@@ -194,7 +200,6 @@ class ListType(Type):
 
 @dataclasses.dataclass
 class RecordType(Type):
-    name: Optional[Symbol]
     fields: dict[Symbol, Type]
 
 

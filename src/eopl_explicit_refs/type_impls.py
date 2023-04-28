@@ -9,6 +9,18 @@ class Type(abc.ABC):
     pass
 
 
+class NamedType(Type):
+    def __init__(self, name: str, ty: Type):
+        self.name = name
+        self.type = ty
+
+    def __str__(self):
+        return self.name
+
+    def __eq__(self, other):
+        return self is other
+
+
 @dataclasses.dataclass
 class BoolType(Type):
     def __str__(self):
@@ -39,7 +51,6 @@ class ListType(Type):
 
 @dataclasses.dataclass
 class RecordType(Type):
-    name: Optional[Symbol]
     fields: dict[Symbol, Type]
 
     def __str__(self):

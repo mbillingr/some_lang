@@ -405,11 +405,13 @@ def parse_atomic_type(ts) -> ast.Type:
                 case (_, TokenKind.IDENTIFIER, _), (":", _, _):
                     fields = parse_record_fields(ts)
                     expect_token(ts, "]")
-                    return spanned(span, ast.RecordType(None, fields))
+                    return spanned(span, ast.RecordType(fields))
                 case _:
                     item_t = parse_type(ts)
                     expect_token(ts, "]")
                     return spanned(span, ast.ListType(item_t))
+        case name, TokenKind.IDENTIFIER, span:
+            return spanned(span, ast.TypeRef(name))
         case other:
             raise UnexpectedToken(other)
 
@@ -420,7 +422,7 @@ def parse_struct_decl(ts) -> ast.RecordDecl:
     expect_token(ts, "[")
     fields = parse_record_fields(ts)
     expect_token(ts, "]")
-    return ast.RecordType(name, fields)
+    return ast.RecordDecl(name, fields)
 
 
 def parse_record_fields(ts) -> dict[ast.Symbol, ast.Type]:
@@ -435,7 +437,8 @@ def parse_record_fields(ts) -> dict[ast.Symbol, ast.Type]:
         if try_token(ts, ","):
             continue
         else:
-            return fields
+            break
+    return fields
 
 
 def parse_symbol(ts) -> ast.Symbol:

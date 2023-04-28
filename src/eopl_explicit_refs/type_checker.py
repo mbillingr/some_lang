@@ -1,3 +1,4 @@
+import dataclasses
 from typing import TypeAlias
 
 from eopl_explicit_refs import abstract_syntax as ast
@@ -8,18 +9,32 @@ from eopl_explicit_refs import type_impls as t
 TEnv: TypeAlias = Env[Type]
 
 
-def init_env() -> TEnv:
-    return EmptyEnv()
+@dataclasses.dataclass
+class Context:
+    env: TEnv
+    types: TEnv
+
+    def extend_env(self, var: str, val: Type):
+        return Context(env=self.env.extend(var, val), types=self.types)
+
+
+def init_ctx() -> TEnv:
+    return Context(env=EmptyEnv(), types=EmptyEnv())
 
 
 def check_program(pgm: ast.Program) -> ast.Program:
     match pgm:
         case ast.Program(exp, records):
-            prog, _ = infer_expr(exp, init_env())
+            ctx = init_ctx()
+            for record in records:
+                ctx.types = ctx.types.extend(
+                    record.name, t.NamedType(record.name, eval_type(ast.RecordType(record.fields), ctx))
+                )
+            prog, _ = infer_expr(exp, ctx)
             return ast.Program(prog, records)
 
 
-def check_expr(exp: ast.Expression, typ: Type, env: TEnv) -> ast.Expression:
+def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
     match typ, exp:
         case ast.Type(), _:
             raise TypeError("Unevaluated type passed to checker")
@@ -31,29 +46,29 @@ def check_expr(exp: ast.Expression, typ: Type, env: TEnv) -> ast.Expression:
             return exp
 
         case _, ast.Identifier(name):
-            actual_t = env.lookup(name)
+            actual_t = ctx.env.lookup(name)
             if actual_t != typ:
                 raise TypeError(f"Expected a {typ} but {name} is a {actual_t}")
             return exp
 
         case t.IntType(), ast.BinOp(lhs, rhs, "+" | "-" | "*" | "/" as op):
-            lhs = check_expr(lhs, t.IntType(), env)
-            rhs = check_expr(rhs, t.IntType(), env)
+            lhs = check_expr(lhs, t.IntType(), ctx)
+            rhs = check_expr(rhs, t.IntType(), ctx)
             return ast.BinOp(lhs, rhs, op)
 
         case t.ListType(_), ast.EmptyList():
             return exp
 
         case t.ListType(item_t), ast.BinOp(lhs, rhs, "::" as op):
-            lhs = check_expr(lhs, item_t, env)
-            rhs = check_expr(rhs, typ, env)
+            lhs = check_expr(lhs, item_t, ctx)
+            rhs = check_expr(rhs, typ, ctx)
             return ast.BinOp(lhs, rhs, op)
 
         case t.FuncType(_, _), ast.Function(arms):
-            return ast.Function([ast.MatchArm(arm.pats, check_matcharm(arm.pats, arm.body, typ, env)) for arm in arms])
+            return ast.Function([ast.MatchArm(arm.pats, check_matcharm(arm.pats, arm.body, typ, ctx)) for arm in arms])
 
         case _, ast.Application(fun, arg):
-            fun, fun_t = infer_expr(fun, env)
+            fun, fun_t = infer_expr(fun, ctx)
             match fun_t:
                 case t.FuncType(arg_t, ret_t):
                     pass
@@ -61,16 +76,16 @@ def check_expr(exp: ast.Expression, typ: Type, env: TEnv) -> ast.Expression:
                     raise TypeError(f"Cannot call {fun_t}")
             if ret_t != typ:
                 raise TypeError(f"Function returns {ret_t} but expected {typ}")
-            return ast.Application(fun, check_expr(arg, arg_t, env))
+            return ast.Application(fun, check_expr(arg, arg_t, ctx))
 
         case _, ast.Conditional(c, a, b):
-            c_out = check_expr(c, t.BoolType(), env)
-            a_out = check_expr(a, typ, env)
-            b_out = check_expr(b, typ, env)
+            c_out = check_expr(c, t.BoolType(), ctx)
+            a_out = check_expr(a, typ, ctx)
+            b_out = check_expr(b, typ, ctx)
             return ast.Conditional(c_out, a_out, b_out)
 
         case _:
-            e_out, actual_t = infer_expr(exp, env)
+            e_out, actual_t = infer_expr(exp, ctx)
             if actual_t != typ:
                 raise TypeError(actual_t, typ)
             return e_out
@@ -80,76 +95,76 @@ class InferenceError(Exception):
     pass
 
 
-def infer_expr(exp: ast.Expression, env: TEnv) -> (ast.Expression, Type):
+def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
     match exp:
         case ast.Literal(val):
             mapping = {bool: t.BoolType, int: t.IntType}
             return exp, mapping[type(val)]()
 
         case ast.Identifier(name):
-            return exp, env.lookup(name)
+            return exp, ctx.env.lookup(name)
 
         case ast.EmptyList():
             raise InferenceError("can't infer empty list type")
 
         case ast.TypeAnnotation(tx, expr):
-            ty = eval_type(tx)
-            expr = check_expr(expr, ty, env)
+            ty = eval_type(tx, ctx)
+            expr = check_expr(expr, ty, ctx)
             return expr, ty
 
         case ast.BinOp(lhs, rhs, "+" | "-" | "*" | "/" as op):
-            lhs = check_expr(lhs, t.IntType(), env)
-            rhs = check_expr(rhs, t.IntType(), env)
+            lhs = check_expr(lhs, t.IntType(), ctx)
+            rhs = check_expr(rhs, t.IntType(), ctx)
             return ast.BinOp(lhs, rhs, op), t.IntType
 
         case ast.BinOp(lhs, rhs, "::" as op):
-            lhs, item_t = infer_expr(lhs, env)
-            rhs = check_expr(rhs, t.ListType(item_t), env)
+            lhs, item_t = infer_expr(lhs, ctx)
+            rhs = check_expr(rhs, t.ListType(item_t), ctx)
             return ast.BinOp(lhs, rhs, op), t.IntType
 
         case ast.Function(patterns):
             raise InferenceError(f"can't infer function signature for {exp}. Please provide a type hint.")
 
         case ast.Application(fun, arg):
-            fun, fun_t = infer_expr(fun, env)
+            fun, fun_t = infer_expr(fun, ctx)
             match fun_t:
                 case t.FuncType(arg_t, ret_t):
                     pass
                 case _:
                     raise TypeError(f"Cannot call {fun_t}")
-            return ast.Application(fun, check_expr(arg, arg_t, env)), ret_t
+            return ast.Application(fun, check_expr(arg, arg_t, ctx)), ret_t
 
         case ast.Let(var, val, bdy, None):
             # without type declaration, the let variable can't be used in the val expression
-            val, val_t = infer_expr(val, env)
-            body, out_t = infer_expr(bdy, env.extend(var, val_t))
+            val, val_t = infer_expr(val, ctx)
+            body, out_t = infer_expr(bdy, ctx.extend_env(var, val_t))
             return ast.Let(var, val, body, val_t), out_t
 
         case ast.Let(var, val, bdy, var_t):
-            var_t = eval_type(var_t)
-            let_env = env.extend(var, var_t)
-            val = check_expr(val, var_t, let_env)
-            body, out_t = infer_expr(bdy, let_env)
+            var_t = eval_type(var_t, ctx)
+            let_ctx = ctx.extend_env(var, var_t)
+            val = check_expr(val, var_t, let_ctx)
+            body, out_t = infer_expr(bdy, let_ctx)
             return ast.Let(var, val, body, var_t), out_t
 
         case ast.BlockExpression(fst, snd):
-            fst = check_stmt(fst, env)
-            snd, out_t = infer_expr(snd, env)
+            fst = check_stmt(fst, ctx)
+            snd, out_t = infer_expr(snd, ctx)
             return ast.BlockExpression(fst, snd), out_t
 
         case ast.Conditional(_, a, b):
             try:
-                _, out_t = infer_expr(a, env)
+                _, out_t = infer_expr(a, ctx)
             except InferenceError:
-                _, out_t = infer_expr(b, env)
-            return check_expr(exp, out_t, env), out_t
+                _, out_t = infer_expr(b, ctx)
+            return check_expr(exp, out_t, ctx), out_t
 
         case ast.NewRef(val):
-            v_out, v_t = infer_expr(val, env)
+            v_out, v_t = infer_expr(val, ctx)
             return ast.NewRef(v_out), t.BoxType(v_t)
 
         case ast.DeRef(box):
-            b_out, box_t = infer_expr(box, env)
+            b_out, box_t = infer_expr(box, ctx)
             if not isinstance(box_t, t.BoxType):
                 raise TypeError(f"Cannot deref a {box_t}")
             return ast.DeRef(b_out), box_t
@@ -158,10 +173,10 @@ def infer_expr(exp: ast.Expression, env: TEnv) -> (ast.Expression, Type):
             field_values = {}
             field_types = {}
             for name, val in fields.items():
-                v_out, val_t = infer_expr(val, env)
+                v_out, val_t = infer_expr(val, ctx)
                 field_values[name] = v_out
                 field_types[name] = val_t
-            return ast.RecordExpr(field_values), t.RecordType(None, field_types)
+            return ast.RecordExpr(field_values), t.RecordType(field_types)
 
         case _:
             raise NotImplementedError(exp)
@@ -199,15 +214,15 @@ def check_stmt(stmt: ast.Statement, env: TEnv) -> ast.Statement:
             raise NotImplementedError(stmt)
 
 
-def check_matcharm(patterns: list[ast.Pattern], body: ast.Expression, typ: Type, env: TEnv) -> ast.Expression:
+def check_matcharm(patterns: list[ast.Pattern], body: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
     match typ, patterns:
         case t.FuncType(arg_t, res_t), [p0, *p_rest]:
-            bindings = check_pattern(p0, arg_t, env)
+            bindings = check_pattern(p0, arg_t, ctx)
             for name, ty in bindings.items():
-                env = env.extend(name, ty)
-            return check_matcharm(p_rest, body, res_t, env)
+                ctx = ctx.extend_env(name, ty)
+            return check_matcharm(p_rest, body, res_t, ctx)
         case _, []:
-            return check_expr(body, typ, env)
+            return check_expr(body, typ, ctx)
         case other:
             raise NotImplementedError(other)
 
@@ -227,17 +242,19 @@ def check_pattern(pat: ast.Pattern, typ: Type, env: TEnv) -> dict[str, Type]:
             raise NotImplementedError(other)
 
 
-def eval_type(tx: ast.Type) -> Type:
+def eval_type(tx: ast.Type, ctx: Context) -> Type:
     match tx:
+        case ast.TypeRef(name):
+            return ctx.types.lookup(name)
         case ast.BoolType:
             return t.BoolType()
         case ast.IntType:
             return t.IntType()
         case ast.ListType(item_t):
-            return t.ListType(eval_type(item_t))
-        case ast.RecordType(name, fields):
-            return t.RecordType(name, {n: eval_type(t) for n, t in fields.items()})
+            return t.ListType(eval_type(item_t, ctx))
+        case ast.RecordType(fields):
+            return t.RecordType({n: eval_type(ty, ctx) for n, ty in fields.items()})
         case ast.FuncType(arg_t, ret_t):
-            return t.FuncType(eval_type(arg_t), eval_type(ret_t))
+            return t.FuncType(eval_type(arg_t, ctx), eval_type(ret_t, ctx))
         case _:
             raise NotImplementedError(tx)
