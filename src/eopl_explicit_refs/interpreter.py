@@ -13,12 +13,13 @@ UNDEFINED = object()
 @dataclasses.dataclass
 class Context:
     env: Env = EmptyEnv()
-    methods: dict[tuple[Any, Any], Method] = dataclasses.field(default_factory=dict)
+    methods: dict[tuple[Any, Any], Closure] = dataclasses.field(default_factory=dict)
 
     def extend_env(self, *vars: str) -> Self:
         return Context(env=self.env.extend(*vars), methods=self.methods)
 
-    def find_method(self, ty, name) -> Method:
+    def find_method(self, ty, name) -> Closure:
+        raise NotImplementedError("Find a way to get methods by index: 1. concrete types, 2. polymorphic")
         return self.methods[(ty, name)]
 
 
