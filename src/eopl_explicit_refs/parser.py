@@ -127,7 +127,7 @@ def parse_expr(ts: TokenStream, min_bp: int = 0, invisible_application=True) -> 
 
 def is_delimiter(t, k) -> bool:
     match t, k:
-        case "true" | "false", _:
+        case "()" | "true" | "false", _:
             return False
         case "=" | ";" | ",", _:
             return True
@@ -141,6 +141,8 @@ def parse_atom(ts: TokenStream):
     match ts.get_next():
         case ts.EOF:
             raise UnexpectedEnd()
+        case "()", _, span:
+            return spanned(span, ast.Literal(None))
         case val, TokenKind.LITERAL_BOOL | TokenKind.LITERAL_INT, span:
             return spanned(span, ast.Literal(val))
         case name, TokenKind.IDENTIFIER, span:
@@ -368,6 +370,9 @@ def parse_pattern(ts) -> ast.Pattern:
 
 def parse_atomic_pattern(ts) -> ast.Pattern:
     match ts.peek():
+        case "()", _, span:
+            ts.get_next()
+            return spanned(span, ast.LiteralPattern(None))
         case ident, TokenKind.IDENTIFIER, span:
             ts.get_next()
             if try_token(ts, ":"):
@@ -404,6 +409,8 @@ def parse_type(ts) -> ast.Type:
 
 def parse_atomic_type(ts) -> ast.Type:
     match ts.get_next():
+        case "()", _, span:
+            return spanned(span, ast.NullType)
         case "Bool", _, span:
             return spanned(span, ast.BoolType)
         case "Int", _, span:

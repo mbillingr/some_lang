@@ -40,7 +40,7 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
             raise TypeError("Unevaluated type passed to checker")
 
         case _, ast.Literal(val):
-            mapping = {bool: t.BoolType, int: t.IntType}
+            mapping = {type(None): t.NullType, bool: t.BoolType, int: t.IntType}
             if mapping[type(val)] != type(typ):
                 raise TypeError(exp, typ)
             return exp
@@ -109,7 +109,7 @@ class InferenceError(Exception):
 def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
     match exp:
         case ast.Literal(val):
-            mapping = {bool: t.BoolType, int: t.IntType}
+            mapping = {type(None): t.NullType, bool: t.BoolType, int: t.IntType}
             return exp, mapping[type(val)]()
 
         case ast.Identifier(name):
@@ -269,6 +269,8 @@ def eval_type(tx: ast.Type, ctx: Context) -> Type:
     match tx:
         case ast.TypeRef(name):
             return ctx.types.lookup(name)
+        case ast.NullType:
+            return t.NullType()
         case ast.BoolType:
             return t.BoolType()
         case ast.IntType:

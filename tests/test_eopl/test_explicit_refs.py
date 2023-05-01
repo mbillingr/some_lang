@@ -122,6 +122,7 @@ def test_bindings(src, expect):
         (5, "((the Int -> Int -> Int fn a => fn b => a + b) 2) 3"),
         (6, "(the Int -> Int -> Int -> Int fn a b c => a + b + c) 1 2 3"),
         (5, "let part = (the Int -> Int -> Int fn a b => a + b) 2 in part 3"),
+        (None, "(the () -> () fn () => ()) ()"),
     ],
 )
 def test_functions(src, expect):
@@ -162,6 +163,8 @@ def test_type_annotations(src, expect):
         # struct in struct
         (0, "struct Foo [x: Int] struct Bar [foo: Foo] 0"),
         (0, "[x=[y=[z=0]]].x.y.z"),
+        # methods
+        # (0, "struct Foo [] impl Foo { method bar self => 0 } (the Foo []).bar")
     ],
 )
 def test_records(src, expect):

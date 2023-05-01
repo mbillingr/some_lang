@@ -19,6 +19,7 @@ KEYWORDS = (
     ",",
     ";",
     "|",
+    "()",
     "deref",
     "else",
     "false",

@@ -24,6 +24,12 @@ class NamedType(Type):
 
 
 @dataclasses.dataclass
+class NullType(Type):
+    def __str__(self):
+        return "()"
+
+
+@dataclasses.dataclass
 class BoolType(Type):
     def __str__(self):
         return "Bool"

@@ -201,6 +201,11 @@ class TypeRef(Type):
 
 
 @dataclasses.dataclass
+class NullType(Type):
+    pass
+
+
+@dataclasses.dataclass
 class IntType(Type):
     pass
 
