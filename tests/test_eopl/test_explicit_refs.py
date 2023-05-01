@@ -165,6 +165,8 @@ def test_type_annotations(src, expect):
         (0, "[x=[y=[z=0]]].x.y.z"),
         # methods
         (0, "struct Foo [] impl Foo { method Foo -> () -> Int bar self () => 0 } (the Foo []).bar ()"),
+        (1, "struct Foo [] impl Foo { method Foo -> Int bar self => 1 } (the Foo []).bar"),
+        (2, "struct Foo [x:Int] impl Foo { method Foo -> Int get-x self => self.x } (the Foo [x=2]).get-x"),
     ],
 )
 def test_records(src, expect):
