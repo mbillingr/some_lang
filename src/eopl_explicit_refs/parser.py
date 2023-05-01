@@ -57,12 +57,15 @@ op_types = {
 
 def parse_program(ts: TokenStream) -> ast.Program:
     records = []
+    impls = []
     while True:
         match ts.peek():
             case "struct", _, _:
                 records.append(parse_struct_decl(ts))
+            case "impl", _, _:
+                impls.append(parse_impl(ts))
             case _:
-                return ast.Program(parse_expr(ts), records)
+                return ast.Program(parse_expr(ts), records, impls)
 
 
 def parse_statement(ts: TokenStream) -> ast.Statement:
@@ -324,7 +327,7 @@ def parse_postfix_operator(lhs, ts):
     match ts.get_next():
         case ".", _, _:
             fieldname = parse_symbol(ts)
-            return spanned(get_span(lhs).merge(get_span(fieldname)), ast.GetField(lhs, fieldname))
+            return spanned(get_span(lhs).merge(get_span(fieldname)), ast.GetAttribute(lhs, fieldname))
         case op, TokenKind.OPERATOR, span:
             return spanned(
                 make_operator_span(span, get_span(lhs)),
@@ -454,6 +457,26 @@ def parse_record_fields(ts) -> dict[ast.Symbol, ast.Type]:
         else:
             break
     return fields
+
+
+def parse_impl(ts) -> ast.ImplBlock:
+    _, _, span0 = expect_token(ts, "impl")
+    typename = parse_symbol(ts)
+    methods = {}
+    expect_token(ts, "{")
+    while True:
+        match ts.get_next():
+            case "}", _, _:
+                break
+            case "method", _, span:
+                signature = parse_type(ts)
+                methodname = parse_symbol(ts)
+                arms = parse_match_arms(ts)
+                method = spanned(get_span(methodname).merge(get_span(arms[-1])), ast.Function(arms))
+                methods[methodname] = spanned(span.merge(get_span(method)), ast.TypeAnnotation(signature, method))
+            case other:
+                raise UnexpectedToken(other)
+    return ast.ImplBlock(typename, methods)
 
 
 def parse_symbol(ts) -> ast.Symbol:

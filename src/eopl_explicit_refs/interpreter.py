@@ -1,6 +1,7 @@
+from __future__ import annotations
 import abc
 import dataclasses
-from typing import Any, Callable
+from typing import Any, Callable, Self
 
 from eopl_explicit_refs.environment import EmptyEnv, Env
 from eopl_explicit_refs import abstract_syntax as ast
@@ -9,14 +10,29 @@ from eopl_explicit_refs import abstract_syntax as ast
 UNDEFINED = object()
 
 
-def init_env() -> Env:
-    return EmptyEnv()
+@dataclasses.dataclass
+class Context:
+    env: Env = EmptyEnv()
+    methods: dict[tuple[Any, Any], Method] = dataclasses.field(default_factory=dict)
+
+    def extend_env(self, *vars: str) -> Self:
+        return Context(env=self.env.extend(*vars), methods=self.methods)
+
+    def find_method(self, ty, name) -> Method:
+        return self.methods[(ty, name)]
 
 
 def analyze_program(pgm: ast.Program) -> Any:
     match pgm:
-        case ast.Program(exp):
-            prog = analyze_expr(exp, init_env(), tail=False)
+        case ast.Program(exp, records, impls):
+            ctx = Context()
+
+            for impl in impls:
+                for method_name, method in impl.methods.items():
+                    arms = analyze_matcharms(method.patterns, ctx)
+                    ctx.methods[(impl.type_name, method_name)] = Closure(ctx, arms)
+
+            prog = analyze_expr(exp, ctx, tail=False)
 
             def program(store):
                 store.clear()
@@ -25,7 +41,7 @@ def analyze_program(pgm: ast.Program) -> Any:
             return program
 
 
-def analyze_stmt(stmt: ast.Statement, env: Env) -> Callable:
+def analyze_stmt(stmt: ast.Statement, ctx: Context) -> Callable:
     match stmt:
         case ast.NopStatement():
             return lambda _: None
@@ -33,36 +49,36 @@ def analyze_stmt(stmt: ast.Statement, env: Env) -> Callable:
         case ast.ExprStmt(expr):
             # Let's assume expressions have no side effects, so we don't execute them,
             # but we still check if they are valid
-            _ = analyze_expr(expr, env, tail=False)
+            _ = analyze_expr(expr, ctx, tail=False)
             return lambda _: None
 
         case ast.Assignment(lhs, rhs):
-            lhs_ = analyze_expr(lhs, env, tail=False)
-            rhs_ = analyze_expr(rhs, env, tail=False)
+            lhs_ = analyze_expr(lhs, ctx, tail=False)
+            rhs_ = analyze_expr(rhs, ctx, tail=False)
             return lambda store: store.setref(lhs_(store), rhs_(store))
 
         case ast.IfStatement(cond, cons, alt):
-            cond_ = analyze_expr(cond, env, tail=False)
-            cons_ = analyze_stmt(cons, env)
-            alt_ = analyze_stmt(alt, env)
+            cond_ = analyze_expr(cond, ctx, tail=False)
+            cons_ = analyze_stmt(cons, ctx)
+            alt_ = analyze_stmt(alt, ctx)
             return lambda store: cons_(store) if cond_(store) else alt_(store)
 
         case _:
             raise NotImplementedError(stmt)
 
 
-def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
+def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
     match exp:
         case ast.Literal(val):
             return lambda _: val
         case ast.Identifier(name):
-            idx = env.lookup(name)
+            idx = ctx.env.lookup(name)
             return lambda store: store.get(idx)
         case ast.EmptyList():
             return lambda _: empty_list()
         case ast.BinOp(lhs, rhs, op):
-            lhs_ = analyze_expr(lhs, env, tail=False)
-            rhs_ = analyze_expr(rhs, env, tail=False)
+            lhs_ = analyze_expr(lhs, ctx, tail=False)
+            rhs_ = analyze_expr(rhs, ctx, tail=False)
             match op:
                 case "+":
                     return lambda store: lhs_(store) + rhs_(store)
@@ -77,14 +93,14 @@ def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
                 case _:
                     raise NotImplementedError(op)
         case ast.NewRef(val):
-            val_ = analyze_expr(val, env, tail=False)
+            val_ = analyze_expr(val, ctx, tail=False)
             return lambda store: store.newref(val_(store))
         case ast.DeRef(ref):
-            ref_ = analyze_expr(ref, env, tail=False)
+            ref_ = analyze_expr(ref, ctx, tail=False)
             return lambda store: store.deref(ref_(store))
         case ast.BlockExpression(stmt, expr):
-            stmt_ = analyze_stmt(stmt, env)
-            expr_ = analyze_expr(expr, env, tail=tail)
+            stmt_ = analyze_stmt(stmt, ctx)
+            expr_ = analyze_expr(expr, ctx, tail=tail)
 
             def sequence(store):
                 stmt_(store)
@@ -93,12 +109,12 @@ def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
             return sequence
 
         case ast.Conditional(a, b, c):
-            cond_ = analyze_expr(a, env, tail=False)
-            then_ = analyze_expr(b, env, tail=tail)
-            else_ = analyze_expr(c, env, tail=tail)
+            cond_ = analyze_expr(a, ctx, tail=False)
+            then_ = analyze_expr(b, ctx, tail=tail)
+            else_ = analyze_expr(c, ctx, tail=tail)
             return lambda store: then_(store) if cond_(store) else else_(store)
         case ast.Let(var, val, bdy):
-            let_env = env.extend(var)
+            let_env = ctx.extend_env(var)
             val_ = analyze_expr(val, let_env, tail=False)
             bdy_ = analyze_expr(bdy, let_env, tail=tail)
 
@@ -112,48 +128,57 @@ def analyze_expr(exp: ast.Expression, env: Env, tail) -> Callable:
             return let
 
         case ast.Function(arms):
-            match_bodies = []
-            for arm in arms:
-                matcher = analyze_patterns(arm.pats)
-                bdy_env = env.extend(*matcher.bindings())
-                bdy_ = analyze_expr(arm.body, bdy_env, tail=True)
-                match_bodies.append((matcher, bdy_))
+            match_bodies = analyze_matcharms(arms, ctx)
 
             def the_function(store):
                 return Closure(store, match_bodies)
 
             return the_function
 
+        case ast.GetMethod(obj, mty, mtn):
+            method = ctx.find_method(mty, mtn)
+            return lambda _: method
+
         case ast.Application():
-            return analyze_application(exp, env=env, tail=tail)
+            return analyze_application(exp, ctx=ctx, tail=tail)
 
         case ast.RecordExpr(fields):
-            fields_ = {n: analyze_expr(v, env, tail=False) for n, v in fields.items()}
+            fields_ = {n: analyze_expr(v, ctx, tail=False) for n, v in fields.items()}
             return lambda store: {n: v(store) for n, v in fields_.items()}
 
-        case ast.GetField(obj, fld):
-            obj_ = analyze_expr(obj, env, tail=False)
+        case ast.GetAttribute(obj, fld):
+            obj_ = analyze_expr(obj, ctx, tail=False)
             return lambda store: obj_(store)[fld]
 
         case ast.TupleExpr(slots):
-            slots_ = [analyze_expr(v, env, tail=False) for v in slots]
+            slots_ = [analyze_expr(v, ctx, tail=False) for v in slots]
             return lambda store: tuple(v(store) for v in slots_)
 
         case ast.GetSlot(obj, idx):
-            obj_ = analyze_expr(obj, env, tail=False)
+            obj_ = analyze_expr(obj, ctx, tail=False)
             return lambda store: obj_(store)[idx]
 
         case _:
             raise NotImplementedError(exp)
 
 
-def analyze_application(fun, *args_, env, tail):
+def analyze_matcharms(arms: list[ast.MatchArm], ctx: Context) -> list[tuple[Matcher, Callable]]:
+    match_bodies = []
+    for arm in arms:
+        matcher = analyze_patterns(arm.pats)
+        bdy_env = ctx.extend_env(*matcher.bindings())
+        bdy_ = analyze_expr(arm.body, bdy_env, tail=True)
+        match_bodies.append((matcher, bdy_))
+    return match_bodies
+
+
+def analyze_application(fun, *args_, ctx, tail):
     match fun:
         case ast.Application(f, a):
-            a_ = analyze_expr(a, env, tail=False)
-            return analyze_application(f, a_, *args_, env=env, tail=tail)
+            a_ = analyze_expr(a, ctx, tail=False)
+            return analyze_application(f, a_, *args_, ctx=ctx, tail=tail)
         case _:
-            fun_ = analyze_expr(fun, env, tail=False)
+            fun_ = analyze_expr(fun, ctx, tail=False)
 
             if tail:
 

@@ -1,5 +1,5 @@
 import dataclasses
-from typing import TypeAlias
+from typing import TypeAlias, Optional
 
 from eopl_explicit_refs import abstract_syntax as ast
 from eopl_explicit_refs.generic_environment import Env, EmptyEnv
@@ -11,27 +11,56 @@ TEnv: TypeAlias = Env[Type]
 
 @dataclasses.dataclass
 class Context:
-    env: TEnv
-    types: TEnv
+    env: TEnv = EmptyEnv()
+    types: TEnv = EmptyEnv()
+    method_signatures: dict[tuple[Type, str], Type] = dataclasses.field(default_factory=dict)
+    method_impls: dict[tuple[Type, str], ast.Expression] = dataclasses.field(default_factory=dict)
 
     def extend_env(self, var: str, val: Type):
-        return Context(env=self.env.extend(var, val), types=self.types)
+        return Context(
+            env=self.env.extend(var, val),
+            types=self.types,
+            method_signatures=self.method_signatures,
+            method_impls=self.method_impls,
+        )
 
-
-def init_ctx() -> TEnv:
-    return Context(env=EmptyEnv(), types=EmptyEnv())
+    def find_method(self, ty: Type, name: str) -> Optional[tuple[Type, ast.Expression]]:
+        try:
+            return self.method_signatures[(ty, name)], self.method_impls[(ty, name)]
+        except KeyError:
+            return None
 
 
 def check_program(pgm: ast.Program) -> ast.Program:
     match pgm:
-        case ast.Program(exp, records):
-            ctx = init_ctx()
+        case ast.Program(exp, records, impls):
+            ctx = Context()
+
             for record in records:
                 ctx.types = ctx.types.extend(
                     record.name, t.NamedType(record.name, eval_type(ast.RecordType(record.fields), ctx))
                 )
+
+            for impl in impls:
+                impl_on = ctx.types.lookup(impl.type_name)
+                for method_name, func in impl.methods.items():
+                    ctx.method_signatures[(impl_on, method_name)] = eval_type(func.type, ctx)
+
+            impls_out = []
+            for impl in impls:
+                impl_on = ctx.types.lookup(impl.type_name)
+                methods_out = {}
+                for method_name, func in impl.methods.items():
+                    signature = ctx.method_signatures[(impl_on, method_name)]
+
+                    body = check_expr(func.expr, signature, ctx)
+                    ctx.method_impls[(impl_on, method_name)] = body
+                    methods_out[method_name] = body
+
+                impls_out.append(ast.ImplBlock(impl_on, methods_out))
+
             prog, _ = infer_expr(exp, ctx)
-            return ast.Program(prog, records)
+            return ast.Program(prog, records, impls_out)
 
 
 def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
@@ -95,6 +124,13 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
 
             return ast.TupleExpr(slots)
 
+        # initializing a named empty record
+        case t.NamedType(_, t.RecordType(t_fields)), ast.EmptyList():
+            if t_fields:
+                raise TypeError(f"missing fields: {t_fields}")
+
+            return ast.TupleExpr([])
+
         case _:
             e_out, actual_t = infer_expr(exp, ctx)
             if actual_t != typ:
@@ -143,6 +179,7 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
                     pass
                 case _:
                     raise TypeError(f"Cannot call {fun_t}")
+
             return ast.Application(fun, check_expr(arg, arg_t, ctx)), ret_t
 
         case ast.Let(var, val, bdy, None):
@@ -191,15 +228,21 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
                 field_types[name] = val_t
             return ast.TupleExpr(field_values), t.RecordType(field_types)
 
-        case ast.GetField(rec, fld):
+        case ast.GetAttribute(rec, fld):
             rec, rec_t = infer_expr(rec, ctx)
-            rec_t = resolve_type(rec_t)
-            if not isinstance(rec_t, t.RecordType):
+
+            method = ctx.find_method(rec_t, fld)
+            if method:
+                signature, _ = method
+                return ast.Application(ast.GetMethod(rec, rec_t, fld), rec), signature.ret
+
+            rec_rt = resolve_type(rec_t)
+            if not isinstance(rec_rt, t.RecordType):
                 raise TypeError(f"Expected record type, got {rec_t}")
-            if fld not in rec_t.fields:
-                raise TypeError(f"Record has no field {fld}")
-            idx = list(rec_t.fields.keys()).index(fld)
-            return ast.GetSlot(rec, idx), rec_t.fields[fld]
+            if fld not in rec_rt.fields:
+                raise TypeError(f"Record has no attribute {fld}")
+            idx = list(rec_rt.fields.keys()).index(fld)
+            return ast.GetSlot(rec, idx), rec_rt.fields[fld]
 
         case _:
             raise NotImplementedError(exp)

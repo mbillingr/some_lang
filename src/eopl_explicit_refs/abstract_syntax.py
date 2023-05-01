@@ -29,12 +29,19 @@ class Pattern(AstNode):
 class Program(AstNode):
     exp: Expression
     records: list[RecordDecl]
+    impls: list[ImplBlock]
 
 
 @dataclasses.dataclass
 class RecordDecl(AstNode):
     name: Symbol
     fields: dict[Symbol, Type]
+
+
+@dataclasses.dataclass
+class ImplBlock(AstNode):
+    type_name: Symbol
+    methods: dict[Symbol, TypeAnnotation]
 
 
 class Symbol(str, AstNode):
@@ -141,7 +148,7 @@ class RecordExpr(Expression):
 
 
 @dataclasses.dataclass
-class GetField(Expression):
+class GetAttribute(Expression):
     record: Expression
     fname: Symbol
 
@@ -155,6 +162,13 @@ class TupleExpr(Expression):
 class GetSlot(Expression):
     tuple: Expression
     index: int
+
+
+@dataclasses.dataclass
+class GetMethod(Expression):
+    object: Expression
+    type: Any
+    method: Symbol
 
 
 @dataclasses.dataclass
