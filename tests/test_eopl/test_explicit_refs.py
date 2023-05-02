@@ -164,12 +164,23 @@ def test_type_annotations(src, expect):
         (0, "struct Foo [x: Int] struct Bar [foo: Foo] 0"),
         (0, "[x=[y=[z=0]]].x.y.z"),
         # methods
-        (0, "struct Foo [] impl Foo { method Foo -> () -> Int bar self () => 0 } (the Foo []).bar ()"),
-        (1, "struct Foo [] impl Foo { method Foo -> Int bar self => 1 } (the Foo []).bar"),
-        (2, "struct Foo [x:Int] impl Foo { method Foo -> Int get-x self => self.x } (the Foo [x=2]).get-x"),
+        (0, "struct Foo [] impl Foo { method bar: Foo -> () -> Int self () => 0 } (the Foo []).bar ()"),
+        (1, "struct Foo [] impl Foo { method bar: Foo -> Int self => 1 } (the Foo []).bar"),
+        (1, "struct Foo [] impl Foo { method bar: Self -> Int self => 1 } (the Foo []).bar"),
+        (2, "struct Foo [x:Int] impl Foo { method get-x: Foo -> Int self => self.x } (the Foo [x=2]).get-x"),
     ],
 )
 def test_records(src, expect):
+    assert evaluate(src) == expect
+
+
+@pytest.mark.parametrize(
+    "expect, src",
+    [
+        (0, "interface Foo { method bar: Self -> () -> Int } 0"),
+    ],
+)
+def test_interfaces(src, expect):
     assert evaluate(src) == expect
 
 

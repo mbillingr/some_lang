@@ -469,8 +469,9 @@ def parse_impl(ts) -> ast.ImplBlock:
             case "}", _, _:
                 break
             case "method", _, span:
-                signature = parse_type(ts)
                 methodname = parse_symbol(ts)
+                expect_token(ts, ":")
+                signature = parse_type(ts)
                 arms = parse_match_arms(ts)
                 method = spanned(get_span(methodname).merge(get_span(arms[-1])), ast.Function(arms))
                 methods[methodname] = spanned(span.merge(get_span(method)), ast.TypeAnnotation(signature, method))
