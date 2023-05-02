@@ -166,9 +166,7 @@ class GetSlot(Expression):
 
 @dataclasses.dataclass
 class GetMethod(Expression):
-    object: Expression
-    type: Any
-    method: Symbol
+    index: int
 
 
 @dataclasses.dataclass

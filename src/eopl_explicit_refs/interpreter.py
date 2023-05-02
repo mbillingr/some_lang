@@ -13,14 +13,13 @@ UNDEFINED = object()
 @dataclasses.dataclass
 class Context:
     env: Env = EmptyEnv()
-    methods: dict[tuple[Any, Any], Closure] = dataclasses.field(default_factory=dict)
+    methods: list[Closure] = dataclasses.field(default_factory=list)
 
     def extend_env(self, *vars: str) -> Self:
         return Context(env=self.env.extend(*vars), methods=self.methods)
 
-    def find_method(self, ty, name) -> Closure:
-        raise NotImplementedError("Find a way to get methods by index: 1. concrete types, 2. polymorphic")
-        return self.methods[(ty, name)]
+    def find_method(self, index: int) -> Closure:
+        return self.methods[index]
 
 
 def analyze_program(pgm: ast.Program) -> Any:
@@ -31,7 +30,9 @@ def analyze_program(pgm: ast.Program) -> Any:
             for impl in impls:
                 for method_name, method in impl.methods.items():
                     arms = analyze_matcharms(method.patterns, ctx)
-                    ctx.methods[(impl.type_name, method_name)] = Closure(ctx, arms)
+                    # the order these are appended in must match the order
+                    # of method indices generated in the type checker
+                    ctx.methods.append(Closure(ctx, arms))
 
             prog = analyze_expr(exp, ctx, tail=False)
 
@@ -136,8 +137,8 @@ def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
 
             return the_function
 
-        case ast.GetMethod(obj, mty, mtn):
-            method = ctx.find_method(mty, mtn)
+        case ast.GetMethod(index):
+            method = ctx.find_method(index)
             return lambda _: method
 
         case ast.Application():

@@ -2,7 +2,6 @@ import dataclasses
 from typing import TypeAlias, Optional
 
 from eopl_explicit_refs import abstract_syntax as ast
-from eopl_explicit_refs.etc import gen_sym
 from eopl_explicit_refs.generic_environment import Env, EmptyEnv
 from eopl_explicit_refs.type_impls import Type
 from eopl_explicit_refs import type_impls as t
@@ -14,20 +13,18 @@ TEnv: TypeAlias = Env[Type]
 class Context:
     env: TEnv = EmptyEnv()
     types: TEnv = EmptyEnv()
-    method_signatures: dict[tuple[Type, str], Type] = dataclasses.field(default_factory=dict)
-    method_impls: dict[tuple[Type, str], ast.Expression] = dataclasses.field(default_factory=dict)
+    methods: dict[tuple[Type, str], [Type, int]] = dataclasses.field(default_factory=dict)
 
     def extend_env(self, var: str, val: Type):
         return Context(
             env=self.env.extend(var, val),
             types=self.types,
-            method_signatures=self.method_signatures,
-            method_impls=self.method_impls,
+            methods=self.methods,
         )
 
-    def find_method(self, ty: Type, name: str) -> Optional[tuple[Type, ast.Expression]]:
+    def find_method(self, ty: Type, name: str) -> Optional[tuple[Type, int]]:
         try:
-            return self.method_signatures[(ty, name)], self.method_impls[(ty, name)]
+            return self.methods[(ty, name)]
         except KeyError:
             return None
 
@@ -45,17 +42,18 @@ def check_program(pgm: ast.Program) -> ast.Program:
             for impl in impls:
                 impl_on = ctx.types.lookup(impl.type_name)
                 for method_name, func in impl.methods.items():
-                    ctx.method_signatures[(impl_on, method_name)] = eval_type(func.type, ctx)
+                    signature = eval_type(func.type, ctx)
+                    index = len(ctx.methods)
+                    ctx.methods[(impl_on, method_name)] = signature, index
 
             impls_out = []
             for impl in impls:
                 impl_on = ctx.types.lookup(impl.type_name)
                 methods_out = {}
                 for method_name, func in impl.methods.items():
-                    signature = ctx.method_signatures[(impl_on, method_name)]
+                    signature, _ = ctx.methods[(impl_on, method_name)]
 
                     body = check_expr(func.expr, signature, ctx)
-                    ctx.method_impls[(impl_on, method_name)] = body
                     methods_out[method_name] = body
 
                 impls_out.append(ast.ImplBlock(impl_on, methods_out))
@@ -234,8 +232,8 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
 
             method = ctx.find_method(rec_t, fld)
             if method:
-                signature, _ = method
-                result = make_method_getter(obj, rec_t, fld)
+                signature, index = method
+                result = ast.Application(ast.GetMethod(index), obj)
                 return result, signature.ret
 
             rec_rt = resolve_type(rec_t)
@@ -248,23 +246,6 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
 
         case _:
             raise NotImplementedError(exp)
-
-
-def make_method_getter(obj: ast.Expression, obj_t: Type, method_name: ast.Symbol) -> ast.Expression:
-    match obj:
-        case ast.Identifier():
-            # object is already bound
-            result = ast.Application(ast.GetMethod(obj, obj_t, method_name), obj)
-        case _:
-            # bind object expression to a new name, so we don't evaluate it twice
-            bound_obj = ast.Identifier(ast.Symbol(gen_sym()))
-            result = ast.Let(
-                bound_obj.name,
-                obj,
-                ast.Application(ast.GetMethod(bound_obj, obj_t, method_name), bound_obj),
-                obj_t,
-            )
-    return result
 
 
 def check_stmt(stmt: ast.Statement, env: TEnv) -> ast.Statement:
