@@ -22,6 +22,13 @@ class Context:
             methods=self.methods,
         )
 
+    def extend_types(self, name: str, ty: Type):
+        return Context(
+            env=self.env,
+            types=self.types.extend(name, ty),
+            methods=self.methods,
+        )
+
     def find_method(self, ty: Type, name: str) -> Optional[tuple[Type, int]]:
         try:
             return self.methods[(ty, name)]
@@ -35,20 +42,19 @@ def check_program(pgm: ast.Program) -> ast.Program:
             ctx = Context()
 
             for record in records:
-                ctx.types = ctx.types.extend(
+                ctx = ctx.extend_types(
                     record.name, t.NamedType(record.name, eval_type(ast.RecordType(record.fields), ctx))
                 )
-
-            for impl in impls:
-                impl_on = ctx.types.lookup(impl.type_name)
-                for method_name, func in impl.methods.items():
-                    signature = eval_type(func.type, ctx)
-                    index = len(ctx.methods)
-                    ctx.methods[(impl_on, method_name)] = signature, index
 
             impls_out = []
             for impl in impls:
                 impl_on = ctx.types.lookup(impl.type_name)
+                impl_ctx = ctx.extend_types("Self", impl_on)
+                for method_name, func in impl.methods.items():
+                    signature = eval_type(func.type, impl_ctx)
+                    index = len(impl_ctx.methods)
+                    impl_ctx.methods[(impl_on, method_name)] = signature, index
+
                 methods_out = {}
                 for method_name, func in impl.methods.items():
                     signature, _ = ctx.methods[(impl_on, method_name)]
