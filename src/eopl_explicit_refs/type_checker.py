@@ -2,6 +2,7 @@ import dataclasses
 from typing import TypeAlias, Optional
 
 from eopl_explicit_refs import abstract_syntax as ast
+from eopl_explicit_refs.etc import gen_sym
 from eopl_explicit_refs.generic_environment import Env, EmptyEnv
 from eopl_explicit_refs.type_impls import Type
 from eopl_explicit_refs import type_impls as t
@@ -228,13 +229,14 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
                 field_types[name] = val_t
             return ast.TupleExpr(field_values), t.RecordType(field_types)
 
-        case ast.GetAttribute(rec, fld):
-            rec, rec_t = infer_expr(rec, ctx)
+        case ast.GetAttribute(obj, fld):
+            obj, rec_t = infer_expr(obj, ctx)
 
             method = ctx.find_method(rec_t, fld)
             if method:
                 signature, _ = method
-                return ast.Application(ast.GetMethod(rec, rec_t, fld), rec), signature.ret
+                result = make_method_getter(obj, rec_t, fld)
+                return result, signature.ret
 
             rec_rt = resolve_type(rec_t)
             if not isinstance(rec_rt, t.RecordType):
@@ -242,10 +244,27 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
             if fld not in rec_rt.fields:
                 raise TypeError(f"Record has no attribute {fld}")
             idx = list(rec_rt.fields.keys()).index(fld)
-            return ast.GetSlot(rec, idx), rec_rt.fields[fld]
+            return ast.GetSlot(obj, idx), rec_rt.fields[fld]
 
         case _:
             raise NotImplementedError(exp)
+
+
+def make_method_getter(obj: ast.Expression, obj_t: Type, method_name: ast.Symbol) -> ast.Expression:
+    match obj:
+        case ast.Identifier():
+            # object is already bound
+            result = ast.Application(ast.GetMethod(obj, obj_t, method_name), obj)
+        case _:
+            # bind object expression to a new name, so we don't evaluate it twice
+            bound_obj = ast.Identifier(ast.Symbol(gen_sym()))
+            result = ast.Let(
+                bound_obj.name,
+                obj,
+                ast.Application(ast.GetMethod(bound_obj, obj_t, method_name), bound_obj),
+                obj_t,
+            )
+    return result
 
 
 def check_stmt(stmt: ast.Statement, env: TEnv) -> ast.Statement:

@@ -91,7 +91,7 @@ class BlockExpression(Expression):
 
 @dataclasses.dataclass
 class Identifier(Expression):
-    name: str
+    name: Symbol
 
 
 @dataclasses.dataclass
@@ -125,7 +125,7 @@ class Conditional(Expression):
 
 @dataclasses.dataclass
 class Let(Expression):
-    var: Identifier
+    var: Symbol
     val: Expression
     bdy: Expression
     var_t: Optional[Type]
