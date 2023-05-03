@@ -85,26 +85,27 @@ class Context:
 
 
 def check_program(pgm: ast.Program) -> ast.Program:
+    ctx = Context()
     vtm = VtableManager()
-    mod, ctx = check_module(pgm.mod, vtm)
+    mod, ctx = check_module(pgm.mod, ctx, vtm)
     exp, _ = infer_expr(pgm.exp, ctx)
     return ast.Program(mod, exp)
 
 
-def check_module(pgm: ast.Module, vtm: VtableManager) -> tuple[ast.Module, Context]:
+def check_module(pgm: ast.Module, ctx: Context, vtm: VtableManager) -> tuple[ast.Module, Context]:
     match pgm:
         case ast.Module(mod_name, submodules, imports, interfaces, records, impls):
-            ctx = Context()
-
             sub_out = {}
             sub_ctx = {}
             for k, v in submodules.items():
-                mod, ctx = check_module(v, vtm)
+                mod, ctx = check_module(v, ctx, vtm)
                 sub_out[k] = mod
                 sub_ctx[k] = ctx
 
+            imports_out = []
             for imp in imports:
-                ctx = check_import(imp, sub_ctx, ctx)
+                imp_, ctx = check_import(imp, sub_ctx, ctx)
+                imports_out.append(imp_)
 
             for intf in interfaces:
                 ifty = t.InterfaceType(intf.name, None, vtm)
@@ -150,7 +151,7 @@ def check_module(pgm: ast.Module, vtm: VtableManager) -> tuple[ast.Module, Conte
 
                 impls_out.append(ast.ImplBlock(impl.interface, impl_on, methods_out))
 
-            return ast.Module(mod_name, sub_out, imports, interfaces, records, impls_out), ctx
+            return ast.Module(mod_name, sub_out, imports_out, interfaces, records, impls_out), ctx
 
         case other:
             raise NotImplementedError(other)
@@ -158,13 +159,26 @@ def check_module(pgm: ast.Module, vtm: VtableManager) -> tuple[ast.Module, Conte
 
 def check_import(imp: ast.Import, submodules: dict[ast.Symbol, Context], ctx: Context):
     module = submodules[imp.module]
+    things_out = []
     for thing in imp.what:
         match thing:
             case ast.Symbol():
-                ctx = ctx.extend_interfaces(thing, module.interfaces.lookup(thing))
+                try:
+                    ctx = ctx.extend_interfaces(thing, module.interfaces.lookup(thing))
+                    continue
+                except LookupError:
+                    pass
+                try:
+                    ctx = ctx.extend_types(thing, module.types.lookup(thing))
+                    continue
+                except LookupError:
+                    pass
+                raise ImportError(thing)
             case ast.Import():
-                ctx = check_import(imp, module.submodules, ctx)
-    return ctx
+                imp_out, ctx = check_import(imp, module.submodules, ctx)
+                things_out.append(imp_out)
+
+    return ast.Import(imp.module, things_out), ctx
 
 
 def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:

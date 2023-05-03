@@ -106,6 +106,7 @@ def parse_imported(ts) -> list[ast.Symbol | ast.Import]:
             expect_token(ts, "[")
             while not try_token(ts, "]"):
                 items.append(parse_subimport(ts))
+            return items
         case _:
             return [parse_subimport(ts)]
 

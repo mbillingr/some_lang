@@ -23,7 +23,8 @@ class Context:
 
 
 def analyze_program(pgm: ast.Program) -> Any:
-    ctx = analyze_module(pgm.mod)
+    ctx = Context()
+    _, ctx = analyze_module(pgm.mod, ctx)
     exp = analyze_expr(pgm.exp, ctx, tail=False)
 
     def program(store):
@@ -33,10 +34,20 @@ def analyze_program(pgm: ast.Program) -> Any:
     return program
 
 
-def analyze_module(mod: ast.Module) -> Context:
+@dataclasses.dataclass
+class Module:
+    pass
+
+
+def analyze_module(mod: ast.Module, ctx: Context) -> tuple[Module, Context]:
     match mod:
         case ast.Module(_, submodules, imports, interfaces, records, impls):
-            ctx = Context()
+            sub_mods = {}
+            for k, m in submodules.items():
+                sub_mods[k], ctx = analyze_module(m, ctx)
+
+            for imp in imports:
+                ctx = analyze_import(imp, sub_mods, ctx)
 
             for impl in impls:
                 for method_name, method in impl.methods.items():
@@ -45,7 +56,18 @@ def analyze_module(mod: ast.Module) -> Context:
                     # of method indices generated in the type checker
                     ctx.methods.append(Closure(ctx, arms))
 
-            return ctx
+            mod_out = Module()
+
+            return mod_out, ctx
+
+
+def analyze_import(imp: ast.Import, sub_mods: dict[ast.Symbol, Module], ctx: Context) -> Context:
+    module = sub_mods[imp.module]
+    for thing in imp.what:
+        match thing:
+            case _:
+                raise NotImplementedError(thing)
+    return ctx
 
 
 def analyze_stmt(stmt: ast.Statement, ctx: Context) -> Callable:
@@ -170,9 +192,7 @@ def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
         case ast.TupleExpr(slots, vtables):
             slots_ = [analyze_expr(v, ctx, tail=False) for v in slots]
             if vtables:
-                return lambda store: TupleObj(v(store) for v in slots_).with_vtables(
-                    vtables
-                )
+                return lambda store: TupleObj(v(store) for v in slots_).with_vtables(vtables)
             else:
                 return lambda store: TupleObj(v(store) for v in slots_)
 
@@ -184,9 +204,7 @@ def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
             raise NotImplementedError(exp)
 
 
-def analyze_matcharms(
-    arms: list[ast.MatchArm], ctx: Context
-) -> list[tuple[Matcher, Callable]]:
+def analyze_matcharms(arms: list[ast.MatchArm], ctx: Context) -> list[tuple[Matcher, Callable]]:
     match_bodies = []
     for arm in arms:
         matcher = analyze_patterns(arm.pats)

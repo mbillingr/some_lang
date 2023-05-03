@@ -174,23 +174,19 @@ def test_type_annotations(src, expect):
         # methods
         (
             0,
-            "struct Foo [] impl Foo { method bar: Foo -> () -> Int self () => 0 }"
-            "(the Foo []).bar ()",
+            "struct Foo [] impl Foo { method bar: Foo -> () -> Int self () => 0 }" "(the Foo []).bar ()",
         ),
         (
             1,
-            "struct Foo [] impl Foo { method bar: Foo -> Int self => 1 }"
-            "(the Foo []).bar",
+            "struct Foo [] impl Foo { method bar: Foo -> Int self => 1 }" "(the Foo []).bar",
         ),
         (
             1,
-            "struct Foo [] impl Foo { method bar: Self -> Int self => 1 }"
-            "(the Foo []).bar",
+            "struct Foo [] impl Foo { method bar: Self -> Int self => 1 }" "(the Foo []).bar",
         ),
         (
             2,
-            "struct Foo [x:Int] impl Foo { method get-x: Foo -> Int self => self.x }"
-            "(the Foo [x=2]).get-x",
+            "struct Foo [x:Int] impl Foo { method get-x: Foo -> Int self => self.x }" "(the Foo [x=2]).get-x",
         ),
     ],
 )
@@ -200,9 +196,7 @@ def test_records(src, expect):
 
 def test_two_similar_records_are_not_same_type():
     with pytest.raises(TypeError):
-        evaluate(
-            "struct Foo [x: Int] struct Bar [x: Int] let bar: Bar = (the Foo [x = 3]) in bar"
-        )
+        evaluate("struct Foo [x: Int] struct Bar [x: Int] let bar: Bar = (the Foo [x = 3]) in bar")
 
 
 @pytest.mark.parametrize(
@@ -249,6 +243,34 @@ def test_interfaces(src, expect):
         (
             0,
             "module my-mod { interface Foo {} } import my-mod.Foo struct Bar [] impl Foo for Bar {} 0",
+        ),
+        (
+            1,
+            "module my-mod { "
+            "    struct Bar [] "
+            "    impl Bar { method x: Self -> Int self => 1 }"
+            "}"
+            "import my-mod.Bar (the Bar []).x",
+        ),
+        (
+            2,
+            "module my-mod { "
+            "    interface Foo { method x: Self -> Int } "
+            "    struct Bar [] "
+            "    impl Foo for Bar { method x: Self -> Int self => 2 }"
+            "}"
+            "import my-mod.[Foo Bar] (the Foo (the Bar [])).x",
+        ),
+        (
+            2,
+            "module my-mod { "
+            "    interface Foo { method x: Self -> Int } "
+            "    struct Bar [] "
+            "    impl Foo for Bar { method x: Self -> Int self => 2 }"
+            "    struct Fuzz []"
+            "    impl Fuzz { method y: Self -> Foo self => (the Bar []) }"
+            "}"
+            "import my-mod.Fuzz (the Fuzz []).y.x",
         ),
     ],
 )
