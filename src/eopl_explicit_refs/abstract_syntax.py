@@ -30,6 +30,13 @@ class Program(AstNode):
     exp: Expression
     records: list[RecordDecl]
     impls: list[ImplBlock]
+    interfaces: list[Interface]
+
+
+@dataclasses.dataclass
+class Interface(AstNode):
+    name: Symbol
+    methods: dict[Symbol, FuncType]
 
 
 @dataclasses.dataclass

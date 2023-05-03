@@ -145,12 +145,20 @@ def test_type_annotations(src, expect):
     [
         # anonymous
         ((1, 2), "[x=1,y=2]"),
-        ((1, 2), "the [x: Int, y: Int] [y = 2, x = 1]"),  # anonymous record fields sorted alphabetically
+        (
+            # anonymous record fields sorted alphabetically
+            (1, 2),
+            "the [x: Int, y: Int] [y = 2, x = 1]",
+        ),
         ((1,), "let foo: [x: Int] = [x=1] in foo"),
         ((1,), "(the [x:Int]->[x:Int] fn x => x) [x=1]"),
         # named
         (0, "struct Foo [] 0"),
-        ((4, 3), "struct Foo [y: Int, x: Int] the Foo [x = 3, y = 4]"),  # named record fields in declaration order
+        (
+            # named record fields in declaration order
+            (4, 3),
+            "struct Foo [y: Int, x: Int] the Foo [x = 3, y = 4]",
+        ),
         ((3,), "struct Foo [x: Int] let bar: Foo = [x = 3] in bar"),
         ((3,), "struct Foo [x: Int] (the Foo -> Foo fn x => x) [x = 3]"),
         ((3,), "struct Foo [x: Int] let bar: Foo = (the Foo [x = 3]) in bar"),
@@ -164,10 +172,26 @@ def test_type_annotations(src, expect):
         (0, "struct Foo [x: Int] struct Bar [foo: Foo] 0"),
         (0, "[x=[y=[z=0]]].x.y.z"),
         # methods
-        (0, "struct Foo [] impl Foo { method bar: Foo -> () -> Int self () => 0 } (the Foo []).bar ()"),
-        (1, "struct Foo [] impl Foo { method bar: Foo -> Int self => 1 } (the Foo []).bar"),
-        (1, "struct Foo [] impl Foo { method bar: Self -> Int self => 1 } (the Foo []).bar"),
-        (2, "struct Foo [x:Int] impl Foo { method get-x: Foo -> Int self => self.x } (the Foo [x=2]).get-x"),
+        (
+            0,
+            "struct Foo [] impl Foo { method bar: Foo -> () -> Int self () => 0 }"
+            "(the Foo []).bar ()",
+        ),
+        (
+            1,
+            "struct Foo [] impl Foo { method bar: Foo -> Int self => 1 }"
+            "(the Foo []).bar",
+        ),
+        (
+            1,
+            "struct Foo [] impl Foo { method bar: Self -> Int self => 1 }"
+            "(the Foo []).bar",
+        ),
+        (
+            2,
+            "struct Foo [x:Int] impl Foo { method get-x: Foo -> Int self => self.x }"
+            "(the Foo [x=2]).get-x",
+        ),
     ],
 )
 def test_records(src, expect):
@@ -178,6 +202,13 @@ def test_records(src, expect):
     "expect, src",
     [
         (0, "interface Foo { method bar: Self -> () -> Int } 0"),
+        (
+            1,
+            "interface Foo { method bar: Self -> Int } "
+            "struct Bar [] "
+            "impl Foo for Bar { method bar: Self -> Int self => 1}"
+            "(the Bar []).bar",
+        ),
     ],
 )
 def test_interfaces(src, expect):
@@ -186,7 +217,9 @@ def test_interfaces(src, expect):
 
 def test_two_similar_records_are_not_same_type():
     with pytest.raises(TypeError):
-        evaluate("struct Foo [x: Int] struct Bar [x: Int] let bar: Bar = (the Foo [x = 3]) in bar")
+        evaluate(
+            "struct Foo [x: Int] struct Bar [x: Int] let bar: Bar = (the Foo [x = 3]) in bar"
+        )
 
 
 def evaluate(src):

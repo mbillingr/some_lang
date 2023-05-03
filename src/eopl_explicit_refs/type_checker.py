@@ -13,7 +13,9 @@ TEnv: TypeAlias = Env[Type]
 class Context:
     env: TEnv = EmptyEnv()
     types: TEnv = EmptyEnv()
-    methods: dict[tuple[Type, str], [Type, int]] = dataclasses.field(default_factory=dict)
+    methods: dict[tuple[Type, str], [Type, int]] = dataclasses.field(
+        default_factory=dict
+    )
 
     def extend_env(self, var: str, val: Type):
         return Context(
@@ -38,12 +40,15 @@ class Context:
 
 def check_program(pgm: ast.Program) -> ast.Program:
     match pgm:
-        case ast.Program(exp, records, impls):
+        case ast.Program(exp, records, impls, interfaces):
             ctx = Context()
 
             for record in records:
                 ctx = ctx.extend_types(
-                    record.name, t.NamedType(record.name, eval_type(ast.RecordType(record.fields), ctx))
+                    record.name,
+                    t.NamedType(
+                        record.name, eval_type(ast.RecordType(record.fields), ctx)
+                    ),
                 )
 
             impls_out = []
@@ -65,7 +70,7 @@ def check_program(pgm: ast.Program) -> ast.Program:
                 impls_out.append(ast.ImplBlock(impl_on, methods_out))
 
             prog, _ = infer_expr(exp, ctx)
-            return ast.Program(prog, records, impls_out)
+            return ast.Program(prog, records, impls_out, interfaces)
 
 
 def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
@@ -99,7 +104,12 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
             return ast.BinOp(lhs, rhs, op)
 
         case t.FuncType(_, _), ast.Function(arms):
-            return ast.Function([ast.MatchArm(arm.pats, check_matcharm(arm.pats, arm.body, typ, ctx)) for arm in arms])
+            return ast.Function(
+                [
+                    ast.MatchArm(arm.pats, check_matcharm(arm.pats, arm.body, typ, ctx))
+                    for arm in arms
+                ]
+            )
 
         case _, ast.Application(fun, arg):
             fun, fun_t = infer_expr(fun, ctx)
@@ -123,7 +133,9 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
             extra_fields = v_fields.keys() - t_fields.keys()
             missing_fields = t_fields.keys() - v_fields.keys()
             if extra_fields or missing_fields:
-                raise TypeError(f"extra fields: {extra_fields}, missing fields: {missing_fields}")
+                raise TypeError(
+                    f"extra fields: {extra_fields}, missing fields: {missing_fields}"
+                )
 
             slots = [check_expr(v_fields[f], t_fields[f], ctx) for f in t_fields]
 
@@ -175,7 +187,9 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
             return ast.BinOp(lhs, rhs, op), t.IntType
 
         case ast.Function(patterns):
-            raise InferenceError(f"can't infer function signature for {exp}. Please provide a type hint.")
+            raise InferenceError(
+                f"can't infer function signature for {exp}. Please provide a type hint."
+            )
 
         case ast.Application(fun, arg):
             fun, fun_t = infer_expr(fun, ctx)
@@ -286,7 +300,9 @@ def check_stmt(stmt: ast.Statement, env: TEnv) -> ast.Statement:
             raise NotImplementedError(stmt)
 
 
-def check_matcharm(patterns: list[ast.Pattern], body: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
+def check_matcharm(
+    patterns: list[ast.Pattern], body: ast.Expression, typ: Type, ctx: Context
+) -> ast.Expression:
     match typ, patterns:
         case t.FuncType(arg_t, res_t), [p0, *p_rest]:
             bindings = check_pattern(p0, arg_t, ctx)

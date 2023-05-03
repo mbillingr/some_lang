@@ -58,14 +58,17 @@ op_types = {
 def parse_program(ts: TokenStream) -> ast.Program:
     records = []
     impls = []
+    interfaces = []
     while True:
         match ts.peek():
             case "struct", _, _:
                 records.append(parse_struct_decl(ts))
             case "impl", _, _:
                 impls.append(parse_impl(ts))
+            case "interface", _, _:
+                interfaces.append(parse_interface(ts))
             case _:
-                return ast.Program(parse_expr(ts), records, impls)
+                return ast.Program(parse_expr(ts), records, impls, interfaces)
 
 
 def parse_statement(ts: TokenStream) -> ast.Statement:
@@ -91,7 +94,9 @@ def parse_statement(ts: TokenStream) -> ast.Statement:
             return spanned(get_span(expr), ast.ExprStmt(expr))
 
 
-def parse_expr(ts: TokenStream, min_bp: int = 0, invisible_application=True) -> ast.Expression:
+def parse_expr(
+    ts: TokenStream, min_bp: int = 0, invisible_application=True
+) -> ast.Expression:
     match ts.peek():
         case op, _, _ if op in prefix_binding_power:
             _, rbp = prefix_binding_power[op]
@@ -121,7 +126,9 @@ def parse_expr(ts: TokenStream, min_bp: int = 0, invisible_application=True) -> 
                 if lbp < min_bp:
                     break
                 arg = parse_expr(ts, rbp)
-                lhs = spanned(get_span(lhs).merge(get_span(arg)), ast.Application(lhs, arg))
+                lhs = spanned(
+                    get_span(lhs).merge(get_span(arg)), ast.Application(lhs, arg)
+                )
             case _:
                 break
 
@@ -175,7 +182,9 @@ def parse_atom(ts: TokenStream):
             val = parse_expr(ts)
             expect_token(ts, "in")
             body = parse_expr(ts)
-            return spanned(span.merge(get_span(body)), ast.Let(var, val, body, var_t=typ))
+            return spanned(
+                span.merge(get_span(body)), ast.Let(var, val, body, var_t=typ)
+            )
         case token:
             raise UnexpectedToken(token)
 
@@ -244,7 +253,9 @@ def parse_list_expression(ts, skip_opening: bool):
             # comma between two elements would be correctly parsed as application.
             try_token(ts, ",")
             rest = parse_list_expression(ts, skip_opening=True)
-            result = spanned(get_span(first).merge(get_span(rest)), ast.BinOp(first, rest, "::"))
+            result = spanned(
+                get_span(first).merge(get_span(rest)), ast.BinOp(first, rest, "::")
+            )
 
     if span0 is not None:
         return spanned(span0.merge(get_span(result)), result)
@@ -327,7 +338,10 @@ def parse_postfix_operator(lhs, ts):
     match ts.get_next():
         case ".", _, _:
             fieldname = parse_symbol(ts)
-            return spanned(get_span(lhs).merge(get_span(fieldname)), ast.GetAttribute(lhs, fieldname))
+            return spanned(
+                get_span(lhs).merge(get_span(fieldname)),
+                ast.GetAttribute(lhs, fieldname),
+            )
         case op, TokenKind.OPERATOR, span:
             return spanned(
                 make_operator_span(span, get_span(lhs)),
@@ -357,7 +371,9 @@ def parse_match_arm(ts) -> ast.MatchArm:
         if try_token(ts, "=>"):
             break
     body = parse_expr(ts)
-    return spanned(get_span(patterns[0]).merge(get_span(body)), ast.MatchArm(patterns, body))
+    return spanned(
+        get_span(patterns[0]).merge(get_span(body)), ast.MatchArm(patterns, body)
+    )
 
 
 def parse_pattern(ts) -> ast.Pattern:
@@ -366,7 +382,9 @@ def parse_pattern(ts) -> ast.Pattern:
         case "::", _, span:
             ts.get_next()
             rhs = parse_pattern(ts)
-            return spanned(get_span(lhs).merge(get_span(rhs)), ast.ListConsPattern(lhs, rhs))
+            return spanned(
+                get_span(lhs).merge(get_span(rhs)), ast.ListConsPattern(lhs, rhs)
+            )
         case _:
             return lhs
 
@@ -434,6 +452,27 @@ def parse_atomic_type(ts) -> ast.Type:
             raise UnexpectedToken(other)
 
 
+def parse_interface(ts) -> ast.Interface:
+    _, _, span0 = expect_token(ts, "interface")
+    name = parse_symbol(ts)
+    methods = {}
+    expect_token(ts, "{")
+    while True:
+        match ts.get_next():
+            case "}", _, _:
+                break
+            case "method", _, span:
+                methodname = parse_symbol(ts)
+                expect_token(ts, ":")
+                signature = parse_type(ts)
+                methods[methodname] = spanned(
+                    span.merge(get_span(signature)), signature
+                )
+            case other:
+                raise UnexpectedToken(other)
+    return ast.Interface(name, methods)
+
+
 def parse_struct_decl(ts) -> ast.RecordDecl:
     _, _, span0 = expect_token(ts, "struct")
     name = parse_symbol(ts)
@@ -461,7 +500,14 @@ def parse_record_fields(ts) -> dict[ast.Symbol, ast.Type]:
 
 def parse_impl(ts) -> ast.ImplBlock:
     _, _, span0 = expect_token(ts, "impl")
-    typename = parse_symbol(ts)
+    name = parse_symbol(ts)
+    if try_token(ts, "for"):
+        interface = name
+        typename = parse_symbol(ts)
+    else:
+        interface = None
+        typename = name
+
     methods = {}
     expect_token(ts, "{")
     while True:
@@ -473,8 +519,12 @@ def parse_impl(ts) -> ast.ImplBlock:
                 expect_token(ts, ":")
                 signature = parse_type(ts)
                 arms = parse_match_arms(ts)
-                method = spanned(get_span(methodname).merge(get_span(arms[-1])), ast.Function(arms))
-                methods[methodname] = spanned(span.merge(get_span(method)), ast.TypeAnnotation(signature, method))
+                method = spanned(
+                    get_span(methodname).merge(get_span(arms[-1])), ast.Function(arms)
+                )
+                methods[methodname] = spanned(
+                    span.merge(get_span(method)), ast.TypeAnnotation(signature, method)
+                )
             case other:
                 raise UnexpectedToken(other)
     return ast.ImplBlock(typename, methods)
