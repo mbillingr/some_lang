@@ -71,6 +71,7 @@ def parse_module(ts: TokenStream) -> ast.Module:
 
 def parse_module_body(ts: TokenStream, name: str) -> ast.Module:
     submodules = {}
+    imports = []
     records = []
     impls = []
     interfaces = []
@@ -79,6 +80,9 @@ def parse_module_body(ts: TokenStream, name: str) -> ast.Module:
             case "module", _, _:
                 mod = parse_module(ts)
                 submodules[mod.name] = mod
+            case "import", _, _:
+                ts.get_next()
+                imports.append(parse_import(ts))
             case "struct", _, _:
                 records.append(parse_struct_decl(ts))
             case "impl", _, _:
@@ -88,6 +92,30 @@ def parse_module_body(ts: TokenStream, name: str) -> ast.Module:
             case _:
                 return ast.Module(name, interfaces, records, impls)
 
+
+def parse_import(ts) -> ast.Import:
+    module = parse_symbol(ts)
+    expect_token(ts, ".")
+    what = parse_imported(ts)
+    return ast.Import(module, what)
+
+def parse_imported(ts) -> list[ast.Symbol | ast.Import]:
+    match ts.peek():
+        case "[", _, _:
+            items = []
+            expect_token(ts, "[")
+            while not try_token(ts, "]"):
+                items.append(parse_subimport(ts))
+        case _:
+            return [parse_subimport(ts)]
+
+
+def parse_subimport(ts) -> ast.Symbol | ast.Import:
+    module_or_symbol = parse_symbol(ts)
+    if try_token(ts, "."):
+        what = parse_imported(ts)
+        return ast.Import(module_or_symbol, what)
+    return module_or_symbol
 
 def parse_statement(ts: TokenStream) -> ast.Statement:
     match ts.peek():

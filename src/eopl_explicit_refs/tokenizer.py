@@ -26,6 +26,7 @@ KEYWORDS = (
     "for",
     "if",
     "impl",
+    "import",
     "in",
     "interface",
     "let",

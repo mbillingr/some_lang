@@ -246,6 +246,10 @@ def test_interfaces(src, expect):
     [
         (0, "module my-mod { } 0"),
         (0, "module outer { module inner { } } 0"),
+        (
+            0,
+            "module my-mod { interface Foo {} } import my-mod.Foo struct Bar [] impl Foo for Bar {} 0",
+        ),
     ],
 )
 def test_modules(src, expect):

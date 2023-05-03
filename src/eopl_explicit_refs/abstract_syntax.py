@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import abc
 import dataclasses
-from typing import Any, Optional
+from typing import Any, Optional, TypeAlias, List
 
 
 class AstNode(abc.ABC):
@@ -37,6 +37,12 @@ class Module(AstNode):
     interfaces: list[Interface]
     records: list[RecordDecl]
     impls: list[ImplBlock]
+
+
+@dataclasses.dataclass
+class Import(AstNode):
+    module: Symbol
+    what: list[Symbol | Import]
 
 
 @dataclasses.dataclass
