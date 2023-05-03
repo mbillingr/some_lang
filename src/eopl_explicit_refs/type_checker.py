@@ -17,6 +17,7 @@ class Context:
     methods: dict[tuple[Type, str], tuple[Type, int]] = dataclasses.field(
         default_factory=dict
     )
+    raise NotImplementedError("make the virtuals field a property of t.Interface type")
     virtuals: dict[tuple[t.InterfaceType, str], tuple[int, int]] = dataclasses.field(
         default_factory=dict
     )
