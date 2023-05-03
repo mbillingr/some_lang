@@ -13,9 +13,6 @@ TEnv: TypeAlias = Env[Type]
 class Context:
     env: TEnv = EmptyEnv()
     interfaces: Env[t.InterfaceType] = EmptyEnv()
-    interface_impls: set[tuple[Type, t.InterfaceType]] = dataclasses.field(
-        default_factory=set
-    )
     types: TEnv = EmptyEnv()
     methods: dict[tuple[Type, str], tuple[Type, int]] = dataclasses.field(
         default_factory=dict
@@ -28,7 +25,7 @@ class Context:
     def check(self, actual_t: Type, expected_t: Type) -> bool:
         match actual_t, expected_t:
             case _, t.InterfaceType():
-                return (actual_t, expected_t) in self.interface_impls
+                return actual_t.implements(expected_t)
             case _, _:
                 return actual_t == expected_t
 
@@ -36,7 +33,6 @@ class Context:
         return Context(
             env=self.env.extend(var, val),
             interfaces=self.interfaces,
-            interface_impls=self.interface_impls,
             types=self.types,
             methods=self.methods,
             virtuals=self.virtuals,
@@ -47,7 +43,6 @@ class Context:
         return Context(
             env=self.env,
             interfaces=self.interfaces,
-            interface_impls=self.interface_impls,
             types=self.types.extend(name, ty),
             methods=self.methods,
             virtuals=self.virtuals,
@@ -61,7 +56,6 @@ class Context:
         return Context(
             env=self.env,
             interfaces=self.interfaces.extend(name, ty),
-            interface_impls=self.interface_impls,
             types=self.types,
             methods=self.methods,
             virtuals=self.virtuals,
@@ -82,27 +76,12 @@ class Context:
                 except KeyError:
                     return None
 
-    def implements(self, ty: Type, intf: t.InterfaceType) -> bool:
-        return (ty, intf) in self.interface_impls
-
-    def declare_impl(self, ty: Type, intf: t.InterfaceType):
-        return Context(
-            env=self.env,
-            interfaces=self.interfaces,
-            interface_impls=self.interface_impls | {(ty, intf)},
-            types=self.types,
-            methods=self.methods,
-            virtuals=self.virtuals,
-            vtables=self.vtables,
-        )
-
     def declare_virtual(self, ifty: t.InterfaceType, method: str):
         table = 0  # we only use a single vtable for now...
         index = len(self.virtuals)
         return Context(
             env=self.env,
             interfaces=self.interfaces,
-            interface_impls=self.interface_impls,
             types=self.types,
             methods=self.methods,
             virtuals=self.virtuals | {(ifty, method): (table, index)},
@@ -121,7 +100,6 @@ class Context:
         return Context(
             env=self.env,
             interfaces=self.interfaces,
-            interface_impls=self.interface_impls,
             types=self.types,
             methods=self.methods,
             virtuals=self.virtuals,
@@ -168,7 +146,7 @@ def check_module(pgm: ast.Module) -> tuple[ast.Module, Context]:
 
                 if impl.interface is not None:
                     interface_obj = ctx.interfaces.lookup(impl.interface)
-                    ctx = ctx.declare_impl(impl_on, interface_obj)
+                    impl_on.declare_impl(interface_obj)
 
                 impl_ctx = ctx.extend_types("Self", impl_on)
                 for method_name, func in impl.methods.items():
@@ -269,7 +247,7 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
 
         case t.InterfaceType() as intf, exp:
             e_out, actual_t = infer_expr(exp, ctx)
-            if not ctx.implements(actual_t, intf):
+            if not actual_t.implements(intf):
                 raise TypeError(f"{actual_t} dos not implement {intf}")
             return e_out
 

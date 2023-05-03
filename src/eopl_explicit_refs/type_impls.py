@@ -1,18 +1,26 @@
+from __future__ import annotations
 import abc
 import dataclasses
-from typing import Optional
 
 from eopl_explicit_refs.abstract_syntax import Symbol
 
 
 class Type(abc.ABC):
-    pass
+    def __init__(self):
+        self.implemented_interfaces: set[InterfaceType] = set()
+
+    def declare_impl(self, ift: InterfaceType):
+        self.implemented_interfaces.add(ift)
+
+    def implements(self, ift: InterfaceType) -> bool:
+        return ift in self.implemented_interfaces
 
 
 class NamedType(Type):
     __match_args__ = ("name", "type")
 
     def __init__(self, name: str, ty: Type):
+        super().__init__()
         self.name = name
         self.type = ty
 
