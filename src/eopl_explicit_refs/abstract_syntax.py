@@ -27,10 +27,16 @@ class Pattern(AstNode):
 
 @dataclasses.dataclass
 class Program(AstNode):
+    mod: Module
     exp: Expression
+
+
+@dataclasses.dataclass
+class Module(AstNode):
+    name: Symbol
+    interfaces: list[Interface]
     records: list[RecordDecl]
     impls: list[ImplBlock]
-    interfaces: list[Interface]
 
 
 @dataclasses.dataclass

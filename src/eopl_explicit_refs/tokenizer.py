@@ -30,6 +30,7 @@ KEYWORDS = (
     "interface",
     "let",
     "method",
+    "module",
     "newref",
     "set",
     "struct",
@@ -191,4 +192,7 @@ class UnexpectedEnd(ParseError):
 class UnexpectedToken(ParseError):
     def __str__(self):
         tok, kind, span = self.args[0]
-        return f"Unexpected {kind.name} '{tok}'\n" + span.show_line()
+        if len(self.args) > 1:
+            return f"Unexpected {kind.name} '{tok}' where {self.args[1]} is expected\n" + span.show_line()
+        else:
+            return f"Unexpected {kind.name} '{tok}'\n" + span.show_line()

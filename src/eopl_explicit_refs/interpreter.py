@@ -23,8 +23,19 @@ class Context:
 
 
 def analyze_program(pgm: ast.Program) -> Any:
-    match pgm:
-        case ast.Program(exp, records, impls):
+    ctx = analyze_module(pgm.mod)
+    exp = analyze_expr(pgm.exp, ctx, tail=False)
+
+    def program(store):
+        store.clear()
+        return exp(store)
+
+    return program
+
+
+def analyze_module(mod: ast.Module) -> Context:
+    match mod:
+        case ast.Module(_, interfaces, records, impls):
             ctx = Context()
 
             for impl in impls:
@@ -34,13 +45,7 @@ def analyze_program(pgm: ast.Program) -> Any:
                     # of method indices generated in the type checker
                     ctx.methods.append(Closure(ctx, arms))
 
-            prog = analyze_expr(exp, ctx, tail=False)
-
-            def program(store):
-                store.clear()
-                return prog(store)
-
-            return program
+            return ctx
 
 
 def analyze_stmt(stmt: ast.Statement, ctx: Context) -> Callable:

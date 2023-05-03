@@ -130,8 +130,14 @@ class Context:
 
 
 def check_program(pgm: ast.Program) -> ast.Program:
+    mod, ctx = check_module(pgm.mod)
+    exp, _ = infer_expr(pgm.exp, ctx)
+    return ast.Program(mod, exp)
+
+
+def check_module(pgm: ast.Module) -> tuple[ast.Module, Context]:
     match pgm:
-        case ast.Program(exp, records, impls, interfaces):
+        case ast.Module(mod_name, interfaces, records, impls):
             ctx = Context()
 
             for intf in interfaces:
@@ -183,8 +189,7 @@ def check_program(pgm: ast.Program) -> ast.Program:
 
                 impls_out.append(ast.ImplBlock(impl.interface, impl_on, methods_out))
 
-            prog, _ = infer_expr(exp, ctx)
-            return ast.Program(prog, records, impls_out, interfaces)
+            return ast.Module(mod_name, interfaces, records, impls_out), ctx
 
 
 def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:

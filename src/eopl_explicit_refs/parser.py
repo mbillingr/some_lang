@@ -56,11 +56,29 @@ op_types = {
 
 
 def parse_program(ts: TokenStream) -> ast.Program:
+    mod = parse_module_body(ts, "__main__")
+    return ast.Program(mod, parse_expr(ts))
+
+
+def parse_module(ts: TokenStream) -> ast.Module:
+    _, _, span0 = expect_token(ts, "module")
+    name = parse_symbol(ts)
+    expect_token(ts, "{")
+    module = parse_module_body(ts, name)
+    _, _, span1 = expect_token(ts, "}")
+    return spanned(span0.merge(span1), module)
+
+
+def parse_module_body(ts: TokenStream, name: str) -> ast.Module:
+    submodules = {}
     records = []
     impls = []
     interfaces = []
     while True:
         match ts.peek():
+            case "module", _, _:
+                mod = parse_module(ts)
+                submodules[mod.name] = mod
             case "struct", _, _:
                 records.append(parse_struct_decl(ts))
             case "impl", _, _:
@@ -68,7 +86,7 @@ def parse_program(ts: TokenStream) -> ast.Program:
             case "interface", _, _:
                 interfaces.append(parse_interface(ts))
             case _:
-                return ast.Program(parse_expr(ts), records, impls, interfaces)
+                return ast.Module(name, interfaces, records, impls)
 
 
 def parse_statement(ts: TokenStream) -> ast.Statement:
@@ -546,9 +564,9 @@ def expect_token(ts, expect):
         case tok, kind, span:
             if isinstance(expect, TokenKind):
                 if kind != expect:
-                    raise UnexpectedToken((tok, kind, span))
+                    raise UnexpectedToken((tok, kind, span), expect)
             elif tok != expect:
-                raise UnexpectedToken((tok, kind, span))
+                raise UnexpectedToken((tok, kind, span), expect)
 
             return tok, kind, span
 

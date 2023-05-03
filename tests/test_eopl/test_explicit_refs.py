@@ -198,6 +198,13 @@ def test_records(src, expect):
     assert evaluate(src) == expect
 
 
+def test_two_similar_records_are_not_same_type():
+    with pytest.raises(TypeError):
+        evaluate(
+            "struct Foo [x: Int] struct Bar [x: Int] let bar: Bar = (the Foo [x = 3]) in bar"
+        )
+
+
 @pytest.mark.parametrize(
     "expect, src",
     [
@@ -234,11 +241,15 @@ def test_interfaces(src, expect):
     assert evaluate(src) == expect
 
 
-def test_two_similar_records_are_not_same_type():
-    with pytest.raises(TypeError):
-        evaluate(
-            "struct Foo [x: Int] struct Bar [x: Int] let bar: Bar = (the Foo [x = 3]) in bar"
-        )
+@pytest.mark.parametrize(
+    "expect, src",
+    [
+        (0, "module my-mod { } 0"),
+        (0, "module outer { module inner { } } 0"),
+    ],
+)
+def test_modules(src, expect):
+    assert evaluate(src) == expect
 
 
 def evaluate(src):
