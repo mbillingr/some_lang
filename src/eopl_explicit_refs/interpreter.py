@@ -143,7 +143,13 @@ def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
 
         case ast.GetVirtual(obj, table, method):
             obj_ = analyze_expr(obj, ctx, tail=False)
-            return lambda store: obj_(store).vtable_lookup(table, method)
+
+            def the_getter(store):
+                evaluated_object = obj_(store)
+                method_idx = evaluated_object.vtable_lookup(table, method)
+                return ctx.find_method(method_idx).apply([evaluated_object], store)
+
+            return the_getter
 
         case ast.Application():
             return analyze_application(exp, ctx=ctx, tail=tail)
@@ -156,9 +162,14 @@ def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
             obj_ = analyze_expr(obj, ctx, tail=False)
             return lambda store: obj_(store)[fld]
 
-        case ast.TupleExpr(slots):
+        case ast.TupleExpr(slots, vtable):
             slots_ = [analyze_expr(v, ctx, tail=False) for v in slots]
-            return lambda store: tuple(v(store) for v in slots_)
+            if vtable:
+                return lambda store: TupleObj(v(store) for v in slots_).with_vtable(
+                    vtable
+                )
+            else:
+                return lambda store: TupleObj(v(store) for v in slots_)
 
         case ast.GetSlot(obj, idx):
             obj_ = analyze_expr(obj, ctx, tail=False)
@@ -361,3 +372,12 @@ def empty_list():
 
 def list_cons(car, cdr):
     return car, cdr
+
+
+class TupleObj(tuple):
+    def with_vtable(self, vtable):
+        self._vtable = vtable
+        return self
+
+    def vtable_lookup(self, table: int, method: int):
+        return self._vtable[table, method]

@@ -1,5 +1,5 @@
 import dataclasses
-from typing import TypeAlias, Optional
+from typing import TypeAlias, Optional, Any
 
 from eopl_explicit_refs import abstract_syntax as ast
 from eopl_explicit_refs.generic_environment import Env, EmptyEnv
@@ -17,12 +17,13 @@ class Context:
         default_factory=set
     )
     types: TEnv = EmptyEnv()
-    methods: dict[tuple[Type, str], [Type, int]] = dataclasses.field(
+    methods: dict[tuple[Type, str], tuple[Type, int]] = dataclasses.field(
         default_factory=dict
     )
     virtuals: dict[tuple[t.InterfaceType, str], tuple[int, int]] = dataclasses.field(
         default_factory=dict
     )
+    vtables: dict[Type, Any] = dataclasses.field(default_factory=dict)
 
     def extend_env(self, var: str, val: Type):
         return Context(
@@ -32,6 +33,7 @@ class Context:
             types=self.types,
             methods=self.methods,
             virtuals=self.virtuals,
+            vtables=self.vtables,
         )
 
     def extend_types(self, name: str, ty: Type):
@@ -42,6 +44,7 @@ class Context:
             types=self.types.extend(name, ty),
             methods=self.methods,
             virtuals=self.virtuals,
+            vtables={ty: {}} | self.vtables,
         )
 
     def set_type(self, name: str, ty: Type):
@@ -55,6 +58,7 @@ class Context:
             types=self.types,
             methods=self.methods,
             virtuals=self.virtuals,
+            vtables=self.vtables,
         )
 
     def set_interface(self, name: str, ty: t.InterfaceType):
@@ -82,6 +86,7 @@ class Context:
             types=self.types,
             methods=self.methods,
             virtuals=self.virtuals,
+            vtables=self.vtables,
         )
 
     def declare_virtual(self, ifty: t.InterfaceType, method: str):
@@ -94,6 +99,26 @@ class Context:
             types=self.types,
             methods=self.methods,
             virtuals=self.virtuals | {(ifty, method): (table, index)},
+            vtables=self.vtables,
+        )
+
+    def add_vtable(self, ty: Type, interface: t.InterfaceType):
+        vtables = self.vtables.copy()
+        table = vtables.setdefault(ty, {})
+
+        for m in interface.methods.keys():
+            _, actual_method_idx = self.methods[(ty, m)]
+            tbl, index = self.virtuals[(interface, m)]
+            table[(tbl, index)] = actual_method_idx
+
+        return Context(
+            env=self.env,
+            interfaces=self.interfaces,
+            interface_impls=self.interface_impls,
+            types=self.types,
+            methods=self.methods,
+            virtuals=self.virtuals,
+            vtables=vtables,
         )
 
 
@@ -129,15 +154,18 @@ def check_program(pgm: ast.Program) -> ast.Program:
                 impl_on = ctx.types.lookup(impl.type_name)
 
                 if impl.interface is not None:
-                    ctx = ctx.declare_impl(
-                        impl_on, ctx.interfaces.lookup(impl.interface)
-                    )
+                    interface_obj = ctx.interfaces.lookup(impl.interface)
+                    ctx = ctx.declare_impl(impl_on, interface_obj)
 
                 impl_ctx = ctx.extend_types("Self", impl_on)
                 for method_name, func in impl.methods.items():
                     signature = eval_type(func.type, impl_ctx)
                     index = len(impl_ctx.methods)
                     impl_ctx.methods[(impl_on, method_name)] = signature, index
+
+                if impl.interface is not None:
+                    interface_obj = ctx.interfaces.lookup(impl.interface)
+                    ctx = ctx.add_vtable(impl_on, interface_obj)
 
                 methods_out = {}
                 for method_name, func in impl.methods.items():
@@ -218,14 +246,14 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
 
             slots = [check_expr(v_fields[f], t_fields[f], ctx) for f in t_fields]
 
-            return ast.TupleExpr(slots)
+            return ast.TupleExpr(slots, vtable=ctx.vtables[typ])
 
         # initializing a named empty record
         case t.NamedType(_, t.RecordType(t_fields)), ast.EmptyList():
             if t_fields:
                 raise TypeError(f"missing fields: {t_fields}")
 
-            return ast.TupleExpr([])
+            return ast.TupleExpr([], vtable=ctx.vtables[typ])
 
         case t.InterfaceType() as intf, exp:
             e_out, actual_t = infer_expr(exp, ctx)
@@ -330,7 +358,7 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
                 v_out, val_t = infer_expr(fields[name], ctx)
                 field_values.append(v_out)
                 field_types[name] = val_t
-            return ast.TupleExpr(field_values), t.RecordType(field_types)
+            return ast.TupleExpr(field_values, vtable=None), t.RecordType(field_types)
 
         case ast.GetAttribute(obj, fld):
             obj, obj_t = infer_expr(obj, ctx)

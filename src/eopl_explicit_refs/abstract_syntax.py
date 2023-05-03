@@ -164,6 +164,7 @@ class GetAttribute(Expression):
 @dataclasses.dataclass
 class TupleExpr(Expression):
     slots: list[Expression]
+    vtable: Optional[Any]
 
 
 @dataclasses.dataclass
