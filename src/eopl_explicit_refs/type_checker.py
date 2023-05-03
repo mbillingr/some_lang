@@ -12,6 +12,7 @@ TEnv: TypeAlias = Env[Type]
 
 @dataclasses.dataclass
 class Context:
+    vtm: VtableManager = VtableManager()
     env: TEnv = EmptyEnv()
     interfaces: Env[t.InterfaceType] = EmptyEnv()
     types: TEnv = EmptyEnv()
@@ -27,6 +28,7 @@ class Context:
 
     def extend_env(self, var: str, val: Type):
         return Context(
+            vtm=self.vtm,
             env=self.env.extend(var, val),
             interfaces=self.interfaces,
             types=self.types,
@@ -36,6 +38,7 @@ class Context:
 
     def extend_types(self, name: str, ty: Type):
         return Context(
+            vtm=self.vtm,
             env=self.env,
             interfaces=self.interfaces,
             types=self.types.extend(name, ty),
@@ -48,6 +51,7 @@ class Context:
 
     def extend_interfaces(self, name: str, ty: t.InterfaceType):
         return Context(
+            vtm=self.vtm,
             env=self.env,
             interfaces=self.interfaces.extend(name, ty),
             types=self.types,
@@ -76,6 +80,7 @@ class Context:
             table[(tbl, index)] = actual_method_idx
 
         return Context(
+            vtm=self.vtm,
             env=self.env,
             interfaces=self.interfaces,
             types=self.types,
@@ -86,19 +91,18 @@ class Context:
 
 def check_program(pgm: ast.Program) -> ast.Program:
     ctx = Context()
-    vtm = VtableManager()
-    mod, ctx = check_module(pgm.mod, ctx, vtm)
+    mod, ctx = check_module(pgm.mod, ctx)
     exp, _ = infer_expr(pgm.exp, ctx)
     return ast.Program(mod, exp)
 
 
-def check_module(pgm: ast.Module, ctx: Context, vtm: VtableManager) -> tuple[ast.Module, Context]:
+def check_module(pgm: ast.Module, ctx: Context) -> tuple[ast.Module, Context]:
     match pgm:
         case ast.Module(mod_name, submodules, imports, interfaces, records, impls):
             sub_out = {}
             sub_ctx = {}
             for k, v in submodules.items():
-                mod, ctx = check_module(v, ctx, vtm)
+                mod, ctx = check_module(v, ctx)
                 sub_out[k] = mod
                 sub_ctx[k] = ctx
 
@@ -108,7 +112,7 @@ def check_module(pgm: ast.Module, ctx: Context, vtm: VtableManager) -> tuple[ast
                 imports_out.append(imp_)
 
             for intf in interfaces:
-                ifty = t.InterfaceType(intf.name, None, vtm)
+                ifty = t.InterfaceType(intf.name, None, ctx.vtm)
                 ctx = ctx.extend_interfaces(intf.name, ifty)
 
             for record in records:
