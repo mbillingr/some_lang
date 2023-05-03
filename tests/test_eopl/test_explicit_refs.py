@@ -216,6 +216,18 @@ def test_records(src, expect):
             "impl Foo for Bar { method bar: Self -> Int self => 1}"
             "(the Foo (the Bar [])).bar",
         ),
+        (
+            (1, (2, ())),
+            "interface Foo { method x: Self -> Int } "
+            "struct A [] "
+            "struct B [] "
+            "impl Foo for A { method x: Self -> Int self => 1}"
+            "impl Foo for B { method x: Self -> Int self => 2}"
+            "let a: A = [] in "
+            "let b: B = [] in "
+            "let get-x: Foo -> Int = fn obj => obj.x in "
+            "    [(get-x a), (get-x b)]",
+        ),
     ],
 )
 def test_interfaces(src, expect):

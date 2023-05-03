@@ -25,6 +25,13 @@ class Context:
     )
     vtables: dict[Type, Any] = dataclasses.field(default_factory=dict)
 
+    def check(self, actual_t: Type, expected_t: Type) -> bool:
+        match actual_t, expected_t:
+            case _, t.InterfaceType():
+                return (actual_t, expected_t) in self.interface_impls
+            case _, _:
+                return actual_t == expected_t
+
     def extend_env(self, var: str, val: Type):
         return Context(
             env=self.env.extend(var, val),
@@ -193,7 +200,7 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
 
         case _, ast.Identifier(name):
             actual_t = ctx.env.lookup(name)
-            if actual_t != typ:
+            if not ctx.check(actual_t, typ):
                 raise TypeError(f"Expected a {typ} but {name} is a {actual_t}")
             return exp
 
