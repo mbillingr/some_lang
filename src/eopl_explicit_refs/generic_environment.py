@@ -13,12 +13,19 @@ class Env(abc.ABC, Generic[T]):
     def lookup(self, var: str) -> T:
         pass
 
+    @abc.abstractmethod
+    def set(self, var: str, val: T):
+        pass
+
 
 class EmptyEnv(Env[T]):
     def __init__(self):
         pass
 
     def lookup(self, var: str) -> T:
+        raise LookupError(var)
+
+    def set(self, var: str, val: T):
         raise LookupError(var)
 
 
@@ -32,3 +39,9 @@ class Entry(Env[T]):
         if self.var == var:
             return self.val
         return self.nxt.lookup(var)
+
+    def set(self, var: str, val: T):
+        if self.var == var:
+            self.val = val
+        else:
+            self.nxt.set(var, val)

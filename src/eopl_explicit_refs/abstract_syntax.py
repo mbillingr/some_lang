@@ -47,6 +47,7 @@ class RecordDecl(AstNode):
 
 @dataclasses.dataclass
 class ImplBlock(AstNode):
+    interface: Optional[Symbol]
     type_name: Symbol
     methods: dict[Symbol, TypeAnnotation]
 
@@ -174,6 +175,13 @@ class GetSlot(Expression):
 @dataclasses.dataclass
 class GetMethod(Expression):
     index: int
+
+
+@dataclasses.dataclass
+class GetVirtual(Expression):
+    obj: Expression
+    table: int
+    method: int
 
 
 @dataclasses.dataclass

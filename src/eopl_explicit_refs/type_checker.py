@@ -12,30 +12,89 @@ TEnv: TypeAlias = Env[Type]
 @dataclasses.dataclass
 class Context:
     env: TEnv = EmptyEnv()
+    interfaces: Env[t.InterfaceType] = EmptyEnv()
+    interface_impls: set[tuple[Type, t.InterfaceType]] = dataclasses.field(
+        default_factory=set
+    )
     types: TEnv = EmptyEnv()
     methods: dict[tuple[Type, str], [Type, int]] = dataclasses.field(
+        default_factory=dict
+    )
+    virtuals: dict[tuple[t.InterfaceType, str], tuple[int, int]] = dataclasses.field(
         default_factory=dict
     )
 
     def extend_env(self, var: str, val: Type):
         return Context(
             env=self.env.extend(var, val),
+            interfaces=self.interfaces,
+            interface_impls=self.interface_impls,
             types=self.types,
             methods=self.methods,
+            virtuals=self.virtuals,
         )
 
     def extend_types(self, name: str, ty: Type):
         return Context(
             env=self.env,
+            interfaces=self.interfaces,
+            interface_impls=self.interface_impls,
             types=self.types.extend(name, ty),
             methods=self.methods,
+            virtuals=self.virtuals,
         )
 
+    def set_type(self, name: str, ty: Type):
+        self.types.set(name, ty)
+
+    def extend_interfaces(self, name: str, ty: t.InterfaceType):
+        return Context(
+            env=self.env,
+            interfaces=self.interfaces.extend(name, ty),
+            interface_impls=self.interface_impls,
+            types=self.types,
+            methods=self.methods,
+            virtuals=self.virtuals,
+        )
+
+    def set_interface(self, name: str, ty: t.InterfaceType):
+        self.interfaces.set(name, ty)
+
     def find_method(self, ty: Type, name: str) -> Optional[tuple[Type, int]]:
-        try:
-            return self.methods[(ty, name)]
-        except KeyError:
-            return None
+        match ty:
+            case t.InterfaceType(_, methods):
+                signature = methods[name]
+                return signature, self.virtuals[(ty, name)]
+            case _:
+                try:
+                    return self.methods[(ty, name)]
+                except KeyError:
+                    return None
+
+    def implements(self, ty: Type, intf: t.InterfaceType) -> bool:
+        return (ty, intf) in self.interface_impls
+
+    def declare_impl(self, ty: Type, intf: t.InterfaceType):
+        return Context(
+            env=self.env,
+            interfaces=self.interfaces,
+            interface_impls=self.interface_impls | {(ty, intf)},
+            types=self.types,
+            methods=self.methods,
+            virtuals=self.virtuals,
+        )
+
+    def declare_virtual(self, ifty: t.InterfaceType, method: str):
+        table = 0  # we only use a single vtable for now...
+        index = len(self.virtuals)
+        return Context(
+            env=self.env,
+            interfaces=self.interfaces,
+            interface_impls=self.interface_impls,
+            types=self.types,
+            methods=self.methods,
+            virtuals=self.virtuals | {(ifty, method): (table, index)},
+        )
 
 
 def check_program(pgm: ast.Program) -> ast.Program:
@@ -43,17 +102,37 @@ def check_program(pgm: ast.Program) -> ast.Program:
         case ast.Program(exp, records, impls, interfaces):
             ctx = Context()
 
+            for intf in interfaces:
+                ifty = t.InterfaceType(intf.name, None)
+                ctx = ctx.extend_interfaces(intf.name, ifty)
+
+                for method in intf.methods.keys():
+                    ctx = ctx.declare_virtual(ifty, method)
+
             for record in records:
-                ctx = ctx.extend_types(
-                    record.name,
-                    t.NamedType(
-                        record.name, eval_type(ast.RecordType(record.fields), ctx)
-                    ),
+                ctx = ctx.extend_types(record.name, t.NamedType(record.name, None))
+
+            for intf in interfaces:
+                methods = {}
+                intf_ctx = ctx.extend_types("Self", t.NamedType("Self", None))
+                for mtn, mts in intf.methods.items():
+                    methods[mtn] = eval_type(mts, intf_ctx)
+                ctx.interfaces.lookup(intf.name).set_methods(methods)
+
+            for record in records:
+                ctx.types.lookup(record.name).set_type(
+                    eval_type(ast.RecordType(record.fields), ctx)
                 )
 
             impls_out = []
             for impl in impls:
                 impl_on = ctx.types.lookup(impl.type_name)
+
+                if impl.interface is not None:
+                    ctx = ctx.declare_impl(
+                        impl_on, ctx.interfaces.lookup(impl.interface)
+                    )
+
                 impl_ctx = ctx.extend_types("Self", impl_on)
                 for method_name, func in impl.methods.items():
                     signature = eval_type(func.type, impl_ctx)
@@ -67,7 +146,7 @@ def check_program(pgm: ast.Program) -> ast.Program:
                     body = check_expr(func.expr, signature, ctx)
                     methods_out[method_name] = body
 
-                impls_out.append(ast.ImplBlock(impl_on, methods_out))
+                impls_out.append(ast.ImplBlock(impl.interface, impl_on, methods_out))
 
             prog, _ = infer_expr(exp, ctx)
             return ast.Program(prog, records, impls_out, interfaces)
@@ -148,7 +227,13 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
 
             return ast.TupleExpr([])
 
-        case _:
+        case t.InterfaceType() as intf, exp:
+            e_out, actual_t = infer_expr(exp, ctx)
+            if not ctx.implements(actual_t, intf):
+                raise TypeError(f"{actual_t} dos not implement {intf}")
+            return e_out
+
+        case _, _:
             e_out, actual_t = infer_expr(exp, ctx)
             if actual_t != typ:
                 raise TypeError(actual_t, typ)
@@ -248,17 +333,19 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
             return ast.TupleExpr(field_values), t.RecordType(field_types)
 
         case ast.GetAttribute(obj, fld):
-            obj, rec_t = infer_expr(obj, ctx)
+            obj, obj_t = infer_expr(obj, ctx)
 
-            method = ctx.find_method(rec_t, fld)
-            if method:
-                signature, index = method
-                result = ast.Application(ast.GetMethod(index), obj)
-                return result, signature.ret
+            match ctx.find_method(obj_t, fld):
+                case (signature, (table, index)):
+                    result = ast.GetVirtual(obj, table, index)
+                    return result, signature.ret
+                case (signature, index):
+                    result = ast.Application(ast.GetMethod(index), obj)
+                    return result, signature.ret
 
-            rec_rt = resolve_type(rec_t)
+            rec_rt = resolve_type(obj_t)
             if not isinstance(rec_rt, t.RecordType):
-                raise TypeError(f"Expected record type, got {rec_t}")
+                raise TypeError(f"Expected record type, got {obj_t}")
             if fld not in rec_rt.fields:
                 raise TypeError(f"Record has no attribute {fld}")
             idx = list(rec_rt.fields.keys()).index(fld)
@@ -333,7 +420,10 @@ def check_pattern(pat: ast.Pattern, typ: Type, env: TEnv) -> dict[str, Type]:
 def eval_type(tx: ast.Type, ctx: Context) -> Type:
     match tx:
         case ast.TypeRef(name):
-            return ctx.types.lookup(name)
+            try:
+                return ctx.types.lookup(name)
+            except LookupError:
+                return ctx.interfaces.lookup(name)
         case ast.NullType:
             return t.NullType()
         case ast.BoolType:

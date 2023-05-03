@@ -527,7 +527,7 @@ def parse_impl(ts) -> ast.ImplBlock:
                 )
             case other:
                 raise UnexpectedToken(other)
-    return ast.ImplBlock(typename, methods)
+    return ast.ImplBlock(interface, typename, methods)
 
 
 def parse_symbol(ts) -> ast.Symbol:

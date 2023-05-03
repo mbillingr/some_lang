@@ -141,6 +141,10 @@ def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
             method = ctx.find_method(index)
             return lambda _: method
 
+        case ast.GetVirtual(obj, table, method):
+            obj_ = analyze_expr(obj, ctx, tail=False)
+            return lambda store: obj_(store).vtable_lookup(table, method)
+
         case ast.Application():
             return analyze_application(exp, ctx=ctx, tail=tail)
 
@@ -164,7 +168,9 @@ def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
             raise NotImplementedError(exp)
 
 
-def analyze_matcharms(arms: list[ast.MatchArm], ctx: Context) -> list[tuple[Matcher, Callable]]:
+def analyze_matcharms(
+    arms: list[ast.MatchArm], ctx: Context
+) -> list[tuple[Matcher, Callable]]:
     match_bodies = []
     for arm in arms:
         matcher = analyze_patterns(arm.pats)

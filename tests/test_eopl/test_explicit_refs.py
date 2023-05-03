@@ -209,6 +209,13 @@ def test_records(src, expect):
             "impl Foo for Bar { method bar: Self -> Int self => 1}"
             "(the Bar []).bar",
         ),
+        (
+            1,
+            "interface Foo { method bar: Self -> Int } "
+            "struct Bar [] "
+            "impl Foo for Bar { method bar: Self -> Int self => 1}"
+            "(the Foo (the Bar [])).bar",
+        ),
     ],
 )
 def test_interfaces(src, expect):

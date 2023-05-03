@@ -16,6 +16,10 @@ class NamedType(Type):
         self.name = name
         self.type = ty
 
+    def set_type(self, ty: Type):
+        assert self.type is None
+        self.type = ty
+
     def __repr__(self):
         return self.name
 
@@ -78,3 +82,24 @@ class FuncType(Type):
 
     def __str__(self):
         return f"{self.arg}->{self.ret}"
+
+
+class InterfaceType(Type):
+    __match_args__ = ("name", "methods")
+
+    def __init__(self, name: str, methods: dict[str, FuncType]):
+        self.name = name
+        self.methods = methods
+
+    def __str__(self):
+        return f"{self.name}"
+
+    def set_methods(self, methods):
+        assert self.methods is None
+        self.methods = methods
+
+    def __eq__(self, other):
+        return self is other
+
+    def __hash__(self):
+        return id(self)
