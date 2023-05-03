@@ -34,6 +34,8 @@ class Program(AstNode):
 @dataclasses.dataclass
 class Module(AstNode):
     name: Symbol
+    submodules: dict[Symbol, Module]
+    imports: list[Import]
     interfaces: list[Interface]
     records: list[RecordDecl]
     impls: list[ImplBlock]
@@ -176,7 +178,7 @@ class GetAttribute(Expression):
 @dataclasses.dataclass
 class TupleExpr(Expression):
     slots: list[Expression]
-    vtable: Optional[Any]
+    vtables: Optional[Any]
 
 
 @dataclasses.dataclass

@@ -3,6 +3,7 @@ import abc
 import dataclasses
 
 from eopl_explicit_refs.abstract_syntax import Symbol
+from eopl_explicit_refs.vtable_manager import VtableManager, VtableIndex
 
 
 class Type(abc.ABC):
@@ -95,16 +96,24 @@ class FuncType(Type):
 class InterfaceType(Type):
     __match_args__ = ("name", "methods")
 
-    def __init__(self, name: str, methods: dict[str, FuncType]):
+    def __init__(self, name: str, methods: dict[str, FuncType], vtm: VtableManager):
         self.name = name
-        self.methods = methods
-
-    def __str__(self):
-        return f"{self.name}"
+        self.methods = None
+        self.vtm = vtm
+        self.virtuals: dict[str, VtableIndex] = {}
+        if methods:
+            self.set_methods(methods)
 
     def set_methods(self, methods):
         assert self.methods is None
         self.methods = methods
+        self.virtuals = self.vtm.assign_virtuals(methods.keys())
+
+    def as_virtual(self, method: str):
+        return self.virtuals[method]
+
+    def __str__(self):
+        return f"{self.name}"
 
     def __eq__(self, other):
         return self is other

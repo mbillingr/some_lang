@@ -35,7 +35,7 @@ def analyze_program(pgm: ast.Program) -> Any:
 
 def analyze_module(mod: ast.Module) -> Context:
     match mod:
-        case ast.Module(_, interfaces, records, impls):
+        case ast.Module(_, submodules, imports, interfaces, records, impls):
             ctx = Context()
 
             for impl in impls:
@@ -167,11 +167,11 @@ def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
             obj_ = analyze_expr(obj, ctx, tail=False)
             return lambda store: obj_(store)[fld]
 
-        case ast.TupleExpr(slots, vtable):
+        case ast.TupleExpr(slots, vtables):
             slots_ = [analyze_expr(v, ctx, tail=False) for v in slots]
-            if vtable:
-                return lambda store: TupleObj(v(store) for v in slots_).with_vtable(
-                    vtable
+            if vtables:
+                return lambda store: TupleObj(v(store) for v in slots_).with_vtables(
+                    vtables
                 )
             else:
                 return lambda store: TupleObj(v(store) for v in slots_)
@@ -380,9 +380,9 @@ def list_cons(car, cdr):
 
 
 class TupleObj(tuple):
-    def with_vtable(self, vtable):
-        self._vtable = vtable
+    def with_vtables(self, vtables):
+        self._vtables = vtables
         return self
 
     def vtable_lookup(self, table: int, method: int):
-        return self._vtable[table, method]
+        return self._vtables[table, method]

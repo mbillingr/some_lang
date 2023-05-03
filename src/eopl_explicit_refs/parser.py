@@ -90,7 +90,7 @@ def parse_module_body(ts: TokenStream, name: str) -> ast.Module:
             case "interface", _, _:
                 interfaces.append(parse_interface(ts))
             case _:
-                return ast.Module(name, interfaces, records, impls)
+                return ast.Module(name, submodules, imports, interfaces, records, impls)
 
 
 def parse_import(ts) -> ast.Import:
