@@ -174,19 +174,23 @@ def test_type_annotations(src, expect):
         # methods
         (
             0,
-            "struct Foo [] impl Foo { method bar: Foo -> () -> Int self () => 0 }" "(the Foo []).bar ()",
+            "struct Foo [] impl Foo { method bar: Foo -> () -> Int self () => 0 }"
+            "(the Foo []).bar ()",
         ),
         (
             1,
-            "struct Foo [] impl Foo { method bar: Foo -> Int self => 1 }" "(the Foo []).bar",
+            "struct Foo [] impl Foo { method bar: Foo -> Int self => 1 }"
+            "(the Foo []).bar",
         ),
         (
             1,
-            "struct Foo [] impl Foo { method bar: Self -> Int self => 1 }" "(the Foo []).bar",
+            "struct Foo [] impl Foo { method bar: Self -> Int self => 1 }"
+            "(the Foo []).bar",
         ),
         (
             2,
-            "struct Foo [x:Int] impl Foo { method get-x: Foo -> Int self => self.x }" "(the Foo [x=2]).get-x",
+            "struct Foo [x:Int] impl Foo { method get-x: Foo -> Int self => self.x }"
+            "(the Foo [x=2]).get-x",
         ),
     ],
 )
@@ -196,7 +200,9 @@ def test_records(src, expect):
 
 def test_two_similar_records_are_not_same_type():
     with pytest.raises(TypeError):
-        evaluate("struct Foo [x: Int] struct Bar [x: Int] let bar: Bar = (the Foo [x = 3]) in bar")
+        evaluate(
+            "struct Foo [x: Int] struct Bar [x: Int] let bar: Bar = (the Foo [x = 3]) in bar"
+        )
 
 
 @pytest.mark.parametrize(
@@ -233,6 +239,16 @@ def test_two_similar_records_are_not_same_type():
 )
 def test_interfaces(src, expect):
     assert evaluate(src) == expect
+
+
+def test_impl_of_wrong_type():
+    with pytest.raises(TypeError):
+        evaluate(
+            "interface Foo { method bla: Self -> Bool } "
+            "struct Bar [] "
+            "impl Foo for Bar { method bla: Self -> Int self => 0 } "
+            "0"
+        )
 
 
 @pytest.mark.parametrize(

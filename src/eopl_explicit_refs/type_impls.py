@@ -33,7 +33,9 @@ class NamedType(Type):
         return self.name
 
     def __eq__(self, other):
-        return self is other
+        if self is other:
+            return True
+        return NotImplemented
 
     def __hash__(self):
         return id(self)
@@ -116,7 +118,7 @@ class InterfaceType(Type):
         return f"{self.name}"
 
     def __eq__(self, other):
-        return self is other
+        return self is other or other.implements(self)
 
     def __hash__(self):
         return id(self)

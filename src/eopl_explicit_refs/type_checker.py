@@ -16,15 +16,13 @@ class Context:
     env: TEnv = EmptyEnv()
     interfaces: Env[t.InterfaceType] = EmptyEnv()
     types: TEnv = EmptyEnv()
-    methods: dict[tuple[Type, str], tuple[Type, int]] = dataclasses.field(default_factory=dict)
+    methods: dict[tuple[Type, str], tuple[Type, int]] = dataclasses.field(
+        default_factory=dict
+    )
     vtables: dict[Type, Any] = dataclasses.field(default_factory=dict)
 
     def check(self, actual_t: Type, expected_t: Type) -> bool:
-        match actual_t, expected_t:
-            case _, t.InterfaceType():
-                return actual_t.implements(expected_t)
-            case _, _:
-                return actual_t == expected_t
+        return actual_t == expected_t
 
     def extend_env(self, var: str, val: Type):
         return Context(
@@ -119,32 +117,41 @@ def check_module(pgm: ast.Module, ctx: Context) -> tuple[ast.Module, Context]:
                 ctx = ctx.extend_types(record.name, t.NamedType(record.name, None))
 
             for intf in interfaces:
+                interface_type = ctx.interfaces.lookup(intf.name)
                 methods = {}
-                intf_ctx = ctx.extend_types("Self", t.NamedType("Self", None))
+                intf_ctx = ctx.extend_types("Self", interface_type)
                 for mtn, mts in intf.methods.items():
                     methods[mtn] = eval_type(mts, intf_ctx)
-                ctx.interfaces.lookup(intf.name).set_methods(methods)
+                interface_type.set_methods(methods)
 
             for record in records:
-                ctx.types.lookup(record.name).set_type(eval_type(ast.RecordType(record.fields), ctx))
+                ctx.types.lookup(record.name).set_type(
+                    eval_type(ast.RecordType(record.fields), ctx)
+                )
 
             impls_out = []
             for impl in impls:
                 impl_on = ctx.types.lookup(impl.type_name)
 
-                if impl.interface is not None:
-                    interface_obj = ctx.interfaces.lookup(impl.interface)
-                    impl_on.declare_impl(interface_obj)
+                interface_type = impl.interface and ctx.interfaces.lookup(
+                    impl.interface
+                )
+
+                if interface_type is not None:
+                    impl_on.declare_impl(interface_type)
 
                 impl_ctx = ctx.extend_types("Self", impl_on)
                 for method_name, func in impl.methods.items():
                     signature = eval_type(func.type, impl_ctx)
+                    if interface_type is not None:
+                        expected_signature = interface_type.methods[method_name]
+                        if not ctx.check(signature, expected_signature):
+                            raise TypeError(signature, expected_signature)
                     index = len(impl_ctx.methods)
                     impl_ctx.methods[(impl_on, method_name)] = signature, index
 
-                if impl.interface is not None:
-                    interface_obj = ctx.interfaces.lookup(impl.interface)
-                    ctx = ctx.add_vtable(impl_on, interface_obj)
+                if interface_type is not None:
+                    ctx = ctx.add_vtable(impl_on, interface_type)
 
                 methods_out = {}
                 for method_name, func in impl.methods.items():
@@ -155,7 +162,12 @@ def check_module(pgm: ast.Module, ctx: Context) -> tuple[ast.Module, Context]:
 
                 impls_out.append(ast.ImplBlock(impl.interface, impl_on, methods_out))
 
-            return ast.Module(mod_name, sub_out, imports_out, interfaces, records, impls_out), ctx
+            return (
+                ast.Module(
+                    mod_name, sub_out, imports_out, interfaces, records, impls_out
+                ),
+                ctx,
+            )
 
         case other:
             raise NotImplementedError(other)
@@ -216,7 +228,12 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
             return ast.BinOp(lhs, rhs, op)
 
         case t.FuncType(_, _), ast.Function(arms):
-            return ast.Function([ast.MatchArm(arm.pats, check_matcharm(arm.pats, arm.body, typ, ctx)) for arm in arms])
+            return ast.Function(
+                [
+                    ast.MatchArm(arm.pats, check_matcharm(arm.pats, arm.body, typ, ctx))
+                    for arm in arms
+                ]
+            )
 
         case _, ast.Application(fun, arg):
             fun, fun_t = infer_expr(fun, ctx)
@@ -240,7 +257,9 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
             extra_fields = v_fields.keys() - t_fields.keys()
             missing_fields = t_fields.keys() - v_fields.keys()
             if extra_fields or missing_fields:
-                raise TypeError(f"extra fields: {extra_fields}, missing fields: {missing_fields}")
+                raise TypeError(
+                    f"extra fields: {extra_fields}, missing fields: {missing_fields}"
+                )
 
             slots = [check_expr(v_fields[f], t_fields[f], ctx) for f in t_fields]
 
@@ -298,7 +317,9 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
             return ast.BinOp(lhs, rhs, op), t.IntType
 
         case ast.Function(patterns):
-            raise InferenceError(f"can't infer function signature for {exp}. Please provide a type hint.")
+            raise InferenceError(
+                f"can't infer function signature for {exp}. Please provide a type hint."
+            )
 
         case ast.Application(fun, arg):
             fun, fun_t = infer_expr(fun, ctx)
@@ -411,7 +432,9 @@ def check_stmt(stmt: ast.Statement, env: TEnv) -> ast.Statement:
             raise NotImplementedError(stmt)
 
 
-def check_matcharm(patterns: list[ast.Pattern], body: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
+def check_matcharm(
+    patterns: list[ast.Pattern], body: ast.Expression, typ: Type, ctx: Context
+) -> ast.Expression:
     match typ, patterns:
         case t.FuncType(arg_t, res_t), [p0, *p_rest]:
             bindings = check_pattern(p0, arg_t, ctx)
