@@ -251,6 +251,26 @@ def test_impl_of_wrong_type():
         )
 
 
+def test_missing_method():
+    with pytest.raises(TypeError):
+        evaluate(
+            "interface Foo { method bla: Self -> Self } "
+            "struct Bar [] "
+            "impl Foo for Bar { } "
+            "0"
+        )
+
+
+def test_extra_method():
+    with pytest.raises(TypeError):
+        evaluate(
+            "interface Foo { } "
+            "struct Bar [] "
+            "impl Foo for Bar { method bla: Self -> Self self => self } "
+            "0"
+        )
+
+
 @pytest.mark.parametrize(
     "expect, src",
     [

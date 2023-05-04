@@ -138,6 +138,18 @@ def check_module(pgm: ast.Module, ctx: Context) -> tuple[ast.Module, Context]:
                 )
 
                 if interface_type is not None:
+                    missing_methods = set(interface_type.methods) - set(impl.methods)
+                    extra_methods = set(impl.methods) - set(interface_type.methods)
+                    if missing_methods or extra_methods:
+                        text = []
+                        if missing_methods:
+                            text.append(f"is missing {missing_methods}")
+                        if extra_methods:
+                            text.append(f"includes unexpected {extra_methods}")
+                        raise TypeError(
+                            f"Implementation of {impl.interface} on {impl.type_name} {'and'.join(text)}"
+                        )
+
                     impl_on.declare_impl(interface_type)
 
                 impl_ctx = ctx.extend_types("Self", impl_on)
