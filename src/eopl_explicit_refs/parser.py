@@ -238,30 +238,6 @@ def parse_block_expression(ts, skip_opening: bool):
     return spanned(expr_span.merge(span), expr)
 
 
-def parse_block_statement(ts, skip_opening: bool):
-    if not skip_opening:
-        expect_token(ts, "{")
-
-    stmts = []
-    while True:
-        stmts.append(parse_statement(ts))
-        match ts.get_next():
-            case "}", _, _:
-                break
-            case ";", _, _:
-                pass
-            case tok:
-                raise UnexpectedToken(tok)
-    compound_statement = stmts.pop()
-    while stmts:
-        s = stmts.pop()
-        compound_statement = spanned(
-            get_span(s).merge(get_span(compound_statement)),
-            ast.BlockStatement(s, compound_statement),
-        )
-    return compound_statement
-
-
 def parse_list_expression(ts, skip_opening: bool):
     span0 = None
     if not skip_opening:

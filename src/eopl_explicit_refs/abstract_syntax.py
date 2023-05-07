@@ -17,10 +17,6 @@ class Expression(AstNode):
     pass
 
 
-class Statement(AstNode):
-    pass
-
-
 class Pattern(AstNode):
     pass
 
@@ -71,27 +67,9 @@ class Symbol(str, AstNode):
 
 
 @dataclasses.dataclass
-class ExprStmt(Statement):
-    expr: Expression
-
-
-@dataclasses.dataclass
 class Assignment(Expression):
     lhs: Expression
     rhs: Expression
-
-
-@dataclasses.dataclass
-class IfStatement(Statement):
-    condition: Expression
-    consequence: Statement
-    alternative: Statement
-
-
-@dataclasses.dataclass
-class BlockStatement(Statement):
-    fst: Statement
-    snd: Statement
 
 
 @dataclasses.dataclass

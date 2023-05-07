@@ -410,22 +410,6 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]
             raise NotImplementedError(exp)
 
 
-def check_stmt(stmt: ast.Statement, env: TEnv) -> ast.Statement:
-    match stmt:
-        case ast.ExprStmt(expr):
-            expr, _ = infer_expr(expr, env)
-            return ast.ExprStmt(expr)
-
-        case ast.IfStatement(c, a, b):
-            c_out = check_expr(c, t.BoolType(), env)
-            a_out = check_stmt(a, env)
-            b_out = check_stmt(b, env)
-            return ast.IfStatement(c_out, a_out, b_out)
-
-        case _:
-            raise NotImplementedError(stmt)
-
-
 def check_matcharm(patterns: list[ast.Pattern], body: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
     match typ, patterns:
         case t.FuncType(arg_t, res_t), [p0, *p_rest]:

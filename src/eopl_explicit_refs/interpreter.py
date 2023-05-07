@@ -70,24 +70,6 @@ def analyze_import(imp: ast.Import, sub_mods: dict[ast.Symbol, Module], ctx: Con
     return ctx
 
 
-def analyze_stmt(stmt: ast.Statement, ctx: Context) -> Callable:
-    match stmt:
-        case ast.ExprStmt(expr):
-            # Let's assume expressions have no side effects, so we don't execute them,
-            # but we still check if they are valid
-            _ = analyze_expr(expr, ctx, tail=False)
-            return lambda _: None
-
-        case ast.IfStatement(cond, cons, alt):
-            cond_ = analyze_expr(cond, ctx, tail=False)
-            cons_ = analyze_stmt(cons, ctx)
-            alt_ = analyze_stmt(alt, ctx)
-            return lambda store: cons_(store) if cond_(store) else alt_(store)
-
-        case _:
-            raise NotImplementedError(stmt)
-
-
 def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
     match exp:
         case ast.Literal(val):
