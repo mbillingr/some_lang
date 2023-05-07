@@ -99,6 +99,7 @@ def parse_import(ts) -> ast.Import:
     what = parse_imported(ts)
     return ast.Import(module, what)
 
+
 def parse_imported(ts) -> list[ast.Symbol | ast.Import]:
     match ts.peek():
         case "[", _, _:
@@ -118,32 +119,8 @@ def parse_subimport(ts) -> ast.Symbol | ast.Import:
         return ast.Import(module_or_symbol, what)
     return module_or_symbol
 
-def parse_statement(ts: TokenStream) -> ast.Statement:
-    match ts.peek():
-        case "if", _, span:
-            ts.get_next()
-            cond = parse_expr(ts)
-            expect_token(ts, "then")
-            lhs = parse_statement(ts)
-            if try_token(ts, "else"):
-                rhs = parse_statement(ts)
-            else:
-                rhs = ast.NopStatement()
-            return spanned(span.merge(get_span(rhs)), ast.IfStatement(cond, lhs, rhs))
-        case "set", _, span:
-            ts.get_next()
-            lhs = parse_expr(ts)
-            expect_token(ts, "=")
-            rhs = parse_expr(ts)
-            return spanned(span.merge(get_span(rhs)), ast.Assignment(lhs, rhs))
-        case _:
-            expr = parse_expr(ts)
-            return spanned(get_span(expr), ast.ExprStmt(expr))
 
-
-def parse_expr(
-    ts: TokenStream, min_bp: int = 0, invisible_application=True
-) -> ast.Expression:
+def parse_expr(ts: TokenStream, min_bp: int = 0, invisible_application=True) -> ast.Expression:
     match ts.peek():
         case op, _, _ if op in prefix_binding_power:
             _, rbp = prefix_binding_power[op]
@@ -173,9 +150,7 @@ def parse_expr(
                 if lbp < min_bp:
                     break
                 arg = parse_expr(ts, rbp)
-                lhs = spanned(
-                    get_span(lhs).merge(get_span(arg)), ast.Application(lhs, arg)
-                )
+                lhs = spanned(get_span(lhs).merge(get_span(arg)), ast.Application(lhs, arg))
             case _:
                 break
 
@@ -229,9 +204,12 @@ def parse_atom(ts: TokenStream):
             val = parse_expr(ts)
             expect_token(ts, "in")
             body = parse_expr(ts)
-            return spanned(
-                span.merge(get_span(body)), ast.Let(var, val, body, var_t=typ)
-            )
+            return spanned(span.merge(get_span(body)), ast.Let(var, val, body, var_t=typ))
+        case "set", _, span:
+            lhs = parse_expr(ts)
+            expect_token(ts, "=")
+            rhs = parse_expr(ts)
+            return spanned(span.merge(get_span(rhs)), ast.Assignment(lhs, rhs))
         case token:
             raise UnexpectedToken(token)
 
@@ -242,7 +220,7 @@ def parse_block_expression(ts, skip_opening: bool):
 
     stmts = []
     while True:
-        stmts.append(parse_statement(ts))
+        stmts.append(parse_expr(ts))
         match ts.get_next():
             case "}", _, span:
                 break
@@ -250,10 +228,9 @@ def parse_block_expression(ts, skip_opening: bool):
                 pass
             case tok:
                 raise UnexpectedToken(tok)
-    # last statement is expected to be an expression
-    last = stmts.pop()
-    expr = ast.stmt_to_expr(last)
-    expr_span = get_span(last)
+
+    expr = stmts.pop()
+    expr_span = get_span(expr)
     while stmts:
         s = stmts.pop()
         expr_span = get_span(s).merge(expr_span)
@@ -300,9 +277,7 @@ def parse_list_expression(ts, skip_opening: bool):
             # comma between two elements would be correctly parsed as application.
             try_token(ts, ",")
             rest = parse_list_expression(ts, skip_opening=True)
-            result = spanned(
-                get_span(first).merge(get_span(rest)), ast.BinOp(first, rest, "::")
-            )
+            result = spanned(get_span(first).merge(get_span(rest)), ast.BinOp(first, rest, "::"))
 
     if span0 is not None:
         return spanned(span0.merge(get_span(result)), result)
@@ -361,8 +336,10 @@ def parse_prefix_operator(rbp, ts):
             cond = parse_expr(ts)
             expect_token(ts, "then")
             lhs = parse_expr(ts)
-            expect_token(ts, "else")
-            rhs = parse_expr(ts, rbp)
+            if try_token(ts, "else"):
+                rhs = parse_expr(ts, rbp)
+            else:
+                rhs = ast.Literal(None)
             return spanned(span.merge(get_span(rhs)), ast.Conditional(cond, lhs, rhs))
         case token:
             raise UnexpectedToken(token)
@@ -418,9 +395,7 @@ def parse_match_arm(ts) -> ast.MatchArm:
         if try_token(ts, "=>"):
             break
     body = parse_expr(ts)
-    return spanned(
-        get_span(patterns[0]).merge(get_span(body)), ast.MatchArm(patterns, body)
-    )
+    return spanned(get_span(patterns[0]).merge(get_span(body)), ast.MatchArm(patterns, body))
 
 
 def parse_pattern(ts) -> ast.Pattern:
@@ -429,9 +404,7 @@ def parse_pattern(ts) -> ast.Pattern:
         case "::", _, span:
             ts.get_next()
             rhs = parse_pattern(ts)
-            return spanned(
-                get_span(lhs).merge(get_span(rhs)), ast.ListConsPattern(lhs, rhs)
-            )
+            return spanned(get_span(lhs).merge(get_span(rhs)), ast.ListConsPattern(lhs, rhs))
         case _:
             return lhs
 
@@ -512,9 +485,7 @@ def parse_interface(ts) -> ast.Interface:
                 methodname = parse_symbol(ts)
                 expect_token(ts, ":")
                 signature = parse_type(ts)
-                methods[methodname] = spanned(
-                    span.merge(get_span(signature)), signature
-                )
+                methods[methodname] = spanned(span.merge(get_span(signature)), signature)
             case other:
                 raise UnexpectedToken(other)
     return ast.Interface(name, methods)
@@ -566,12 +537,8 @@ def parse_impl(ts) -> ast.ImplBlock:
                 expect_token(ts, ":")
                 signature = parse_type(ts)
                 arms = parse_match_arms(ts)
-                method = spanned(
-                    get_span(methodname).merge(get_span(arms[-1])), ast.Function(arms)
-                )
-                methods[methodname] = spanned(
-                    span.merge(get_span(method)), ast.TypeAnnotation(signature, method)
-                )
+                method = spanned(get_span(methodname).merge(get_span(arms[-1])), ast.Function(arms))
+                methods[methodname] = spanned(span.merge(get_span(method)), ast.TypeAnnotation(signature, method))
             case other:
                 raise UnexpectedToken(other)
     return ast.ImplBlock(interface, typename, methods)

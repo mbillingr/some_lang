@@ -42,6 +42,12 @@ class NamedType(Type):
 
 
 @dataclasses.dataclass(frozen=True)
+class AnyType(Type):
+    def __str__(self):
+        return "_"
+
+
+@dataclasses.dataclass(frozen=True)
 class NullType(Type):
     def __str__(self):
         return "()"

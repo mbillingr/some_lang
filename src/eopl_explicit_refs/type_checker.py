@@ -16,9 +16,7 @@ class Context:
     env: TEnv = EmptyEnv()
     interfaces: Env[t.InterfaceType] = EmptyEnv()
     types: TEnv = EmptyEnv()
-    methods: dict[tuple[Type, str], tuple[Type, int]] = dataclasses.field(
-        default_factory=dict
-    )
+    methods: dict[tuple[Type, str], tuple[Type, int]] = dataclasses.field(default_factory=dict)
     vtables: dict[Type, Any] = dataclasses.field(default_factory=dict)
 
     def check(self, actual_t: Type, expected_t: Type) -> bool:
@@ -125,17 +123,13 @@ def check_module(pgm: ast.Module, ctx: Context) -> tuple[ast.Module, Context]:
                 interface_type.set_methods(methods)
 
             for record in records:
-                ctx.types.lookup(record.name).set_type(
-                    eval_type(ast.RecordType(record.fields), ctx)
-                )
+                ctx.types.lookup(record.name).set_type(eval_type(ast.RecordType(record.fields), ctx))
 
             impls_out = []
             for impl in impls:
                 impl_on = ctx.types.lookup(impl.type_name)
 
-                interface_type = impl.interface and ctx.interfaces.lookup(
-                    impl.interface
-                )
+                interface_type = impl.interface and ctx.interfaces.lookup(impl.interface)
 
                 if interface_type is not None:
                     missing_methods = set(interface_type.methods) - set(impl.methods)
@@ -146,9 +140,7 @@ def check_module(pgm: ast.Module, ctx: Context) -> tuple[ast.Module, Context]:
                             text.append(f"is missing {missing_methods}")
                         if extra_methods:
                             text.append(f"includes unexpected {extra_methods}")
-                        raise TypeError(
-                            f"Implementation of {impl.interface} on {impl.type_name} {'and'.join(text)}"
-                        )
+                        raise TypeError(f"Implementation of {impl.interface} on {impl.type_name} {'and'.join(text)}")
 
                     impl_on.declare_impl(interface_type)
 
@@ -175,9 +167,7 @@ def check_module(pgm: ast.Module, ctx: Context) -> tuple[ast.Module, Context]:
                 impls_out.append(ast.ImplBlock(impl.interface, impl_on, methods_out))
 
             return (
-                ast.Module(
-                    mod_name, sub_out, imports_out, interfaces, records, impls_out
-                ),
+                ast.Module(mod_name, sub_out, imports_out, interfaces, records, impls_out),
                 ctx,
             )
 
@@ -214,6 +204,10 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
         case ast.Type(), _:
             raise TypeError("Unevaluated type passed to checker")
 
+        case t.AnyType(), _:
+            exp, _ = infer_expr(exp, ctx)
+            return exp
+
         case _, ast.Literal(val):
             mapping = {type(None): t.NullType, bool: t.BoolType, int: t.IntType}
             if mapping[type(val)] != type(typ):
@@ -240,12 +234,7 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
             return ast.BinOp(lhs, rhs, op)
 
         case t.FuncType(_, _), ast.Function(arms):
-            return ast.Function(
-                [
-                    ast.MatchArm(arm.pats, check_matcharm(arm.pats, arm.body, typ, ctx))
-                    for arm in arms
-                ]
-            )
+            return ast.Function([ast.MatchArm(arm.pats, check_matcharm(arm.pats, arm.body, typ, ctx)) for arm in arms])
 
         case _, ast.Application(fun, arg):
             fun, fun_t = infer_expr(fun, ctx)
@@ -269,9 +258,7 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
             extra_fields = v_fields.keys() - t_fields.keys()
             missing_fields = t_fields.keys() - v_fields.keys()
             if extra_fields or missing_fields:
-                raise TypeError(
-                    f"extra fields: {extra_fields}, missing fields: {missing_fields}"
-                )
+                raise TypeError(f"extra fields: {extra_fields}, missing fields: {missing_fields}")
 
             slots = [check_expr(v_fields[f], t_fields[f], ctx) for f in t_fields]
 
@@ -301,7 +288,7 @@ class InferenceError(Exception):
     pass
 
 
-def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
+def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]:
     match exp:
         case ast.Literal(val):
             mapping = {type(None): t.NullType, bool: t.BoolType, int: t.IntType}
@@ -329,9 +316,7 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
             return ast.BinOp(lhs, rhs, op), t.IntType
 
         case ast.Function(patterns):
-            raise InferenceError(
-                f"can't infer function signature for {exp}. Please provide a type hint."
-            )
+            raise InferenceError(f"can't infer function signature for {exp}. Please provide a type hint.")
 
         case ast.Application(fun, arg):
             fun, fun_t = infer_expr(fun, ctx)
@@ -357,7 +342,7 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
             return ast.Let(var, val, body, var_t), out_t
 
         case ast.BlockExpression(fst, snd):
-            fst = check_stmt(fst, ctx)
+            fst = check_expr(fst, t.AnyType(), ctx)
             snd, out_t = infer_expr(snd, ctx)
             return ast.BlockExpression(fst, snd), out_t
 
@@ -377,6 +362,19 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
             if not isinstance(box_t, t.BoxType):
                 raise TypeError(f"Cannot deref a {box_t}")
             return ast.DeRef(b_out), box_t
+
+        case ast.Assignment(lhs, rhs):
+            try:
+                l_out, l_t = infer_expr(lhs, ctx)
+                if not isinstance(l_t, t.BoxType):
+                    raise TypeError(f"Cannot assign to a {l_t}")
+                r_out = check_expr(rhs, l_t.item_t, ctx)
+                return ast.Assignment(l_out, r_out), t.NullType()
+            except InferenceError:
+                pass
+            r_out, r_t = infer_expr(rhs, ctx)
+            l_out = check_expr(lhs, t.BoxType(r_t), ctx)
+            return ast.Assignment(l_out, r_out), t.NullType()
 
         case ast.RecordExpr(fields):
             field_values = []
@@ -414,9 +412,6 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> (ast.Expression, Type):
 
 def check_stmt(stmt: ast.Statement, env: TEnv) -> ast.Statement:
     match stmt:
-        case ast.NopStatement():
-            return stmt
-
         case ast.ExprStmt(expr):
             expr, _ = infer_expr(expr, env)
             return ast.ExprStmt(expr)
@@ -427,26 +422,11 @@ def check_stmt(stmt: ast.Statement, env: TEnv) -> ast.Statement:
             b_out = check_stmt(b, env)
             return ast.IfStatement(c_out, a_out, b_out)
 
-        case ast.Assignment(lhs, rhs):
-            try:
-                l_out, l_t = infer_expr(lhs, env)
-                if not isinstance(l_t, t.BoxType):
-                    raise TypeError(f"Cannot assign to a {l_t}")
-                r_out = check_expr(rhs, l_t.item_t, env)
-                return ast.Assignment(l_out, r_out)
-            except InferenceError:
-                pass
-            r_out, r_t = infer_expr(rhs, env)
-            l_out = check_expr(lhs, t.BoxType(r_t), env)
-            return ast.Assignment(l_out, r_out)
-
         case _:
             raise NotImplementedError(stmt)
 
 
-def check_matcharm(
-    patterns: list[ast.Pattern], body: ast.Expression, typ: Type, ctx: Context
-) -> ast.Expression:
+def check_matcharm(patterns: list[ast.Pattern], body: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
     match typ, patterns:
         case t.FuncType(arg_t, res_t), [p0, *p_rest]:
             bindings = check_pattern(p0, arg_t, ctx)

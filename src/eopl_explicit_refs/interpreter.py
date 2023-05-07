@@ -72,19 +72,11 @@ def analyze_import(imp: ast.Import, sub_mods: dict[ast.Symbol, Module], ctx: Con
 
 def analyze_stmt(stmt: ast.Statement, ctx: Context) -> Callable:
     match stmt:
-        case ast.NopStatement():
-            return lambda _: None
-
         case ast.ExprStmt(expr):
             # Let's assume expressions have no side effects, so we don't execute them,
             # but we still check if they are valid
             _ = analyze_expr(expr, ctx, tail=False)
             return lambda _: None
-
-        case ast.Assignment(lhs, rhs):
-            lhs_ = analyze_expr(lhs, ctx, tail=False)
-            rhs_ = analyze_expr(rhs, ctx, tail=False)
-            return lambda store: store.setref(lhs_(store), rhs_(store))
 
         case ast.IfStatement(cond, cons, alt):
             cond_ = analyze_expr(cond, ctx, tail=False)
@@ -124,11 +116,22 @@ def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
         case ast.NewRef(val):
             val_ = analyze_expr(val, ctx, tail=False)
             return lambda store: store.newref(val_(store))
+
+        case ast.Assignment(lhs, rhs):
+            lhs_ = analyze_expr(lhs, ctx, tail=False)
+            rhs_ = analyze_expr(rhs, ctx, tail=False)
+
+            def the_assignment(store):
+                store.setref(lhs_(store), rhs_(store))
+
+            return the_assignment
+
         case ast.DeRef(ref):
             ref_ = analyze_expr(ref, ctx, tail=False)
             return lambda store: store.deref(ref_(store))
+
         case ast.BlockExpression(stmt, expr):
-            stmt_ = analyze_stmt(stmt, ctx)
+            stmt_ = analyze_expr(stmt, ctx, tail=False)
             expr_ = analyze_expr(expr, ctx, tail=tail)
 
             def sequence(store):
@@ -142,6 +145,7 @@ def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
             then_ = analyze_expr(b, ctx, tail=tail)
             else_ = analyze_expr(c, ctx, tail=tail)
             return lambda store: then_(store) if cond_(store) else else_(store)
+
         case ast.Let(var, val, bdy):
             let_env = ctx.extend_env(var)
             val_ = analyze_expr(val, let_env, tail=False)

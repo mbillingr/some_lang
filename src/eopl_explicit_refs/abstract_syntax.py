@@ -71,17 +71,12 @@ class Symbol(str, AstNode):
 
 
 @dataclasses.dataclass
-class NopStatement(Statement):
-    pass
-
-
-@dataclasses.dataclass
 class ExprStmt(Statement):
     expr: Expression
 
 
 @dataclasses.dataclass
-class Assignment(Statement):
+class Assignment(Expression):
     lhs: Expression
     rhs: Expression
 
@@ -107,7 +102,7 @@ class TypeAnnotation(Expression):
 
 @dataclasses.dataclass
 class BlockExpression(Expression):
-    pre: Statement
+    pre: Expression
     exp: Expression
 
 
@@ -271,13 +266,3 @@ class RecordType(Type):
 class FuncType(Type):
     arg: Type
     ret: Type
-
-
-def stmt_to_expr(stmt: Statement) -> Expression:
-    match stmt:
-        case ExprStmt(x):
-            return x
-        case IfStatement(a, b, c):
-            return Conditional(a, stmt_to_expr(b), stmt_to_expr(c))
-        case _:
-            raise TypeError(f"Can't convert {type(stmt).__name__} to expression")
