@@ -1,17 +1,23 @@
 import dataclasses
-from typing import Any
+from typing import Any, TypeVar, Generic
+
+CLS = TypeVar("CLS")
 
 
-class PythonStore:
+class PythonStore(Generic[CLS]):
     @dataclasses.dataclass
     class Ref:
         val: Any
 
     def __init__(self):
         self.env = ()
+        self.methods = []
+        self.vtables = []
 
     def clear(self):
         self.env = ()
+        self.methods = []
+        self.vtables = []
 
     def push(self, *vals):
         self.env = (list(vals), self.env)
@@ -44,3 +50,15 @@ class PythonStore:
 
     def setref(self, ref: Ref, val: Any):
         ref.val = val
+
+    def add_method(self, method: CLS):
+        return self.methods.append(method)
+
+    def get_method(self, idx: int) -> CLS:
+        return self.methods[idx]
+
+    def set_vtables(self, vtables):
+        self.vtables = vtables
+
+    def get_vtable(self, vtidx: int):
+        return self.vtables[vtidx]

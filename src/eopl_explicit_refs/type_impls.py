@@ -1,6 +1,7 @@
 from __future__ import annotations
 import abc
 import dataclasses
+from typing import Optional
 
 from eopl_explicit_refs.abstract_syntax import Symbol
 from eopl_explicit_refs.vtable_manager import VtableManager, VtableIndex
@@ -16,18 +17,38 @@ class Type(abc.ABC):
     def implements(self, ift: InterfaceType) -> bool:
         return ift in self.implemented_interfaces
 
+    def find_method(self, name: str) -> Optional[tuple[Type, int]]:
+        return None
+
+    def add_method(self, name: str, signature: Type):
+        raise NotImplementedError()
+
+    def get_vtables(self) -> dict:
+        return {}
+
 
 class NamedType(Type):
     __match_args__ = ("name", "type")
 
-    def __init__(self, name: str, ty: Type):
+    def __init__(self, fqn: str, ty: Type):
         super().__init__()
-        self.name = name
+        self.name = fqn
         self.type = ty
+        self._methods = {}
+        self._vtables = {}
 
     def set_type(self, ty: Type):
         assert self.type is None
         self.type = ty
+
+    def find_method(self, name: str) -> Optional[tuple[Type, int]]:
+        return self._methods.get(name)
+
+    def add_method(self, name: str, signature: Type):
+        self._methods[name] = signature
+
+    def get_vtables(self) -> dict:
+        return self._vtables
 
     def __repr__(self):
         return self.name
@@ -104,8 +125,9 @@ class FuncType(Type):
 class InterfaceType(Type):
     __match_args__ = ("name", "methods")
 
-    def __init__(self, name: str, methods: dict[str, FuncType], vtm: VtableManager):
-        self.name = name
+    def __init__(self, fqn: str, methods: dict[str, FuncType], vtm: VtableManager):
+        super().__init__()
+        self.fully_qualified_name = fqn
         self.methods = None
         self.vtm = vtm
         self.virtuals: dict[str, VtableIndex] = {}
@@ -116,6 +138,9 @@ class InterfaceType(Type):
         assert self.methods is None
         self.methods = methods
         self.virtuals = self.vtm.assign_virtuals(methods.keys())
+
+    def find_method(self, name: str) -> Optional[tuple[Type, int]]:
+        return ("virtual", self.fully_qualified_name, self.methods[name])
 
     def as_virtual(self, method: str):
         return self.virtuals[method]

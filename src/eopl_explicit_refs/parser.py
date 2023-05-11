@@ -427,11 +427,11 @@ def parse_type(ts) -> ast.Type:
 def parse_atomic_type(ts) -> ast.Type:
     match ts.get_next():
         case "()", _, span:
-            return spanned(span, ast.NullType)
+            return spanned(span, ast.NullType())
         case "Bool", _, span:
-            return spanned(span, ast.BoolType)
+            return spanned(span, ast.BoolType())
         case "Int", _, span:
-            return spanned(span, ast.IntType)
+            return spanned(span, ast.IntType())
         case "[", _, span:
             match ts.peek(0), ts.peek(1):
                 case (_, TokenKind.IDENTIFIER, _), (":", _, _):

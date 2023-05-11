@@ -13,22 +13,34 @@ UNDEFINED = object()
 @dataclasses.dataclass
 class Context:
     env: Env = EmptyEnv()
-    methods: list[Closure] = dataclasses.field(default_factory=list)
+    method_names: dict[str, int] = dataclasses.field(default_factory=dict)
+    vtables: dict[str, int] = dataclasses.field(default_factory=dict)
 
     def extend_env(self, *vars: str) -> Self:
-        return Context(env=self.env.extend(*vars), methods=self.methods)
+        return Context(env=self.env.extend(*vars), method_names=self.method_names, vtables=self.vtables)
 
-    def find_method(self, index: int) -> Closure:
-        return self.methods[index]
+    def find_method(self, name: str) -> int:
+        return self.method_names[name]
+
+    def register_method(self, name: str) -> int:
+        index = len(self.method_names)
+        self.method_names[name] = index
+        return index
 
 
-def analyze_program(pgm: ast.Program) -> Any:
+def analyze_program(pgm: ast.ExecutableProgram) -> Any:
     ctx = Context()
-    _, ctx = analyze_module(pgm.mod, ctx)
+
+    ctx.vtables = {k: i for i, k in enumerate(pgm.vtables.keys())}
+    vtables = list(pgm.vtables.values())
+
+    mod, ctx = analyze_module(pgm.mod, ctx)
     exp = analyze_expr(pgm.exp, ctx, tail=False)
 
     def program(store):
         store.clear()
+        store.set_vtables(vtables)
+        mod(store)
         return exp(store)
 
     return program
@@ -36,7 +48,14 @@ def analyze_program(pgm: ast.Program) -> Any:
 
 @dataclasses.dataclass
 class Module:
-    pass
+    sub_modules: dict[str, Module] = dataclasses.field(default_factory=dict)
+    methods: list[Closure] = dataclasses.field(default_factory=list)
+
+    def __call__(self, store):
+        for sm in self.sub_modules.values():
+            sm(store)
+        for m in self.methods:
+            store.add_method(m)
 
 
 def analyze_module(mod: ast.Module, ctx: Context) -> tuple[Module, Context]:
@@ -44,19 +63,23 @@ def analyze_module(mod: ast.Module, ctx: Context) -> tuple[Module, Context]:
         case ast.Module(_, submodules, imports, interfaces, records, impls):
             sub_mods = {}
             for k, m in submodules.items():
-                sub_mods[k], ctx = analyze_module(m, ctx)
+                sm, ctx = analyze_module(m, ctx)
+                sub_mods[k] = sm
 
             for imp in imports:
                 ctx = analyze_import(imp, sub_mods, ctx)
 
+            methods = []
             for impl in impls:
                 for method_name, method in impl.methods.items():
                     arms = analyze_matcharms(method.patterns, ctx)
                     # the order these are appended in must match the order
                     # of method indices generated in the type checker
-                    ctx.methods.append(Closure(ctx, arms))
+                    idx = ctx.register_method(method_name)
+                    ctx.method_names[method_name] = idx
+                    methods.append(Closure(ctx, arms))
 
-            mod_out = Module()
+            mod_out = Module(sub_mods, methods)
 
             return mod_out, ctx
 
@@ -66,7 +89,8 @@ def analyze_import(imp: ast.Import, sub_mods: dict[ast.Symbol, Module], ctx: Con
     for thing in imp.what:
         match thing:
             case _:
-                raise NotImplementedError(thing)
+                #raise NotImplementedError(thing)
+                pass
     return ctx
 
 
@@ -150,17 +174,17 @@ def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
 
             return the_function
 
-        case ast.GetMethod(index):
-            method = ctx.find_method(index)
-            return lambda _: method
+        case ast.GetMethod(name):
+            idx = ctx.find_method(name)
+            return lambda store: store.get_method(idx)
 
-        case ast.GetVirtual(obj, table, method):
+        case ast.GetVirtual(obj, table, vidx):
             obj_ = analyze_expr(obj, ctx, tail=False)
 
             def the_getter(store):
                 evaluated_object = obj_(store)
-                method_idx = evaluated_object.vtable_lookup(table, method)
-                return ctx.find_method(method_idx).apply([evaluated_object], store)
+                method_idx = evaluated_object.vtable_lookup(table, vidx)
+                return store.get_method(method_idx).apply([evaluated_object], store)
 
             return the_getter
 
@@ -175,16 +199,18 @@ def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
             obj_ = analyze_expr(obj, ctx, tail=False)
             return lambda store: obj_(store)[fld]
 
-        case ast.TupleExpr(slots, vtables):
+        case ast.TupleExpr(slots):
             slots_ = [analyze_expr(v, ctx, tail=False) for v in slots]
-            if vtables:
-                return lambda store: TupleObj(v(store) for v in slots_).with_vtables(vtables)
-            else:
-                return lambda store: TupleObj(v(store) for v in slots_)
+            return lambda store: TupleObj(v(store) for v in slots_)
 
         case ast.GetSlot(obj, idx):
             obj_ = analyze_expr(obj, ctx, tail=False)
             return lambda store: obj_(store)[idx]
+
+        case ast.WithInterfaces(obj, typename):
+            obj_ = analyze_expr(obj, ctx, tail=False)
+            vtable_idx = ctx.vtables[typename]
+            return lambda store: obj_(store).with_vtable(store.get_vtable(vtable_idx))
 
         case _:
             raise NotImplementedError(exp)
@@ -384,9 +410,9 @@ def list_cons(car, cdr):
 
 
 class TupleObj(tuple):
-    def with_vtables(self, vtables):
+    def with_vtable(self, vtables):
         self._vtables = vtables
         return self
 
     def vtable_lookup(self, table: int, method: int):
-        return self._vtables[table, method]
+        return self._vtables[table][method]

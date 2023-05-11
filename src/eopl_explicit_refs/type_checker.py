@@ -1,3 +1,4 @@
+from __future__ import annotations
 import dataclasses
 from typing import TypeAlias, Optional, Any
 
@@ -12,34 +13,33 @@ TEnv: TypeAlias = Env[Type]
 
 @dataclasses.dataclass
 class Context:
+    path: tuple[str, ...] = ()
+    submodules: dict[str, Context] = dataclasses.field(default_factory=dict)
     vtm: VtableManager = VtableManager()
     env: TEnv = EmptyEnv()
     interfaces: Env[t.InterfaceType] = EmptyEnv()
     types: TEnv = EmptyEnv()
-    methods: dict[tuple[Type, str], tuple[Type, int]] = dataclasses.field(default_factory=dict)
-    vtables: dict[Type, Any] = dataclasses.field(default_factory=dict)
 
     def check(self, actual_t: Type, expected_t: Type) -> bool:
         return actual_t == expected_t
 
     def extend_env(self, var: str, val: Type):
         return Context(
+            path=self.path,
+            submodules=self.submodules,
             vtm=self.vtm,
             env=self.env.extend(var, val),
             interfaces=self.interfaces,
             types=self.types,
-            methods=self.methods,
-            vtables=self.vtables,
         )
 
     def extend_types(self, name: str, ty: Type):
         return Context(
+            path=self.path,
             vtm=self.vtm,
             env=self.env,
             interfaces=self.interfaces,
             types=self.types.extend(name, ty),
-            methods=self.methods,
-            vtables={ty: {}} | self.vtables,
         )
 
     def set_type(self, name: str, ty: Type):
@@ -47,41 +47,26 @@ class Context:
 
     def extend_interfaces(self, name: str, ty: t.InterfaceType):
         return Context(
+            path=self.path,
             vtm=self.vtm,
             env=self.env,
             interfaces=self.interfaces.extend(name, ty),
             types=self.types,
-            methods=self.methods,
-            vtables=self.vtables,
         )
 
-    def find_method(self, ty: Type, name: str) -> Optional[tuple[Type, int]]:
-        match ty:
-            case t.InterfaceType(_, methods):
-                signature = methods[name]
-                return signature, ty.as_virtual(name)
-            case _:
-                try:
-                    return self.methods[(ty, name)]
-                except KeyError:
-                    return None
-
     def add_vtable(self, ty: Type, interface: t.InterfaceType):
-        vtables = self.vtables.copy()
-        table = vtables.setdefault(ty, {})
+        table = ty.get_vtables()
 
         for m in interface.methods.keys():
-            _, actual_method_idx = self.methods[(ty, m)]
             tbl, index = interface.as_virtual(m)
-            table[(tbl, index)] = actual_method_idx
+            table.setdefault(tbl, {})[index] = m
 
         return Context(
+            path=self.path,
             vtm=self.vtm,
             env=self.env,
             interfaces=self.interfaces,
             types=self.types,
-            methods=self.methods,
-            vtables=vtables,
         )
 
 
@@ -92,19 +77,20 @@ def check_program(pgm: ast.Program) -> ast.Program:
     return ast.Program(mod, exp)
 
 
-def check_module(pgm: ast.Module, ctx: Context) -> tuple[ast.Module, Context]:
+def check_module(pgm: ast.Module, parent_ctx: Context) -> tuple[ast.Module, Context]:
+    ctx = Context()
     match pgm:
         case ast.Module(mod_name, submodules, imports, interfaces, records, impls):
+            ctx.path = (*parent_ctx.path, mod_name)
             sub_out = {}
-            sub_ctx = {}
             for k, v in submodules.items():
-                mod, ctx = check_module(v, ctx)
+                mod, ctx_ = check_module(v, ctx)
                 sub_out[k] = mod
-                sub_ctx[k] = ctx
+                ctx.submodules[k] = ctx_
 
             imports_out = []
             for imp in imports:
-                imp_, ctx = check_import(imp, sub_ctx, ctx)
+                imp_, ctx = check_import(imp, ctx.submodules, ctx)
                 imports_out.append(imp_)
 
             for intf in interfaces:
@@ -151,20 +137,19 @@ def check_module(pgm: ast.Module, ctx: Context) -> tuple[ast.Module, Context]:
                         expected_signature = interface_type.methods[method_name]
                         if not ctx.check(signature, expected_signature):
                             raise TypeError(signature, expected_signature)
-                    index = len(impl_ctx.methods)
-                    impl_ctx.methods[(impl_on, method_name)] = signature, index
+                    impl_on.add_method(method_name, signature)
 
                 if interface_type is not None:
                     ctx = ctx.add_vtable(impl_on, interface_type)
 
                 methods_out = {}
                 for method_name, func in impl.methods.items():
-                    signature, _ = ctx.methods[(impl_on, method_name)]
+                    signature = impl_on.find_method(method_name)
 
                     body = check_expr(func.expr, signature, ctx)
                     methods_out[method_name] = body
 
-                impls_out.append(ast.ImplBlock(impl.interface, impl_on, methods_out))
+                impls_out.append(ast.ImplBlock(impl.interface, impl_on.name, methods_out))
 
             return (
                 ast.Module(mod_name, sub_out, imports_out, interfaces, records, impls_out),
@@ -183,17 +168,19 @@ def check_import(imp: ast.Import, submodules: dict[ast.Symbol, Context], ctx: Co
             case ast.Symbol():
                 try:
                     ctx = ctx.extend_interfaces(thing, module.interfaces.lookup(thing))
+                    things_out.append(thing)
                     continue
                 except LookupError:
                     pass
                 try:
                     ctx = ctx.extend_types(thing, module.types.lookup(thing))
+                    things_out.append(thing)
                     continue
                 except LookupError:
                     pass
                 raise ImportError(thing)
             case ast.Import():
-                imp_out, ctx = check_import(imp, module.submodules, ctx)
+                imp_out, ctx = check_import(thing, module.submodules, ctx)
                 things_out.append(imp_out)
 
     return ast.Import(imp.module, things_out), ctx
@@ -254,7 +241,7 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
             return ast.Conditional(c_out, a_out, b_out)
 
         # initializing a named record type with a record expression
-        case t.NamedType(_, t.RecordType(t_fields)), ast.RecordExpr(v_fields):
+        case t.NamedType(tname, t.RecordType(t_fields)), ast.RecordExpr(v_fields):
             extra_fields = v_fields.keys() - t_fields.keys()
             missing_fields = t_fields.keys() - v_fields.keys()
             if extra_fields or missing_fields:
@@ -262,14 +249,26 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
 
             slots = [check_expr(v_fields[f], t_fields[f], ctx) for f in t_fields]
 
-            return ast.TupleExpr(slots, vtables=ctx.vtables[typ])
+            if not typ.implemented_interfaces:
+                return ast.TupleExpr(slots)
+
+            return ast.WithInterfaces(
+                ast.TupleExpr(slots),
+                typename=tname,
+            )
 
         # initializing a named empty record
-        case t.NamedType(_, t.RecordType(t_fields)), ast.EmptyList():
+        case t.NamedType(tname, t.RecordType(t_fields)), ast.EmptyList():
             if t_fields:
                 raise TypeError(f"missing fields: {t_fields}")
 
-            return ast.TupleExpr([], vtables=ctx.vtables[typ])
+            if not typ.implemented_interfaces:
+                return ast.TupleExpr([])
+
+            return ast.WithInterfaces(
+                ast.TupleExpr([]),
+                typename=tname,
+            )
 
         case t.InterfaceType() as intf, exp:
             e_out, actual_t = infer_expr(exp, ctx)
@@ -332,14 +331,14 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]
             # without type declaration, the let variable can't be used in the val expression
             val, val_t = infer_expr(val, ctx)
             body, out_t = infer_expr(bdy, ctx.extend_env(var, val_t))
-            return ast.Let(var, val, body, val_t), out_t
+            return ast.Let(var, val, body, None), out_t
 
         case ast.Let(var, val, bdy, var_t):
             var_t = eval_type(var_t, ctx)
             let_ctx = ctx.extend_env(var, var_t)
             val = check_expr(val, var_t, let_ctx)
             body, out_t = infer_expr(bdy, let_ctx)
-            return ast.Let(var, val, body, var_t), out_t
+            return ast.Let(var, val, body, None), out_t
 
         case ast.BlockExpression(fst, snd):
             fst = check_expr(fst, t.AnyType(), ctx)
@@ -385,17 +384,19 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]
                 v_out, val_t = infer_expr(fields[name], ctx)
                 field_values.append(v_out)
                 field_types[name] = val_t
-            return ast.TupleExpr(field_values, vtables=None), t.RecordType(field_types)
+            return ast.TupleExpr(field_values), t.RecordType(field_types)
 
         case ast.GetAttribute(obj, fld):
             obj, obj_t = infer_expr(obj, ctx)
 
-            match ctx.find_method(obj_t, fld):
-                case (signature, (table, index)):
-                    result = ast.GetVirtual(obj, table, index)
+            match obj_t.find_method(fld):
+                case ("virtual", interface, signature):
+                    result = ast.GetNamedVirtual(obj, interface, fld)
                     return result, signature.ret
-                case (signature, index):
-                    result = ast.Application(ast.GetMethod(index), obj)
+                case None:
+                    pass
+                case signature:
+                    result = ast.Application(ast.GetMethod(fld), obj)
                     return result, signature.ret
 
             rec_rt = resolve_type(obj_t)
@@ -445,11 +446,11 @@ def eval_type(tx: ast.Type, ctx: Context) -> Type:
                 return ctx.types.lookup(name)
             except LookupError:
                 return ctx.interfaces.lookup(name)
-        case ast.NullType:
+        case ast.NullType():
             return t.NullType()
-        case ast.BoolType:
+        case ast.BoolType():
             return t.BoolType()
-        case ast.IntType:
+        case ast.IntType():
             return t.IntType()
         case ast.ListType(item_t):
             return t.ListType(eval_type(item_t, ctx))
