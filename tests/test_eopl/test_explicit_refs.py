@@ -282,6 +282,14 @@ def test_extra_method():
             "module outer { module inner { struct Foo [] } } import outer.inner.Foo (the Foo [])",
         ),
         (
+            0,
+            "module outer { module inner { struct Foo [] } import .inner.Foo } 0",
+        ),
+        (
+            0,
+            "module outer { module inner { struct Foo [] } import outer.inner.Foo } 0",
+        ),
+        (
             1,
             "module my-mod { "
             "    struct Bar [] "
