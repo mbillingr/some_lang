@@ -1,21 +1,18 @@
 from __future__ import annotations
 import dataclasses
-from typing import TypeAlias, Optional, Any
+from typing import TypeAlias
 
 from eopl_explicit_refs import abstract_syntax as ast
 from eopl_explicit_refs.generic_environment import Env, EmptyEnv
 from eopl_explicit_refs.type_impls import Type
 from eopl_explicit_refs import type_impls as t
-from eopl_explicit_refs.vtable_manager import VtableManager
 
 TEnv: TypeAlias = Env[Type]
 
 
 @dataclasses.dataclass
 class Context:
-    path: tuple[str, ...] = ()
     submodules: dict[str, Context] = dataclasses.field(default_factory=dict)
-    vtm: VtableManager = VtableManager()
     env: TEnv = EmptyEnv()
     interfaces: Env[t.InterfaceType] = EmptyEnv()
     types: TEnv = EmptyEnv()
@@ -25,9 +22,7 @@ class Context:
 
     def extend_env(self, var: str, val: Type):
         return Context(
-            path=self.path,
             submodules=self.submodules,
-            vtm=self.vtm,
             env=self.env.extend(var, val),
             interfaces=self.interfaces,
             types=self.types,
@@ -35,8 +30,6 @@ class Context:
 
     def extend_types(self, name: str, ty: Type):
         return Context(
-            path=self.path,
-            vtm=self.vtm,
             env=self.env,
             interfaces=self.interfaces,
             types=self.types.extend(name, ty),
@@ -47,25 +40,8 @@ class Context:
 
     def extend_interfaces(self, name: str, ty: t.InterfaceType):
         return Context(
-            path=self.path,
-            vtm=self.vtm,
             env=self.env,
             interfaces=self.interfaces.extend(name, ty),
-            types=self.types,
-        )
-
-    def add_vtable(self, ty: Type, interface: t.InterfaceType):
-        table = ty.get_vtables()
-
-        for m in interface.methods.keys():
-            tbl, index = interface.as_virtual(m)
-            table.setdefault(tbl, {})[index] = m
-
-        return Context(
-            path=self.path,
-            vtm=self.vtm,
-            env=self.env,
-            interfaces=self.interfaces,
             types=self.types,
         )
 
@@ -81,7 +57,6 @@ def check_module(pgm: ast.Module, parent_ctx: Context) -> tuple[ast.Module, Cont
     ctx = Context()
     match pgm:
         case ast.Module(mod_name, submodules, imports, interfaces, records, impls):
-            ctx.path = (*parent_ctx.path, mod_name)
             sub_out = {}
             for k, v in submodules.items():
                 mod, ctx_ = check_module(v, ctx)
@@ -94,7 +69,7 @@ def check_module(pgm: ast.Module, parent_ctx: Context) -> tuple[ast.Module, Cont
                 imports_out.append(imp_)
 
             for intf in interfaces:
-                ifty = t.InterfaceType(intf.name, None, ctx.vtm)
+                ifty = t.InterfaceType(intf.name, None)
                 ctx = ctx.extend_interfaces(intf.name, ifty)
 
             for record in records:
@@ -138,9 +113,6 @@ def check_module(pgm: ast.Module, parent_ctx: Context) -> tuple[ast.Module, Cont
                         if not ctx.check(signature, expected_signature):
                             raise TypeError(signature, expected_signature)
                     impl_on.add_method(method_name, signature)
-
-                if interface_type is not None:
-                    ctx = ctx.add_vtable(impl_on, interface_type)
 
                 methods_out = {}
                 for method_name, func in impl.methods.items():

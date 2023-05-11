@@ -23,9 +23,6 @@ class Type(abc.ABC):
     def add_method(self, name: str, signature: Type):
         raise NotImplementedError()
 
-    def get_vtables(self) -> dict:
-        return {}
-
 
 class NamedType(Type):
     __match_args__ = ("name", "type")
@@ -35,7 +32,6 @@ class NamedType(Type):
         self.name = fqn
         self.type = ty
         self._methods = {}
-        self._vtables = {}
 
     def set_type(self, ty: Type):
         assert self.type is None
@@ -46,9 +42,6 @@ class NamedType(Type):
 
     def add_method(self, name: str, signature: Type):
         self._methods[name] = signature
-
-    def get_vtables(self) -> dict:
-        return self._vtables
 
     def __repr__(self):
         return self.name
@@ -125,25 +118,19 @@ class FuncType(Type):
 class InterfaceType(Type):
     __match_args__ = ("name", "methods")
 
-    def __init__(self, fqn: str, methods: dict[str, FuncType], vtm: VtableManager):
+    def __init__(self, fqn: str, methods: dict[str, FuncType]):
         super().__init__()
         self.fully_qualified_name = fqn
         self.methods = None
-        self.vtm = vtm
-        self.virtuals: dict[str, VtableIndex] = {}
         if methods:
             self.set_methods(methods)
 
     def set_methods(self, methods):
         assert self.methods is None
         self.methods = methods
-        self.virtuals = self.vtm.assign_virtuals(methods.keys())
 
     def find_method(self, name: str) -> Optional[tuple[Type, int]]:
         return ("virtual", self.fully_qualified_name, self.methods[name])
-
-    def as_virtual(self, method: str):
-        return self.virtuals[method]
 
     def __str__(self):
         return f"{self.name}"
