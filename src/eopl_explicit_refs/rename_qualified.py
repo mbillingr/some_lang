@@ -18,7 +18,7 @@ class Visitor:
             case ast.Program(mod, exp):
                 self.__init__()
                 self.path.append(mod.name)
-                mod_out = mod.default_transform(self.visit)
+                mod_out = self.transform_module(mod)
                 exp_out = exp.transform(self.visit)
                 return ast.Program(mod_out, exp_out)
 
@@ -26,17 +26,19 @@ class Visitor:
                 old_decl_env = self.decl_env
                 self.decl_env = {}
                 self.path.append(node.name)
-                node_out = node.default_transform(self.visit)
-                node_out.name = self.make_qualname()
+                node_out = self.transform_module(node)
                 self.path.pop()
                 self.decl_env = old_decl_env
                 return node_out
 
+            case ast.AbsoluteImport(module, name):
+                self.decl_env[name] = module + "." + name
+                return node
+
             case ast.Import():
-                for imported_qualname_parts in node.iter():
-                    name = imported_qualname_parts[-1]
-                    self.decl_env[name] = self.make_qualname(*imported_qualname_parts)
-                return node.default_transform(self.visit)
+                raise NotImplementedError(
+                    "All imports should be absolute at this point"
+                )
 
             case ast.Interface(name, methods):
                 qual_ifname = self.add_decl(name)
@@ -58,6 +60,15 @@ class Visitor:
                 node_out.type_name = qual_tyname
                 return node_out
 
+            case ast.TypeRef(typename):
+                node_out = node.default_transform(self.visit)
+                try:
+                    qual_tyname = self.decl_env[typename]
+                    node_out.name = qual_tyname
+                except KeyError:
+                    pass
+                return node_out
+
             case ast.WithInterfaces(obj, typename):
                 qual_tyname = self.decl_env[typename]
                 node_out = node.default_transform(self.visit)
@@ -72,6 +83,35 @@ class Visitor:
 
             case _:
                 return NotImplemented
+
+    def transform_module(self, node: ast.Module) -> ast.Module:
+        node_out = ast.Module(
+            self.make_qualname(),
+            ast.transform_dict_values(node.submodules, self.visit),
+            ast.transform_collection(
+                self.flatten_imports(node.imports), self.visit
+            ),
+            ast.transform_collection(node.interfaces, self.visit),
+            ast.transform_collection(node.records, self.visit),
+            ast.transform_collection(node.impls, self.visit),
+        )
+        return node_out
+
+    def flatten_imports(self, imports: list[ast.Import]) -> list[ast.Import]:
+        imports_out = []
+        for imp in imports:
+            match imp:
+                case ast.AbsoluteImport():
+                    imports_out.extend(imp)
+                case ast.RelativeImport():
+                    for [*path, thing] in imp.iter():
+                        imports_out.append(
+                            ast.AbsoluteImport(".".join(self.path + path), thing)
+                        )
+                case ast.NestedImport():
+                    for [*path, thing] in imp.iter():
+                        imports_out.append(ast.AbsoluteImport(".".join(path), thing))
+        return imports_out
 
     def _register_functions(self, node_out):
         for method_name, method_body in node_out.methods.items():

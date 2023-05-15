@@ -34,13 +34,18 @@ def analyze_program(pgm: ast.ExecutableProgram) -> Any:
     ctx.vtables = {k: i for i, k in enumerate(pgm.vtables.keys())}
     vtables = list(pgm.vtables.values())
 
-    mod, ctx = analyze_module(pgm.mod, ctx)
+    mods = []
+    for mod in pgm.modules.values():
+        mod_, ctx = analyze_module(mod, ctx)
+        mods.append(mod_)
+
     exp = analyze_expr(pgm.exp, ctx, tail=False)
 
     def program(store):
         store.clear()
         store.set_vtables(vtables)
-        mod(store)
+        for mod in mods:
+            mod(store)
         return exp(store)
 
     return program
@@ -60,7 +65,9 @@ class Module:
 
 def analyze_module(mod: ast.Module, ctx: Context) -> tuple[Module, Context]:
     match mod:
-        case ast.Module(_, submodules, imports, interfaces, records, impls):
+        case ast.Module():
+            raise TypeError("Cannot run unchecked module")
+        case ast.CheckedModule(_, submodules, imports, types, impls):
             sub_mods = {}
             for k, m in submodules.items():
                 sm, ctx = analyze_module(m, ctx)
@@ -84,14 +91,16 @@ def analyze_module(mod: ast.Module, ctx: Context) -> tuple[Module, Context]:
             return mod_out, ctx
 
 
-def analyze_import(imp: ast.Import, sub_mods: dict[ast.Symbol, Module], ctx: Context) -> Context:
-    module = sub_mods[imp.module]
-    for thing in imp.what:
-        match thing:
-            case _:
-                #raise NotImplementedError(thing)
-                pass
+def analyze_import(imp: ast.AbsoluteImport, sub_mods: dict[ast.Symbol, Module], ctx: Context) -> Context:
     return ctx
+    #match ctx.
+    #module = sub_mods[imp.module]
+    #for thing in imp.what:
+    #    match thing:
+    #        case _:
+    #            #raise NotImplementedError(thing)
+    #            pass
+    #return ctx
 
 
 def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:

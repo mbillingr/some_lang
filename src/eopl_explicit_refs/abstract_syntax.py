@@ -61,13 +61,26 @@ class Program(AstNode):
 
 
 @dataclasses.dataclass
+class CheckedProgram(AstNode):
+    modules: dict[str, Module]
+    exp: Expression
+
+    def default_transform(self, visitor) -> Self:
+        return Program(
+            transform_dict_values(self.modules, visitor), self.exp.transform(visitor)
+        )
+
+
+@dataclasses.dataclass
 class ExecutableProgram(AstNode):
-    mod: Module
+    modules: dict[str, Module]
     exp: Expression
     vtables: dict[str, dict[int, dict[int, int]]]
 
     def default_transform(self, visitor) -> Self:
-        return ExecutableProgram(self.mod.transform(visitor), self.exp.transform(visitor))
+        return ExecutableProgram(
+            self.mod.transform(visitor), self.exp.transform(visitor)
+        )
 
 
 @dataclasses.dataclass
@@ -91,22 +104,57 @@ class Module(AstNode):
 
 
 @dataclasses.dataclass
+class CheckedModule(AstNode):
+    name: Symbol
+    submodules: dict[Symbol, CheckedModule]
+    imports: list[Import]
+    types: dict[Symbol, Any]
+    impls: list[ImplBlock]
+
+    def default_transform(self, visitor) -> Self:
+        return CheckedModule(
+            self.name,
+            transform_dict_values(self.submodules, visitor),
+            transform_collection(self.imports, visitor),
+            transform_dict_values(self.types, visitor),
+            transform_collection(self.impls, visitor),
+        )
+
+
 class Import(AstNode):
+    pass
+
+
+@dataclasses.dataclass
+class AbsoluteImport(Import):
+    module: Symbol
+    name: Symbol
+
+    def default_transform(self, visitor) -> Self:
+        return self
+
+
+@dataclasses.dataclass
+class NestedImport(Import):
     module: Symbol
     what: list[Symbol | Import]
 
     def default_transform(self, visitor) -> Self:
         what = [transform_any(w, visitor) for w in self.what]
-        return Import(self.module, what)
+        return NestedImport(self.module, what)
 
     def iter(self):
         for w in self.what:
             match w:
                 case Import():
-                    for path, name in w.iter():
-                        yield [self.module, path, name]
+                    for [*path, name] in w.iter():
+                        yield [self.module, *path, name]
                 case _:
                     yield [self.module, w]
+
+
+class RelativeImport(NestedImport):
+    pass
 
 
 @dataclasses.dataclass
@@ -131,10 +179,12 @@ class RecordDecl(AstNode):
 class ImplBlock(AstNode):
     interface: Optional[Symbol]
     type_name: Symbol
-    methods: dict[Symbol, TypeAnnotation]
+    methods: dict[Symbol, Expression]
 
     def default_transform(self, visitor) -> Self:
-        return ImplBlock(self.interface, self.type_name, transform_dict_values(self.methods, visitor))
+        return ImplBlock(
+            self.interface, self.type_name, transform_dict_values(self.methods, visitor)
+        )
 
 
 class Symbol(str, AstNode):
@@ -160,7 +210,9 @@ class TypeAnnotation(Expression):
     expr: Expression
 
     def default_transform(self, visitor) -> Self:
-        return TypeAnnotation(self.type.transform(visitor), self.expr.transform(visitor))
+        return TypeAnnotation(
+            self.type.transform(visitor), self.expr.transform(visitor)
+        )
 
 
 @dataclasses.dataclass
@@ -222,7 +274,9 @@ class Conditional(Expression):
 
     def default_transform(self, visitor) -> Self:
         return Conditional(
-            self.condition.transform(visitor), self.consequence.transform(visitor), self.alternative.transform(visitor)
+            self.condition.transform(visitor),
+            self.consequence.transform(visitor),
+            self.alternative.transform(visitor),
         )
 
 
@@ -235,7 +289,10 @@ class Let(Expression):
 
     def default_transform(self, visitor) -> Self:
         return Let(
-            self.var, self.val.transform(visitor), self.bdy.transform(visitor), transform_any(self.var_t, visitor)
+            self.var,
+            self.val.transform(visitor),
+            self.bdy.transform(visitor),
+            transform_any(self.var_t, visitor),
         )
 
 
@@ -328,7 +385,9 @@ class MatchArm(AstNode):
     body: Expression
 
     def default_transform(self, visitor) -> Self:
-        return MatchArm(transform_collection(self.pats, visitor), self.body.transform(visitor))
+        return MatchArm(
+            transform_collection(self.pats, visitor), self.body.transform(visitor)
+        )
 
 
 @dataclasses.dataclass
@@ -431,11 +490,11 @@ class FuncType(Type):
 
 
 def transform_collection(the_list, visitor, factory=list):
-    return factory(x.transform(visitor) for x in the_list)
+    return factory(transform_any(x, visitor) for x in the_list)
 
 
 def transform_dict_values(the_dict, visitor):
-    return {k: v.transform(visitor) for k, v in the_dict.items()}
+    return {k: transform_any(v, visitor) for k, v in the_dict.items()}
 
 
 def transform_optional(the_option, visitor):

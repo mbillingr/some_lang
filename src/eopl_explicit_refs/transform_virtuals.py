@@ -1,6 +1,6 @@
 import contextlib
 
-from eopl_explicit_refs import abstract_syntax as ast
+from eopl_explicit_refs import abstract_syntax as ast, type_impls
 from eopl_explicit_refs.vtable_manager import VtableManager
 
 
@@ -19,15 +19,24 @@ class Visitor:
 
     def visit(self, node: ast.AstNode):
         match node:
-            case ast.Program(mod, exp):
+            case ast.Program():
+                raise TypeError("Can't virtualize raw program. Run through type checker first")
+
+            case ast.CheckedProgram(mods, exp):
                 self.__init__()
-                mod_out = mod.default_transform(self.visit)
+                mod_out = ast.transform_dict_values(mods, self.visit)
                 exp_out = exp.transform(self.visit)
                 return ast.ExecutableProgram(mod_out, exp_out, self.vtables)
 
-            case ast.Interface(name, methods):
-                self.interfaces[name] = self.vtm.assign_virtuals(methods.keys())
+            case ast.CheckedModule(name, submodules,  imports, types, impls):
+                for name, ty in types.items():
+                    if not isinstance(ty, type_impls.InterfaceType):
+                        continue
+                    self.interfaces[ty.fully_qualified_name] = self.vtm.assign_virtuals(ty.methods.keys())
                 return node.default_transform(self.visit)
+
+            case ast.Interface(name, methods):
+                raise NotImplementedError("Unexpected interface declaration")
 
             case ast.ImplBlock(None):
                 node_out = node.default_transform(self.visit)

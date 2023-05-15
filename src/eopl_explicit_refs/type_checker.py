@@ -12,7 +12,7 @@ TEnv: TypeAlias = Env[Type]
 
 @dataclasses.dataclass
 class Context:
-    submodules: dict[str, Context] = dataclasses.field(default_factory=dict)
+    modules: dict[str, ast.CheckedModule] = dataclasses.field(default_factory=dict)
     env: TEnv = EmptyEnv()
     types: TEnv = EmptyEnv()
 
@@ -21,14 +21,14 @@ class Context:
 
     def extend_env(self, var: str, val: Type):
         return Context(
-            submodules=self.submodules,
+            modules=self.modules,
             env=self.env.extend(var, val),
             types=self.types,
         )
 
     def extend_types(self, name: str, ty: Type):
         return Context(
-            submodules=self.submodules,
+            modules=self.modules,
             env=self.env,
             types=self.types.extend(name, ty),
         )
@@ -38,7 +38,7 @@ class Context:
 
     def extend_interfaces(self, name: str, ty: t.InterfaceType):
         return Context(
-            submodules=self.submodules,
+            modules=self.modules,
             env=self.env,
             types=self.types.extend(name, ty),
         )
@@ -46,24 +46,25 @@ class Context:
 
 def check_program(pgm: ast.Program) -> ast.Program:
     ctx = Context()
-    mod, ctx = check_module(pgm.mod, ctx)
+    _, ctx = check_module(pgm.mod, ctx)
     exp, _ = infer_expr(pgm.exp, ctx)
-    return ast.Program(mod, exp)
+    return ast.CheckedProgram(ctx.modules, exp)
 
 
-def check_module(pgm: ast.Module, parent_ctx: Context) -> tuple[ast.Module, Context]:
-    ctx = Context()
+def check_module(
+    pgm: ast.Module, parent_ctx: Context
+) -> tuple[ast.CheckedModule, Context]:
+    ctx = parent_ctx
     match pgm:
         case ast.Module(mod_name, submodules, imports, interfaces, records, impls):
-            sub_out = {}
+            checked_modules = {}
             for k, v in submodules.items():
-                mod, ctx_ = check_module(v, ctx)
-                sub_out[k] = mod
-                ctx.submodules[k] = ctx_
+                mod, ctx = check_module(v, ctx)
+                checked_modules[k] = mod
 
             imports_out = []
             for imp in imports:
-                imp_, ctx = check_import(imp, ctx.submodules, ctx)
+                imp_, ctx = check_import(imp, ctx)
                 imports_out.append(imp_)
 
             for intf in interfaces:
@@ -127,35 +128,34 @@ def check_module(pgm: ast.Module, parent_ctx: Context) -> tuple[ast.Module, Cont
                     ast.ImplBlock(impl.interface, impl_on.name, methods_out)
                 )
 
-            return (
-                ast.Module(
-                    mod_name, sub_out, imports_out, interfaces, records, impls_out
-                ),
-                ctx,
+            mod_out = ast.CheckedModule(
+                mod_name,
+                checked_modules,
+                imports_out,
+                {k: v for k, v in ctx.types.items()},
+                impls_out,
             )
+            parent_ctx.modules[mod_name] = mod_out
+
+            return mod_out, ctx
 
         case other:
             raise NotImplementedError(other)
 
 
-def check_import(imp: ast.Import, submodules: dict[ast.Symbol, Context], ctx: Context):
-    module = submodules[imp.module]
-    things_out = []
-    for thing in imp.what:
-        match thing:
-            case ast.Symbol():
-                try:
-                    ctx = ctx.extend_types(thing, module.types.lookup(thing))
-                    things_out.append(thing)
-                    continue
-                except LookupError:
-                    pass
-                raise ImportError(thing)
-            case ast.Import():
-                imp_out, ctx = check_import(thing, module.submodules, ctx)
-                things_out.append(imp_out)
+def check_import(imp: ast.Import, ctx: Context):
+    match imp:
+        case ast.AbsoluteImport(module, name):
+            mod = ctx.modules[module]
+            qualname = module + "." + name
+            try:
+                ctx = ctx.extend_types(qualname, mod.types[qualname])
+            except LookupError:
+                raise ImportError(f"No {name} in {module}")
+        case _:
+            raise NotImplementedError("Unexpected import")
 
-    return ast.Import(imp.module, things_out), ctx
+    return imp, ctx
 
 
 def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:

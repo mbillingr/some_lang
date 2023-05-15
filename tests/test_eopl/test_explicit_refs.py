@@ -3,7 +3,14 @@ import json
 
 import pytest
 
-from eopl_explicit_refs import tokenizer, parser, interpreter, type_checker, transform_virtuals, rename_qualified
+from eopl_explicit_refs import (
+    tokenizer,
+    parser,
+    interpreter,
+    type_checker,
+    transform_virtuals,
+    rename_qualified,
+)
 from eopl_explicit_refs.store import PythonStore as Store
 
 
@@ -177,19 +184,23 @@ def test_type_annotations(src, expect):
         # methods
         (
             0,
-            "struct Foo [] impl Foo { method bar: Foo -> () -> Int self () => 0 }" "(the Foo []).bar ()",
+            "struct Foo [] impl Foo { method bar: Foo -> () -> Int self () => 0 }"
+            "(the Foo []).bar ()",
         ),
         (
             1,
-            "struct Foo [] impl Foo { method bar: Foo -> Int self => 1 }" "(the Foo []).bar",
+            "struct Foo [] impl Foo { method bar: Foo -> Int self => 1 }"
+            "(the Foo []).bar",
         ),
         (
             1,
-            "struct Foo [] impl Foo { method bar: Self -> Int self => 1 }" "(the Foo []).bar",
+            "struct Foo [] impl Foo { method bar: Self -> Int self => 1 }"
+            "(the Foo []).bar",
         ),
         (
             2,
-            "struct Foo [x:Int] impl Foo { method get-x: Foo -> Int self => self.x }" "(the Foo [x=2]).get-x",
+            "struct Foo [x:Int] impl Foo { method get-x: Foo -> Int self => self.x }"
+            "(the Foo [x=2]).get-x",
         ),
     ],
 )
@@ -199,7 +210,9 @@ def test_records(src, expect):
 
 def test_two_similar_records_are_not_same_type():
     with pytest.raises(TypeError):
-        evaluate("struct Foo [x: Int] struct Bar [x: Int] let bar: Bar = (the Foo [x = 3]) in bar")
+        evaluate(
+            "struct Foo [x: Int] struct Bar [x: Int] let bar: Bar = (the Foo [x = 3]) in bar"
+        )
 
 
 @pytest.mark.parametrize(
@@ -250,13 +263,21 @@ def test_impl_of_wrong_type():
 
 def test_missing_method():
     with pytest.raises(TypeError):
-        evaluate("interface Foo { method bla: Self -> Self } " "struct Bar [] " "impl Foo for Bar { } " "0")
+        evaluate(
+            "interface Foo { method bla: Self -> Self } "
+            "struct Bar [] "
+            "impl Foo for Bar { } "
+            "0"
+        )
 
 
 def test_extra_method():
     with pytest.raises(TypeError):
         evaluate(
-            "interface Foo { } " "struct Bar [] " "impl Foo for Bar { method bla: Self -> Self self => self } " "0"
+            "interface Foo { } "
+            "struct Bar [] "
+            "impl Foo for Bar { method bla: Self -> Self self => self } "
+            "0"
         )
 
 
@@ -267,19 +288,19 @@ def test_extra_method():
         (0, "module outer { module inner { } } 0"),
         (
             (),
-            "module my-mod { struct Foo [] } import my-mod.Foo (the Foo [])",
+            "module my-mod { struct Foo [] } import .my-mod.Foo (the Foo [])",
         ),
         (
             (),
-            "module my-mod { struct Foo [] struct Bar [] } import my-mod.[Foo Bar] (the Foo [])",
+            "module my-mod { struct Foo [] struct Bar [] } import .my-mod.[Foo Bar] (the Foo [])",
         ),
         (
             0,
-            "module my-mod { interface Foo {} } import my-mod.Foo struct Bar [] impl Foo for Bar {} 0",
+            "module my-mod { interface Foo {} } import .my-mod.Foo struct Bar [] impl Foo for Bar {} 0",
         ),
         (
             (),
-            "module outer { module inner { struct Foo [] } } import outer.inner.Foo (the Foo [])",
+            "module outer { module inner { struct Foo [] } } import .outer.inner.Foo (the Foo [])",
         ),
         (
             0,
@@ -287,7 +308,7 @@ def test_extra_method():
         ),
         (
             0,
-            "module outer { module inner { struct Foo [] } import outer.inner.Foo } 0",
+            "module outer { module inner { struct Foo [] } import __main__.outer.inner.Foo } 0",
         ),
         (
             1,
@@ -295,7 +316,7 @@ def test_extra_method():
             "    struct Bar [] "
             "    impl Bar { method x: Self -> Int self => 1 }"
             "}"
-            "import my-mod.Bar (the Bar []).x",
+            "import .my-mod.Bar (the Bar []).x",
         ),
         (
             2,
@@ -304,7 +325,7 @@ def test_extra_method():
             "    struct Bar [] "
             "    impl Foo for Bar { method x: Self -> Int self => 2 }"
             "}"
-            "import my-mod.[Foo Bar] (the Foo (the Bar [])).x",
+            "import .my-mod.[Foo Bar] (the Foo (the Bar [])).x",
         ),
         (
             2,
@@ -315,7 +336,7 @@ def test_extra_method():
             "    struct Fuzz []"
             "    impl Fuzz { method y: Self -> Foo self => (the Bar []) }"
             "}"
-            "import my-mod.[Foo Fuzz] (the Fuzz []).y.x",
+            "import .my-mod.[Foo Fuzz] (the Fuzz []).y.x",
         ),
     ],
 )
@@ -331,10 +352,10 @@ def test_module_scoping():
 def evaluate(src):
     token_stream = tokenizer.default_tokenizer(src)
     program = parser.parse_program(token_stream)
-    program = program.transform(visitor=lambda _: NotImplemented)
+    program = rename_qualified.rename_qualified(program)
+    # print(json.dumps(program.to_dict(), indent=4))
     checked = type_checker.check_program(program)
-    checked = rename_qualified.rename_qualified(checked)
-    print(json.dumps(checked.to_dict(), indent=4))
     checked = transform_virtuals.transform_virtuals(checked)
+    # print(json.dumps(checked.to_dict(), indent=4))
     runner = interpreter.analyze_program(checked)
     return runner(Store())
