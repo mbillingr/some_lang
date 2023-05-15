@@ -14,7 +14,6 @@ TEnv: TypeAlias = Env[Type]
 class Context:
     submodules: dict[str, Context] = dataclasses.field(default_factory=dict)
     env: TEnv = EmptyEnv()
-    interfaces: Env[t.InterfaceType] = EmptyEnv()
     types: TEnv = EmptyEnv()
 
     def check(self, actual_t: Type, expected_t: Type) -> bool:
@@ -24,14 +23,13 @@ class Context:
         return Context(
             submodules=self.submodules,
             env=self.env.extend(var, val),
-            interfaces=self.interfaces,
             types=self.types,
         )
 
     def extend_types(self, name: str, ty: Type):
         return Context(
+            submodules=self.submodules,
             env=self.env,
-            interfaces=self.interfaces,
             types=self.types.extend(name, ty),
         )
 
@@ -40,9 +38,9 @@ class Context:
 
     def extend_interfaces(self, name: str, ty: t.InterfaceType):
         return Context(
+            submodules=self.submodules,
             env=self.env,
-            interfaces=self.interfaces.extend(name, ty),
-            types=self.types,
+            types=self.types.extend(name, ty),
         )
 
 
@@ -76,7 +74,7 @@ def check_module(pgm: ast.Module, parent_ctx: Context) -> tuple[ast.Module, Cont
                 ctx = ctx.extend_types(record.name, t.NamedType(record.name, None))
 
             for intf in interfaces:
-                interface_type = ctx.interfaces.lookup(intf.name)
+                interface_type = ctx.types.lookup(intf.name)
                 methods = {}
                 intf_ctx = ctx.extend_types("Self", interface_type)
                 for mtn, mts in intf.methods.items():
@@ -84,13 +82,15 @@ def check_module(pgm: ast.Module, parent_ctx: Context) -> tuple[ast.Module, Cont
                 interface_type.set_methods(methods)
 
             for record in records:
-                ctx.types.lookup(record.name).set_type(eval_type(ast.RecordType(record.fields), ctx))
+                ctx.types.lookup(record.name).set_type(
+                    eval_type(ast.RecordType(record.fields), ctx)
+                )
 
             impls_out = []
             for impl in impls:
                 impl_on = ctx.types.lookup(impl.type_name)
 
-                interface_type = impl.interface and ctx.interfaces.lookup(impl.interface)
+                interface_type = impl.interface and ctx.types.lookup(impl.interface)
 
                 if interface_type is not None:
                     missing_methods = set(interface_type.methods) - set(impl.methods)
@@ -101,7 +101,9 @@ def check_module(pgm: ast.Module, parent_ctx: Context) -> tuple[ast.Module, Cont
                             text.append(f"is missing {missing_methods}")
                         if extra_methods:
                             text.append(f"includes unexpected {extra_methods}")
-                        raise TypeError(f"Implementation of {impl.interface} on {impl.type_name} {'and'.join(text)}")
+                        raise TypeError(
+                            f"Implementation of {impl.interface} on {impl.type_name} {'and'.join(text)}"
+                        )
 
                     impl_on.declare_impl(interface_type)
 
@@ -121,10 +123,14 @@ def check_module(pgm: ast.Module, parent_ctx: Context) -> tuple[ast.Module, Cont
                     body = check_expr(func.expr, signature, ctx)
                     methods_out[method_name] = body
 
-                impls_out.append(ast.ImplBlock(impl.interface, impl_on.name, methods_out))
+                impls_out.append(
+                    ast.ImplBlock(impl.interface, impl_on.name, methods_out)
+                )
 
             return (
-                ast.Module(mod_name, sub_out, imports_out, interfaces, records, impls_out),
+                ast.Module(
+                    mod_name, sub_out, imports_out, interfaces, records, impls_out
+                ),
                 ctx,
             )
 
@@ -138,12 +144,6 @@ def check_import(imp: ast.Import, submodules: dict[ast.Symbol, Context], ctx: Co
     for thing in imp.what:
         match thing:
             case ast.Symbol():
-                try:
-                    ctx = ctx.extend_interfaces(thing, module.interfaces.lookup(thing))
-                    things_out.append(thing)
-                    continue
-                except LookupError:
-                    pass
                 try:
                     ctx = ctx.extend_types(thing, module.types.lookup(thing))
                     things_out.append(thing)
@@ -193,7 +193,12 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
             return ast.BinOp(lhs, rhs, op)
 
         case t.FuncType(_, _), ast.Function(arms):
-            return ast.Function([ast.MatchArm(arm.pats, check_matcharm(arm.pats, arm.body, typ, ctx)) for arm in arms])
+            return ast.Function(
+                [
+                    ast.MatchArm(arm.pats, check_matcharm(arm.pats, arm.body, typ, ctx))
+                    for arm in arms
+                ]
+            )
 
         case _, ast.Application(fun, arg):
             fun, fun_t = infer_expr(fun, ctx)
@@ -217,7 +222,9 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
             extra_fields = v_fields.keys() - t_fields.keys()
             missing_fields = t_fields.keys() - v_fields.keys()
             if extra_fields or missing_fields:
-                raise TypeError(f"extra fields: {extra_fields}, missing fields: {missing_fields}")
+                raise TypeError(
+                    f"extra fields: {extra_fields}, missing fields: {missing_fields}"
+                )
 
             slots = [check_expr(v_fields[f], t_fields[f], ctx) for f in t_fields]
 
@@ -287,7 +294,9 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]
             return ast.BinOp(lhs, rhs, op), t.IntType
 
         case ast.Function(patterns):
-            raise InferenceError(f"can't infer function signature for {exp}. Please provide a type hint.")
+            raise InferenceError(
+                f"can't infer function signature for {exp}. Please provide a type hint."
+            )
 
         case ast.Application(fun, arg):
             fun, fun_t = infer_expr(fun, ctx)
@@ -383,7 +392,9 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]
             raise NotImplementedError(exp)
 
 
-def check_matcharm(patterns: list[ast.Pattern], body: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
+def check_matcharm(
+    patterns: list[ast.Pattern], body: ast.Expression, typ: Type, ctx: Context
+) -> ast.Expression:
     match typ, patterns:
         case t.FuncType(arg_t, res_t), [p0, *p_rest]:
             bindings = check_pattern(p0, arg_t, ctx)
@@ -414,10 +425,7 @@ def check_pattern(pat: ast.Pattern, typ: Type, env: TEnv) -> dict[str, Type]:
 def eval_type(tx: ast.Type, ctx: Context) -> Type:
     match tx:
         case ast.TypeRef(name):
-            try:
-                return ctx.types.lookup(name)
-            except LookupError:
-                return ctx.interfaces.lookup(name)
+            return ctx.types.lookup(name)
         case ast.NullType():
             return t.NullType()
         case ast.BoolType():
