@@ -245,6 +245,15 @@ def test_two_similar_records_are_not_same_type():
             "let get-x: Foo -> Int = fn obj => obj.x in "
             "    [(get-x a), (get-x b)]",
         ),
+        (
+            42,
+            "interface Foo { method x: Self -> Int } "
+            "struct Bar [] "
+            "impl Foo for Bar { method x: Self -> Int self => 42 }"
+            "struct Fuzz []"
+            "impl Fuzz { method y: Self -> Foo self => (the Bar []) }"
+            "(the Fuzz []).y.x",
+        ),
     ],
 )
 def test_interfaces(src, expect):
@@ -328,11 +337,11 @@ def test_extra_method():
             "import .my-mod.[Foo Bar] (the Foo (the Bar [])).x",
         ),
         (
-            2,
+            42,
             "module my-mod { "
             "    interface Foo { method x: Self -> Int } "
             "    struct Bar [] "
-            "    impl Foo for Bar { method x: Self -> Int self => 2 }"
+            "    impl Foo for Bar { method x: Self -> Int self => 42 }"
             "    struct Fuzz []"
             "    impl Fuzz { method y: Self -> Foo self => (the Bar []) }"
             "}"
@@ -341,6 +350,26 @@ def test_extra_method():
     ],
 )
 def test_modules(src, expect):
+    assert evaluate(src) == expect
+
+
+@pytest.mark.parametrize(
+    "expect, src",
+    [
+        (
+            42,
+            "module my-mod { "
+            "    interface Foo { method x: Self -> Int } "
+            "    struct Bar [] "
+            "    impl Foo for Bar { method x: Self -> Int self => 42 }"
+            "    struct Fuzz []"
+            "    impl Fuzz { method y: Self -> Foo self => (the Bar []) }"
+            "}"
+            "import .my-mod.[Foo Fuzz] (the Fuzz []).y.x",
+        ),
+    ],
+)
+def test_dbg(src, expect):
     assert evaluate(src) == expect
 
 
@@ -353,7 +382,7 @@ def evaluate(src):
     token_stream = tokenizer.default_tokenizer(src)
     program = parser.parse_program(token_stream)
     program = rename_qualified.rename_qualified(program)
-    # print(json.dumps(program.to_dict(), indent=4))
+    print(json.dumps(program.to_dict(), indent=4))
     checked = type_checker.check_program(program)
     checked = transform_virtuals.transform_virtuals(checked)
     # print(json.dumps(checked.to_dict(), indent=4))
