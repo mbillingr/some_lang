@@ -122,7 +122,6 @@ def check_module(pgm: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedModul
 
             mod_out = ast.CheckedModule(
                 mod_name,
-                imports_out,
                 {k: v for k, v in ctx.types.items()},
                 impls_out,
             )

@@ -102,14 +102,12 @@ class Module(AstNode):
 @dataclasses.dataclass
 class CheckedModule(AstNode):
     name: Symbol
-    imports: list[Import]
     types: dict[Symbol, Any]
     impls: list[ImplBlock]
 
     def default_transform(self, visitor) -> Self:
         return CheckedModule(
             self.name,
-            transform_collection(self.imports, visitor),
             transform_dict_values(self.types, visitor),
             transform_collection(self.impls, visitor),
         )

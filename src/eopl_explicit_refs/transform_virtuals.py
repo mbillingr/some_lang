@@ -28,7 +28,7 @@ class Visitor:
                 exp_out = exp.transform(self.visit)
                 return ast.ExecutableProgram(mod_out, exp_out, self.vtables)
 
-            case ast.CheckedModule(name, imports, types, impls):
+            case ast.CheckedModule(name, types, impls):
                 for name, ty in types.items():
                     if not isinstance(ty, type_impls.InterfaceType):
                         continue

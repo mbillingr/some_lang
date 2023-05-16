@@ -64,10 +64,7 @@ def analyze_module(mod: ast.CheckedModule, ctx: Context) -> tuple[Module, Contex
     match mod:
         case ast.Module():
             raise TypeError("Cannot run unchecked module")
-        case ast.CheckedModule(_, imports, types, impls):
-            for imp in imports:
-                ctx = analyze_import(imp, ctx)
-
+        case ast.CheckedModule(_, types, impls):
             methods = []
             for impl in impls:
                 for method_name, method in impl.methods.items():
@@ -81,18 +78,6 @@ def analyze_module(mod: ast.CheckedModule, ctx: Context) -> tuple[Module, Contex
             mod_out = Module(methods)
 
             return mod_out, ctx
-
-
-def analyze_import(imp: ast.AbsoluteImport, ctx: Context) -> Context:
-    return ctx
-    # match ctx.
-    # module = sub_mods[imp.module]
-    # for thing in imp.what:
-    #    match thing:
-    #        case _:
-    #            #raise NotImplementedError(thing)
-    #            pass
-    # return ctx
 
 
 def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
