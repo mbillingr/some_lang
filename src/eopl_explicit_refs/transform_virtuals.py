@@ -24,9 +24,10 @@ class Visitor:
 
             case ast.CheckedProgram(mods, exp):
                 self.__init__()
-                mod_out = ast.transform_dict_values(mods, self.visit)
+                _ = ast.transform_dict_values(mods, self.visit)
                 exp_out = exp.transform(self.visit)
-                return ast.ExecutableProgram(mod_out, self.static_functions, exp_out, self.vtables)
+                funcs = [(n, f) for n, f in zip(self.static_funcnames, self.static_functions)]
+                return ast.ExecutableProgram(funcs, exp_out, self.vtables)
 
             case ast.CheckedModule(name, types, impls):
                 for name, ty in types.items():

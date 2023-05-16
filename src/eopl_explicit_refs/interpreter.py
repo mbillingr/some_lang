@@ -34,11 +34,6 @@ def analyze_program(pgm: ast.ExecutableProgram) -> Any:
     ctx.vtables = {k: i for i, k in enumerate(pgm.vtables.keys())}
     vtables = list(pgm.vtables.values())
 
-    mods = []
-    for mod in pgm.modules.values():
-        mod_, ctx = analyze_module(mod, ctx)
-        mods.append(mod_)
-
     methods = analyze_static_functions(pgm.functions, ctx)
 
     exp = analyze_expr(pgm.exp, ctx, tail=False)
@@ -81,8 +76,11 @@ def analyze_module(mod: ast.CheckedModule, ctx: Context) -> tuple[Module, Contex
             return mod_out, ctx
 
 
-def analyze_static_functions(funcs: Iterable[ast.Function], ctx: Context) -> Callable:
-    bodies = [analyze_matcharms(f.patterns, ctx) for f in funcs]
+def analyze_static_functions(funcs: Iterable[tuple[ast.Symbol, ast.Function]], ctx: Context) -> Callable:
+    for name, _ in funcs:
+        ctx.register_method(name)
+
+    bodies = [analyze_matcharms(f.patterns, ctx) for _, f in funcs]
 
     def initialization(store):
         for body in bodies:
