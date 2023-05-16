@@ -26,8 +26,7 @@ class Visitor:
                 self.__init__()
                 _ = ast.transform_dict_values(mods, self.visit)
                 exp_out = exp.transform(self.visit)
-                funcs = [(n, f) for n, f in zip(self.static_funcnames, self.static_functions)]
-                return ast.ExecutableProgram(funcs, exp_out, self.vtables)
+                return ast.ExecutableProgram(self.static_functions, exp_out, self.vtables)
 
             case ast.CheckedModule(name, types, impls):
                 for name, ty in types.items():
@@ -56,6 +55,9 @@ class Visitor:
                         ]
 
                 return node_out
+
+            case ast.GetMethod(name):
+                return ast.GetMethod(self.static_funcnames[name])
 
             case ast.GetNamedVirtual(obj, interface, method_name):
                 tbl, idx = self.interfaces[interface][method_name]

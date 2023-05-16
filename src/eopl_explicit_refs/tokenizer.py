@@ -151,7 +151,7 @@ def ident_first():
 
 
 def ident_rest():
-    return ident_first() | OneOf(IDENT_SYMS)
+    return ident_first() | OneOf(IDENT_SYMS) | OneOf(DIGITS)
 
 
 def num():

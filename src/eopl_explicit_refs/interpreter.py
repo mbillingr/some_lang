@@ -13,19 +13,10 @@ UNDEFINED = object()
 @dataclasses.dataclass
 class Context:
     env: Env = EmptyEnv()
-    method_names: dict[str, int] = dataclasses.field(default_factory=dict)
     vtables: dict[str, int] = dataclasses.field(default_factory=dict)
 
     def extend_env(self, *vars: str) -> Self:
-        return Context(env=self.env.extend(*vars), method_names=self.method_names, vtables=self.vtables)
-
-    def find_method(self, name: str) -> int:
-        return self.method_names[name]
-
-    def register_method(self, name: str) -> int:
-        index = len(self.method_names)
-        self.method_names[name] = index
-        return index
+        return Context(env=self.env.extend(*vars), vtables=self.vtables)
 
 
 def analyze_program(pgm: ast.ExecutableProgram) -> Any:
@@ -76,11 +67,8 @@ def analyze_module(mod: ast.CheckedModule, ctx: Context) -> tuple[Module, Contex
             return mod_out, ctx
 
 
-def analyze_static_functions(funcs: Iterable[tuple[ast.Symbol, ast.Function]], ctx: Context) -> Callable:
-    for name, _ in funcs:
-        ctx.register_method(name)
-
-    bodies = [analyze_matcharms(f.patterns, ctx) for _, f in funcs]
+def analyze_static_functions(funcs: Iterable[ast.Function], ctx: Context) -> Callable:
+    bodies = [analyze_matcharms(f.patterns, ctx) for f in funcs]
 
     def initialization(store):
         for body in bodies:
@@ -169,8 +157,8 @@ def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
 
             return the_function
 
-        case ast.GetMethod(name):
-            idx = ctx.find_method(name)
+        case ast.GetMethod(idx):
+            assert isinstance(idx, int)
             return lambda store: store.get_method(idx)
 
         case ast.GetVirtual(obj, table, vidx):

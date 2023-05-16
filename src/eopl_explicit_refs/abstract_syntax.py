@@ -71,7 +71,7 @@ class CheckedProgram(AstNode):
 
 @dataclasses.dataclass
 class ExecutableProgram(AstNode):
-    functions: list[tuple[Symbol, Function]]
+    functions: list[Function]
     exp: Expression
     vtables: dict[str, dict[int, dict[int, int]]]
 
@@ -341,7 +341,7 @@ class GetSlot(Expression):
 
 @dataclasses.dataclass
 class GetMethod(Expression):
-    name: str
+    name_or_index: str | int
 
     def default_transform(self, visitor) -> Self:
         return self

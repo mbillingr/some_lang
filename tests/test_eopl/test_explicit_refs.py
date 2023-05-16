@@ -248,6 +248,20 @@ def test_two_similar_records_are_not_same_type():
             "impl Fuzz { method y: Self -> Foo self => (the Bar []) }"
             "(the Fuzz []).y.x",
         ),
+        (
+            (111, (112, (121, (122, (211, (212, (221, (222, ())))))))),
+            "interface A { method a1: Self -> Int method a2: Self -> Int } "
+            "interface B { method b1: Self -> Int method b2: Self -> Int } "
+            "struct X [] "
+            "struct Y [] "
+            "impl A for Y { method a1: Self -> Int self => 211 method a2: Self -> Int self => 212 }"
+            "impl B for X { method b1: Self -> Int self => 121 method b2: Self -> Int self => 122 }"
+            "impl B for Y { method b1: Self -> Int self => 221 method b2: Self -> Int self => 222 }"
+            "impl A for X { method a1: Self -> Int self => 111 method a2: Self -> Int self => 112 }"
+            "let x: X = [] in "
+            "let y: Y = [] in"
+            "  [x.a1, x.a2, x.b1, x.b2, y.a1, y.a2, y.b1, y.b2] ",
+        ),
     ],
 )
 def test_interfaces(src, expect):
@@ -350,7 +364,7 @@ def evaluate(src):
     program = rename_qualified.rename_qualified(program)
     print(json.dumps(program.to_dict(), indent=4))
     checked = type_checker.check_program(program)
-    checked = transform_virtuals.transform_virtuals(checked)
-    # print(json.dumps(checked.to_dict(), indent=4))
-    runner = interpreter.analyze_program(checked)
+    execable = transform_virtuals.transform_virtuals(checked)
+    print(json.dumps(execable.to_dict(), indent=4))
+    runner = interpreter.analyze_program(execable)
     return runner(Store())
