@@ -355,14 +355,17 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]
             obj, obj_t = infer_expr(obj, ctx)
 
             match obj_t.find_method(fld):
+                case None:
+                    pass
                 case ("virtual", interface, signature):
                     result = ast.GetNamedVirtual(obj, interface, fld)
                     return result, signature.ret
-                case None:
-                    pass
                 case fqn, signature:
                     result = ast.Application(ast.GetMethod(fqn), obj)
                     return result, signature.ret
+
+            if isinstance(obj_t, t.InterfaceType):
+                raise TypeError(f"{obj_t} has no method {fld}")
 
             rec_rt = resolve_type(obj_t)
             if not isinstance(rec_rt, t.RecordType):

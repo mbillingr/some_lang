@@ -127,10 +127,11 @@ class InterfaceType(Type):
         self.methods = methods
 
     def find_method(self, name: str) -> Optional[tuple[Type, int]]:
-        return ("virtual", self.fully_qualified_name, self.methods[name])
+        method = self.methods.get(name)
+        return method and ("virtual", self.fully_qualified_name, method)
 
     def __str__(self):
-        return f"{self.name}"
+        return f"{self.fully_qualified_name}"
 
     def __eq__(self, other):
         return self is other or other.implements(self)
