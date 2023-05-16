@@ -1,7 +1,7 @@
 from __future__ import annotations
 import abc
 import dataclasses
-from typing import Optional
+from typing import Optional, Any
 
 from eopl_explicit_refs.abstract_syntax import Symbol
 from eopl_explicit_refs.vtable_manager import VtableManager, VtableIndex
@@ -17,11 +17,8 @@ class Type(abc.ABC):
     def implements(self, ift: InterfaceType) -> bool:
         return ift in self.implemented_interfaces
 
-    def find_method(self, name: str) -> Optional[tuple[Type, int]]:
+    def find_method(self, name: str) -> Optional[Any]:
         return None
-
-    def add_method(self, name: str, signature: Type):
-        raise NotImplementedError()
 
 
 class NamedType(Type):
@@ -37,11 +34,11 @@ class NamedType(Type):
         assert self.type is None
         self.type = ty
 
-    def find_method(self, name: str) -> Optional[tuple[Type, int]]:
+    def find_method(self, name: str) -> Optional[Any]:
         return self._methods.get(name)
 
-    def add_method(self, name: str, signature: Type):
-        self._methods[name] = signature
+    def add_method(self, name: str, fqn: str, signature: Type):
+        self._methods[name] = (fqn, signature)
 
     def __repr__(self):
         return self.name

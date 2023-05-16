@@ -102,6 +102,8 @@ def check_module(pgm: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedModul
 
                     impl_on.declare_impl(interface_type)
 
+                name_parts = [impl.type_name, "" if impl.interface is None else impl.interface]
+
                 impl_ctx = ctx.extend_types("Self", impl_on)
                 for method_name, func in impl.methods.items():
                     signature = eval_type(func.type, impl_ctx)
@@ -109,11 +111,12 @@ def check_module(pgm: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedModul
                         expected_signature = interface_type.methods[method_name]
                         if not ctx.check(signature, expected_signature):
                             raise TypeError(signature, expected_signature)
-                    impl_on.add_method(method_name, signature)
+                    method_fqn = ".".join([*name_parts, method_name])
+                    impl_on.add_method(method_name, method_fqn, signature)
 
                 methods_out = {}
                 for method_name, func in impl.methods.items():
-                    signature = impl_on.find_method(method_name)
+                    _, signature = impl_on.find_method(method_name)
 
                     body = check_expr(func.expr, signature, ctx)
                     methods_out[method_name] = body
@@ -357,8 +360,8 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]
                     return result, signature.ret
                 case None:
                     pass
-                case signature:
-                    result = ast.Application(ast.GetMethod(fld), obj)
+                case fqn, signature:
+                    result = ast.Application(ast.GetMethod(fqn), obj)
                     return result, signature.ret
 
             rec_rt = resolve_type(obj_t)
