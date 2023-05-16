@@ -1,9 +1,9 @@
 import nested.lib.Y  # sibling import
-import :a-lib.X      # absolute import
+import :a-lib.hello  # absolute import
 import .foo.Bar      # relative import
 
 module foo {
   struct Bar []
 }
 
-42
+hello ()

@@ -96,6 +96,10 @@ def check_module(module: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedMo
             for record in records:
                 ctx = ctx.extend_types(record.name, t.NamedType(record.name, None))
 
+            for fn in funcs:
+                signature = eval_type(fn.func.type, ctx)
+                ctx = ctx.extend_env(fn.name, signature)
+
             for intf in interfaces:
                 interface_type = ctx.types.lookup(intf.name)
                 methods = {}
@@ -147,21 +151,20 @@ def check_module(module: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedMo
 
                 impls_out.append(ast.ImplBlock(impl.interface, impl_on.name, methods_out))
 
-            for fn in funcs:
-                signature = eval_type(fn.func.type, ctx)
-                ctx = ctx.extend_env(fn.name, signature)
-
-            funcs_out = []
+            funcs_out = {}
+            fsigs_out = {}
             for fn in funcs:
                 signature = ctx.env.lookup(fn.name)
                 body = check_expr(fn.func.expr, signature, ctx)
-                funcs_out.append(ast.FunctionDefinition(fn.name, body))
+                funcs_out[fn.name] = body
+                fsigs_out[fn.name] = signature
 
             mod_out = ast.CheckedModule(
                 mod_name,
                 {k: v for k, v in ctx.types.items()},
                 impls_out,
                 funcs_out,
+                fsigs_out,
             )
             parent_ctx.modules[mod_name] = mod_out
 
@@ -176,14 +179,22 @@ def check_import(imp: ast.Import, ctx: Context):
         case ast.AbsoluteImport(module, name):
             mod = ctx.find_module(module)
             qualname = module + "." + name
+
             try:
                 ctx = ctx.extend_types(qualname, mod.types[qualname])
+                return imp, ctx
             except LookupError:
-                raise ImportError(f"No {name} in {module}")
+                pass
+
+            try:
+                ctx = ctx.extend_env(qualname, mod.fsigs[qualname])
+                return imp, ctx
+            except LookupError:
+                pass
+
+            raise ImportError(f"No {name} in {module}")
         case _:
             raise NotImplementedError("Unexpected import")
-
-    return imp, ctx
 
 
 def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:

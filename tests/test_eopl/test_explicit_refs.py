@@ -310,6 +310,10 @@ def test_extra_method():
             "module my-mod { interface Foo {} } import .my-mod.Foo struct Bar [] impl Foo for Bar {} 0",
         ),
         (
+            0,
+            "module my-mod { fn foo: Int -> Int x => x; } import .my-mod.foo foo 0",
+        ),
+        (
             (),
             "module outer { module inner { struct Foo [] } } import .outer.inner.Foo (the Foo [])",
         ),

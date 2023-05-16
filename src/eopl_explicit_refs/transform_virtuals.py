@@ -28,11 +28,15 @@ class Visitor:
                 exp_out = exp.transform(self.visit)
                 return ast.ExecutableProgram(self.static_functions, exp_out, self.vtables)
 
-            case ast.CheckedModule(name, types, impls):
+            case ast.CheckedModule(name, types, impls, funcs):
                 for name, ty in types.items():
                     if not isinstance(ty, type_impls.InterfaceType):
                         continue
                     self._register_interface(ty)
+
+                for name, fn in funcs.items():
+                    self._register_function(name, fn)
+
                 return node.default_transform(self.visit)
 
             case ast.Interface(name, methods):
@@ -54,11 +58,6 @@ class Visitor:
                             self.fully_qualified_method_name(method_name, node.type_name, qual_ifname)
                         ]
 
-                return node_out
-
-            case ast.FunctionDefinition(name, func):
-                node_out = node.default_transform(self.visit)
-                self._register_function(name, func)
                 return node_out
 
             case ast.GetMethod(name) | ast.ToplevelRef(name):

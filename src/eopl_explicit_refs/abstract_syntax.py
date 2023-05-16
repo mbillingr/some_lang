@@ -106,14 +106,16 @@ class CheckedModule(AstNode):
     name: Symbol
     types: dict[Symbol, Any]
     impls: list[ImplBlock]
-    funcs: list[FunctionDefinition]
+    funcs: dict[Symbol, Function]
+    fsigs: dict[Symbol, Any]
 
     def default_transform(self, visitor) -> Self:
         return CheckedModule(
             self.name,
             transform_dict_values(self.types, visitor),
             transform_collection(self.impls, visitor),
-            transform_collection(self.funcs, visitor),
+            transform_dict_values(self.funcs, visitor),
+            transform_dict_values(self.fsigs, visitor),
         )
 
 
