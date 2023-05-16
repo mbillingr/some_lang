@@ -66,9 +66,7 @@ class CheckedProgram(AstNode):
     exp: Expression
 
     def default_transform(self, visitor) -> Self:
-        return Program(
-            transform_dict_values(self.modules, visitor), self.exp.transform(visitor)
-        )
+        return Program(transform_dict_values(self.modules, visitor), self.exp.transform(visitor))
 
 
 @dataclasses.dataclass
@@ -78,9 +76,7 @@ class ExecutableProgram(AstNode):
     vtables: dict[str, dict[int, dict[int, int]]]
 
     def default_transform(self, visitor) -> Self:
-        return ExecutableProgram(
-            self.mod.transform(visitor), self.exp.transform(visitor)
-        )
+        return ExecutableProgram(self.mod.transform(visitor), self.exp.transform(visitor))
 
 
 @dataclasses.dataclass
@@ -106,7 +102,6 @@ class Module(AstNode):
 @dataclasses.dataclass
 class CheckedModule(AstNode):
     name: Symbol
-    submodules: dict[Symbol, CheckedModule]
     imports: list[Import]
     types: dict[Symbol, Any]
     impls: list[ImplBlock]
@@ -114,7 +109,6 @@ class CheckedModule(AstNode):
     def default_transform(self, visitor) -> Self:
         return CheckedModule(
             self.name,
-            transform_dict_values(self.submodules, visitor),
             transform_collection(self.imports, visitor),
             transform_dict_values(self.types, visitor),
             transform_collection(self.impls, visitor),
@@ -182,9 +176,7 @@ class ImplBlock(AstNode):
     methods: dict[Symbol, Expression]
 
     def default_transform(self, visitor) -> Self:
-        return ImplBlock(
-            self.interface, self.type_name, transform_dict_values(self.methods, visitor)
-        )
+        return ImplBlock(self.interface, self.type_name, transform_dict_values(self.methods, visitor))
 
 
 class Symbol(str, AstNode):
@@ -210,9 +202,7 @@ class TypeAnnotation(Expression):
     expr: Expression
 
     def default_transform(self, visitor) -> Self:
-        return TypeAnnotation(
-            self.type.transform(visitor), self.expr.transform(visitor)
-        )
+        return TypeAnnotation(self.type.transform(visitor), self.expr.transform(visitor))
 
 
 @dataclasses.dataclass
@@ -385,9 +375,7 @@ class MatchArm(AstNode):
     body: Expression
 
     def default_transform(self, visitor) -> Self:
-        return MatchArm(
-            transform_collection(self.pats, visitor), self.body.transform(visitor)
-        )
+        return MatchArm(transform_collection(self.pats, visitor), self.body.transform(visitor))
 
 
 @dataclasses.dataclass

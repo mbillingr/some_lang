@@ -53,28 +53,20 @@ def analyze_program(pgm: ast.ExecutableProgram) -> Any:
 
 @dataclasses.dataclass
 class Module:
-    sub_modules: dict[str, Module] = dataclasses.field(default_factory=dict)
     methods: list[Closure] = dataclasses.field(default_factory=list)
 
     def __call__(self, store):
-        for sm in self.sub_modules.values():
-            sm(store)
         for m in self.methods:
             store.add_method(m)
 
 
-def analyze_module(mod: ast.Module, ctx: Context) -> tuple[Module, Context]:
+def analyze_module(mod: ast.CheckedModule, ctx: Context) -> tuple[Module, Context]:
     match mod:
         case ast.Module():
             raise TypeError("Cannot run unchecked module")
-        case ast.CheckedModule(_, submodules, imports, types, impls):
-            sub_mods = {}
-            for k, m in submodules.items():
-                sm, ctx = analyze_module(m, ctx)
-                sub_mods[k] = sm
-
+        case ast.CheckedModule(_, imports, types, impls):
             for imp in imports:
-                ctx = analyze_import(imp, sub_mods, ctx)
+                ctx = analyze_import(imp, ctx)
 
             methods = []
             for impl in impls:
@@ -86,21 +78,21 @@ def analyze_module(mod: ast.Module, ctx: Context) -> tuple[Module, Context]:
                     ctx.method_names[method_name] = idx
                     methods.append(Closure(ctx, arms))
 
-            mod_out = Module(sub_mods, methods)
+            mod_out = Module(methods)
 
             return mod_out, ctx
 
 
-def analyze_import(imp: ast.AbsoluteImport, sub_mods: dict[ast.Symbol, Module], ctx: Context) -> Context:
+def analyze_import(imp: ast.AbsoluteImport, ctx: Context) -> Context:
     return ctx
-    #match ctx.
-    #module = sub_mods[imp.module]
-    #for thing in imp.what:
+    # match ctx.
+    # module = sub_mods[imp.module]
+    # for thing in imp.what:
     #    match thing:
     #        case _:
     #            #raise NotImplementedError(thing)
     #            pass
-    #return ctx
+    # return ctx
 
 
 def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:

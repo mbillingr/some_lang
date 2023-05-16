@@ -51,9 +51,7 @@ def check_program(pgm: ast.Program) -> ast.Program:
     return ast.CheckedProgram(ctx.modules, exp)
 
 
-def check_module(
-    pgm: ast.Module, parent_ctx: Context
-) -> tuple[ast.CheckedModule, Context]:
+def check_module(pgm: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedModule, Context]:
     ctx = parent_ctx
     match pgm:
         case ast.Module(mod_name, submodules, imports, interfaces, records, impls):
@@ -83,9 +81,7 @@ def check_module(
                 interface_type.set_methods(methods)
 
             for record in records:
-                ctx.types.lookup(record.name).set_type(
-                    eval_type(ast.RecordType(record.fields), ctx)
-                )
+                ctx.types.lookup(record.name).set_type(eval_type(ast.RecordType(record.fields), ctx))
 
             impls_out = []
             for impl in impls:
@@ -102,9 +98,7 @@ def check_module(
                             text.append(f"is missing {missing_methods}")
                         if extra_methods:
                             text.append(f"includes unexpected {extra_methods}")
-                        raise TypeError(
-                            f"Implementation of {impl.interface} on {impl.type_name} {'and'.join(text)}"
-                        )
+                        raise TypeError(f"Implementation of {impl.interface} on {impl.type_name} {'and'.join(text)}")
 
                     impl_on.declare_impl(interface_type)
 
@@ -124,13 +118,10 @@ def check_module(
                     body = check_expr(func.expr, signature, ctx)
                     methods_out[method_name] = body
 
-                impls_out.append(
-                    ast.ImplBlock(impl.interface, impl_on.name, methods_out)
-                )
+                impls_out.append(ast.ImplBlock(impl.interface, impl_on.name, methods_out))
 
             mod_out = ast.CheckedModule(
                 mod_name,
-                checked_modules,
                 imports_out,
                 {k: v for k, v in ctx.types.items()},
                 impls_out,
@@ -193,12 +184,7 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
             return ast.BinOp(lhs, rhs, op)
 
         case t.FuncType(_, _), ast.Function(arms):
-            return ast.Function(
-                [
-                    ast.MatchArm(arm.pats, check_matcharm(arm.pats, arm.body, typ, ctx))
-                    for arm in arms
-                ]
-            )
+            return ast.Function([ast.MatchArm(arm.pats, check_matcharm(arm.pats, arm.body, typ, ctx)) for arm in arms])
 
         case _, ast.Application(fun, arg):
             fun, fun_t = infer_expr(fun, ctx)
@@ -222,9 +208,7 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
             extra_fields = v_fields.keys() - t_fields.keys()
             missing_fields = t_fields.keys() - v_fields.keys()
             if extra_fields or missing_fields:
-                raise TypeError(
-                    f"extra fields: {extra_fields}, missing fields: {missing_fields}"
-                )
+                raise TypeError(f"extra fields: {extra_fields}, missing fields: {missing_fields}")
 
             slots = [check_expr(v_fields[f], t_fields[f], ctx) for f in t_fields]
 
@@ -294,9 +278,7 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]
             return ast.BinOp(lhs, rhs, op), t.IntType
 
         case ast.Function(patterns):
-            raise InferenceError(
-                f"can't infer function signature for {exp}. Please provide a type hint."
-            )
+            raise InferenceError(f"can't infer function signature for {exp}. Please provide a type hint.")
 
         case ast.Application(fun, arg):
             fun, fun_t = infer_expr(fun, ctx)
@@ -392,9 +374,7 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]
             raise NotImplementedError(exp)
 
 
-def check_matcharm(
-    patterns: list[ast.Pattern], body: ast.Expression, typ: Type, ctx: Context
-) -> ast.Expression:
+def check_matcharm(patterns: list[ast.Pattern], body: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
     match typ, patterns:
         case t.FuncType(arg_t, res_t), [p0, *p_rest]:
             bindings = check_pattern(p0, arg_t, ctx)
