@@ -1,0 +1,3 @@
+import other.Z
+
+interface Y { }

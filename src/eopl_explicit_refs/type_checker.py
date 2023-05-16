@@ -1,6 +1,7 @@
 from __future__ import annotations
 import dataclasses
-from typing import TypeAlias
+from pathlib import Path
+from typing import TypeAlias, Callable
 
 from eopl_explicit_refs import abstract_syntax as ast
 from eopl_explicit_refs.generic_environment import Env, EmptyEnv
@@ -10,11 +11,17 @@ from eopl_explicit_refs import type_impls as t
 TEnv: TypeAlias = Env[Type]
 
 
+DEFAULT_SEARCH_PATH = Path("sources")
+LIB_EXTENSION = ".src"
+
+
 @dataclasses.dataclass
 class Context:
     modules: dict[str, ast.CheckedModule] = dataclasses.field(default_factory=dict)
     env: TEnv = EmptyEnv()
     types: TEnv = EmptyEnv()
+
+    import_hooks: list[Callable] = dataclasses.field(default_factory=list)
 
     def check(self, actual_t: Type, expected_t: Type) -> bool:
         return actual_t == expected_t
@@ -24,6 +31,7 @@ class Context:
             modules=self.modules,
             env=self.env.extend(var, val),
             types=self.types,
+            import_hooks=self.import_hooks,
         )
 
     def extend_types(self, name: str, ty: Type):
@@ -31,6 +39,7 @@ class Context:
             modules=self.modules,
             env=self.env,
             types=self.types.extend(name, ty),
+            import_hooks=self.import_hooks,
         )
 
     def set_type(self, name: str, ty: Type):
@@ -41,19 +50,34 @@ class Context:
             modules=self.modules,
             env=self.env,
             types=self.types.extend(name, ty),
+            import_hooks=self.import_hooks,
         )
 
+    def find_module(self, name: str) -> ast.CheckedModule:
+        try:
+            return self.modules[name]
+        except LookupError:
+            pass
 
-def check_program(pgm: ast.Program) -> ast.Program:
-    ctx = Context()
+        for hook in self.import_hooks:
+            module = hook(self, name)
+            if module:
+                self.modules[name] = module
+                return module
+
+        raise NameError(f"Unknown module: {name}")
+
+
+def check_program(pgm: ast.Program, context_args=None) -> ast.Program:
+    ctx = Context(**(context_args or {}))
     _, ctx = check_module(pgm.mod, ctx)
     exp, _ = infer_expr(pgm.exp, ctx)
     return ast.CheckedProgram(ctx.modules, exp)
 
 
-def check_module(pgm: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedModule, Context]:
+def check_module(module: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedModule, Context]:
     ctx = parent_ctx
-    match pgm:
+    match module:
         case ast.Module(mod_name, submodules, imports, interfaces, records, impls):
             checked_modules = {}
             for k, v in submodules.items():
@@ -139,7 +163,7 @@ def check_module(pgm: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedModul
 def check_import(imp: ast.Import, ctx: Context):
     match imp:
         case ast.AbsoluteImport(module, name):
-            mod = ctx.modules[module]
+            mod = ctx.find_module(module)
             qualname = module + "." + name
             try:
                 ctx = ctx.extend_types(qualname, mod.types[qualname])

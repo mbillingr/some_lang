@@ -145,8 +145,9 @@ class NestedImport(Import):
                     yield [self.module, w]
 
 
+@dataclasses.dataclass
 class RelativeImport(NestedImport):
-    pass
+    offset: int
 
 
 @dataclasses.dataclass

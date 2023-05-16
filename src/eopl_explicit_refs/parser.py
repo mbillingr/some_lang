@@ -95,13 +95,16 @@ def parse_module_body(ts: TokenStream, name: str) -> ast.Module:
 
 def parse_import(ts) -> ast.Import:
     relative = bool(try_token(ts, "."))
+    absolute = bool(try_token(ts, ":"))
     module = parse_symbol(ts)
     expect_token(ts, ".")
     what = parse_imported(ts)
-    if relative:
-        return ast.RelativeImport(module, what)
-    else:
+    if absolute:
         return ast.NestedImport(module, what)
+    elif relative:
+        return ast.RelativeImport(module, what, 0)
+    else:
+        return ast.RelativeImport(module, what, -1)
 
 
 def parse_imported(ts) -> list[ast.Symbol | ast.Import]:

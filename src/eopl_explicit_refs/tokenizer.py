@@ -102,6 +102,7 @@ def default_tokenizer(src: str) -> TokenStream:
     token_stream = scanner.tokenize(src)
     # token_stream = inspect(token_stream)
     token_stream = remove_all_whitespace(token_stream)
+    token_stream = remove_comments(token_stream)
     token_stream = transform_literals(token_stream)
     token_stream = TokenStream(token_stream)
     return token_stream
@@ -134,6 +135,15 @@ def remove_all_whitespace(token_stream: Iterable[Token]) -> Iterator[Token]:
     for token in token_stream:
         match token:
             case _, TokenKind.WHITESPACE, _:
+                pass
+            case _:
+                yield token
+
+
+def remove_comments(token_stream: Iterable[Token]) -> Iterator[Token]:
+    for token in token_stream:
+        match token:
+            case _, TokenKind.COMMENT, _:
                 pass
             case _:
                 yield token

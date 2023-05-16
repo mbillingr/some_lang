@@ -317,7 +317,7 @@ def test_extra_method():
         ),
         (
             0,
-            "module outer { module inner { struct Foo [] } import __main__.outer.inner.Foo } 0",
+            "module outer { module inner { struct Foo [] } import :__main__.outer.inner.Foo } 0",
         ),
         (
             1,

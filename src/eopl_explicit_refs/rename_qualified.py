@@ -1,7 +1,4 @@
-import contextlib
-
 from eopl_explicit_refs import abstract_syntax as ast
-from eopl_explicit_refs.vtable_manager import VtableManager
 
 
 def rename_qualified(node: ast.Program):
@@ -24,10 +21,11 @@ class Visitor:
 
             case ast.Module():
                 old_decl_env = self.decl_env
+                old_path = self.path.copy()
                 self.decl_env = {}
-                self.path.append(node.name)
+                self.path.extend(node.name.split("."))
                 node_out = self.transform_module(node)
-                self.path.pop()
+                self.path = old_path
                 self.decl_env = old_decl_env
                 return node_out
 
@@ -36,9 +34,7 @@ class Visitor:
                 return node
 
             case ast.Import():
-                raise NotImplementedError(
-                    "All imports should be absolute at this point"
-                )
+                raise NotImplementedError("All imports should be absolute at this point")
 
             case ast.Interface(name, methods):
                 qual_ifname = self.add_decl(name)
@@ -88,9 +84,7 @@ class Visitor:
         node_out = ast.Module(
             self.make_qualname(),
             ast.transform_dict_values(node.submodules, self.visit),
-            ast.transform_collection(
-                self.flatten_imports(node.imports), self.visit
-            ),
+            ast.transform_collection(self.flatten_imports(node.imports), self.visit),
             ast.transform_collection(node.interfaces, self.visit),
             ast.transform_collection(node.records, self.visit),
             ast.transform_collection(node.impls, self.visit),
@@ -103,11 +97,10 @@ class Visitor:
             match imp:
                 case ast.AbsoluteImport():
                     imports_out.extend(imp)
-                case ast.RelativeImport():
+                case ast.RelativeImport(_, _, offset):
+                    offset = len(self.path) + offset
                     for [*path, thing] in imp.iter():
-                        imports_out.append(
-                            ast.AbsoluteImport(".".join(self.path + path), thing)
-                        )
+                        imports_out.append(ast.AbsoluteImport(".".join(self.path[:offset] + path), thing))
                 case ast.NestedImport():
                     for [*path, thing] in imp.iter():
                         imports_out.append(ast.AbsoluteImport(".".join(path), thing))
