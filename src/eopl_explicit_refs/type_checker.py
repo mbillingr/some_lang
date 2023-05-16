@@ -78,7 +78,7 @@ def check_program(pgm: ast.Program, context_args=None) -> ast.Program:
 def check_module(module: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedModule, Context]:
     ctx = parent_ctx
     match module:
-        case ast.Module(mod_name, submodules, imports, interfaces, records, impls):
+        case ast.Module(mod_name, submodules, imports, interfaces, records, impls, funcs):
             checked_modules = {}
             for k, v in submodules.items():
                 mod, ctx = check_module(v, ctx)
@@ -147,10 +147,21 @@ def check_module(module: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedMo
 
                 impls_out.append(ast.ImplBlock(impl.interface, impl_on.name, methods_out))
 
+            for fn in funcs:
+                signature = eval_type(fn.func.type, ctx)
+                ctx = ctx.extend_env(fn.name, signature)
+
+            funcs_out = []
+            for fn in funcs:
+                signature = ctx.env.lookup(fn.name)
+                body = check_expr(fn.func.expr, signature, ctx)
+                funcs_out.append(ast.FunctionDefinition(fn.name, body))
+
             mod_out = ast.CheckedModule(
                 mod_name,
                 {k: v for k, v in ctx.types.items()},
                 impls_out,
+                funcs_out,
             )
             parent_ctx.modules[mod_name] = mod_out
 
@@ -282,7 +293,8 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]
             mapping = {type(None): t.NullType, bool: t.BoolType, int: t.IntType}
             return exp, mapping[type(val)]()
 
-        case ast.Identifier(name):
+        case ast.Identifier(name) | ast.ToplevelRef(name):
+            # for now, locals and top-level are the same environment in the type checker
             return exp, ctx.env.lookup(name)
 
         case ast.EmptyList():

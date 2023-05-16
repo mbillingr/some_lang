@@ -87,6 +87,7 @@ class Module(AstNode):
     interfaces: list[Interface]
     records: list[RecordDecl]
     impls: list[ImplBlock]
+    funcs: list[FunctionDefinition]
 
     def default_transform(self, visitor) -> Self:
         return Module(
@@ -96,6 +97,7 @@ class Module(AstNode):
             transform_collection(self.interfaces, visitor),
             transform_collection(self.records, visitor),
             transform_collection(self.impls, visitor),
+            transform_collection(self.funcs, visitor),
         )
 
 
@@ -104,12 +106,14 @@ class CheckedModule(AstNode):
     name: Symbol
     types: dict[Symbol, Any]
     impls: list[ImplBlock]
+    funcs: list[FunctionDefinition]
 
     def default_transform(self, visitor) -> Self:
         return CheckedModule(
             self.name,
             transform_dict_values(self.types, visitor),
             transform_collection(self.impls, visitor),
+            transform_collection(self.funcs, visitor),
         )
 
 
@@ -148,6 +152,15 @@ class NestedImport(Import):
 @dataclasses.dataclass
 class RelativeImport(NestedImport):
     offset: int
+
+
+@dataclasses.dataclass
+class FunctionDefinition(AstNode):
+    name: Symbol
+    func: Expression
+
+    def default_transform(self, visitor) -> Self:
+        return FunctionDefinition(self.name, self.func.transform(visitor))
 
 
 @dataclasses.dataclass
@@ -216,6 +229,14 @@ class BlockExpression(Expression):
 @dataclasses.dataclass
 class Identifier(Expression):
     name: Symbol
+
+    def default_transform(self, visitor) -> Self:
+        return self
+
+
+@dataclasses.dataclass
+class ToplevelRef(Expression):
+    name_or_index: str | int
 
     def default_transform(self, visitor) -> Self:
         return self

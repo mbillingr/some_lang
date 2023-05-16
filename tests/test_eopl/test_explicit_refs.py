@@ -133,6 +133,8 @@ def test_bindings(src, expect):
         (6, "(the Int -> Int -> Int -> Int fn a b c => a + b + c) 1 2 3"),
         (5, "let part = (the Int -> Int -> Int fn a b => a + b) 2 in part 3"),
         (None, "(the () -> () fn () => ()) ()"),
+        # Function Definition
+        (0, "fn foo: () -> Int () => 0; foo ()"),
     ],
 )
 def test_functions(src, expect):

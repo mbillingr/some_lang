@@ -1,3 +1,5 @@
+import functools
+
 from eopl_explicit_refs import abstract_syntax as ast
 
 
@@ -9,6 +11,7 @@ class Visitor:
     def __init__(self):
         self.path = []
         self.decl_env = {}
+        self.local_env = set()
 
     def visit(self, node: ast.AstNode):
         match node:
@@ -48,12 +51,18 @@ class Visitor:
                 node_out.name = qual_tyname
                 return node_out
 
-            case ast.ImplBlock(interface, type_name, methods):
+            case ast.ImplBlock(interface, type_name):
                 qual_ifname = interface and self.decl_env[interface]
                 qual_tyname = self.decl_env[type_name]
                 node_out = node.default_transform(self.visit)
                 node_out.interface = qual_ifname
                 node_out.type_name = qual_tyname
+                return node_out
+
+            case ast.FunctionDefinition(name):
+                qual_fname = self.add_decl(name)
+                node_out = node.default_transform(self.visit)
+                node_out.name = qual_fname
                 return node_out
 
             case ast.TypeRef(typename):
@@ -77,6 +86,28 @@ class Visitor:
                 node_out.interface = qual_ifname
                 return node_out
 
+            case ast.Let(var):
+                defined_before = var in self.local_env
+                self.local_env.add(var)
+                node_out = node.default_transform(self.visit)
+                if not defined_before:
+                    self.local_env.remove(var)
+                return node_out
+
+            case ast.MatchArm(pats, body):
+                bound_vars = functools.reduce(lambda a, b: a | b, map(vars_in_pattern, pats))
+                undefined_before = bound_vars - self.local_env
+                node_out = node.default_transform(self.visit)
+                self.local_env -= undefined_before
+                return node_out
+
+            case ast.Identifier(name):
+                node_out = node.default_transform(self.visit)
+                if name not in self.local_env and name in self.decl_env:
+                    return ast.ToplevelRef(self.decl_env[name])
+                else:
+                    return node
+
             case _:
                 return NotImplemented
 
@@ -88,6 +119,7 @@ class Visitor:
             ast.transform_collection(node.interfaces, self.visit),
             ast.transform_collection(node.records, self.visit),
             ast.transform_collection(node.impls, self.visit),
+            ast.transform_collection(node.funcs, self.visit),
         )
         return node_out
 
@@ -119,3 +151,17 @@ class Visitor:
         qualname = self.make_qualname(name)
         self.decl_env[name] = qualname
         return qualname
+
+
+def vars_in_pattern(pat: ast.Pattern) -> set[str]:
+    match pat:
+        case ast.BindingPattern(name):
+            return {name}
+        case ast.LiteralPattern(val):
+            return set()
+        case ast.ListConsPattern(car, cdr):
+            return vars_in_pattern(car) | vars_in_pattern(cdr)
+        case ast.EmptyListPattern():
+            return set()
+        case other:
+            raise NotImplementedError(other)

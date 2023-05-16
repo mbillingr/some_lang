@@ -75,6 +75,7 @@ def parse_module_body(ts: TokenStream, name: str) -> ast.Module:
     records = []
     impls = []
     interfaces = []
+    functions = []
     while True:
         match ts.peek():
             case "module", _, _:
@@ -89,8 +90,10 @@ def parse_module_body(ts: TokenStream, name: str) -> ast.Module:
                 impls.append(parse_impl(ts))
             case "interface", _, _:
                 interfaces.append(parse_interface(ts))
+            case "fn", _, _:
+                functions.append(parse_function_definition(ts))
             case _:
-                return ast.Module(name, submodules, imports, interfaces, records, impls)
+                return ast.Module(name, submodules, imports, interfaces, records, impls, functions)
 
 
 def parse_import(ts) -> ast.Import:
@@ -455,6 +458,14 @@ def parse_atomic_type(ts) -> ast.Type:
             raise UnexpectedToken(other)
 
 
+def parse_function_definition(ts) -> ast.FunctionDefinition:
+    _, _, span0 = expect_token(ts, "fn")
+    name = parse_symbol(ts)
+    func = parse_typed_function(ts)
+    expect_token(ts, ";")
+    return spanned(span0.merge(get_span(func)), ast.FunctionDefinition(name, func))
+
+
 def parse_interface(ts) -> ast.Interface:
     _, _, span0 = expect_token(ts, "interface")
     name = parse_symbol(ts)
@@ -517,14 +528,19 @@ def parse_impl(ts) -> ast.ImplBlock:
                 break
             case "method", _, span:
                 methodname = parse_symbol(ts)
-                expect_token(ts, ":")
-                signature = parse_type(ts)
-                arms = parse_match_arms(ts)
-                method = spanned(get_span(methodname).merge(get_span(arms[-1])), ast.Function(arms))
-                methods[methodname] = spanned(span.merge(get_span(method)), ast.TypeAnnotation(signature, method))
+                method = parse_typed_function(ts)
+                methods[methodname] = spanned(span.merge(get_span(method)), method)
             case other:
                 raise UnexpectedToken(other)
     return ast.ImplBlock(interface, typename, methods)
+
+
+def parse_typed_function(ts: TokenStream) -> ast.TypeAnnotation:
+    expect_token(ts, ":")
+    signature = parse_type(ts)
+    arms = parse_match_arms(ts)
+    function = spanned(get_span(arms[0]).merge(get_span(arms[-1])), ast.Function(arms))
+    return spanned(get_span(signature).merge(get_span(function)), ast.TypeAnnotation(signature, function))
 
 
 def parse_symbol(ts) -> ast.Symbol:
