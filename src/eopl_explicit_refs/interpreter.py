@@ -1,7 +1,7 @@
 from __future__ import annotations
 import abc
 import dataclasses
-from typing import Any, Callable, Self
+from typing import Any, Callable, Self, Iterable
 
 from eopl_explicit_refs.environment import EmptyEnv, Env
 from eopl_explicit_refs import abstract_syntax as ast
@@ -39,13 +39,14 @@ def analyze_program(pgm: ast.ExecutableProgram) -> Any:
         mod_, ctx = analyze_module(mod, ctx)
         mods.append(mod_)
 
+    methods = analyze_static_functions(pgm.functions, ctx)
+
     exp = analyze_expr(pgm.exp, ctx, tail=False)
 
     def program(store):
         store.clear()
         store.set_vtables(vtables)
-        for mod in mods:
-            mod(store)
+        methods(store)
         return exp(store)
 
     return program
@@ -78,6 +79,16 @@ def analyze_module(mod: ast.CheckedModule, ctx: Context) -> tuple[Module, Contex
             mod_out = Module(methods)
 
             return mod_out, ctx
+
+
+def analyze_static_functions(funcs: Iterable[ast.Function], ctx: Context) -> Callable:
+    bodies = [analyze_matcharms(f.patterns, ctx) for f in funcs]
+
+    def initialization(store):
+        for body in bodies:
+            store.add_method(Procedure(body))
+
+    return initialization
 
 
 def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
@@ -335,15 +346,17 @@ class MatcherError(Exception):
     pass
 
 
-class Closure:
-    def __init__(self, store, match_bodies):
+class Procedure:
+    def __init__(self, match_bodies):
         self.match_bodies = match_bodies
-        self.saved_env = store.env
+
+    def prepare_env(self, store):
+        pass
 
     def apply(self, args, store):
         preserved_stack = store.env
         try:
-            store.env = self.saved_env
+            self.prepare_env(store)
             match_bodies = self.match_bodies
             while True:
                 try:
@@ -363,11 +376,20 @@ class Closure:
                             return res.apply(args, store)
                     raise MatcherError("no pattern matched")
                 except TailCall as tc:
-                    store.env = tc.func.saved_env
+                    self.prepare_env(store)
                     match_bodies = tc.func.match_bodies
                     args = tc.args
         finally:
             store.env = preserved_stack
+
+
+class Closure(Procedure):
+    def __init__(self, store, match_bodies):
+        super().__init__(match_bodies)
+        self.saved_env = store.env
+
+    def prepare_env(self, store):
+        store.env = self.saved_env
 
 
 class Partial:
@@ -383,7 +405,7 @@ class Partial:
 
 @dataclasses.dataclass
 class TailCall(Exception):
-    func: Closure
+    func: Procedure
     args: list[Any]
 
 

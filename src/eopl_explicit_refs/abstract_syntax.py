@@ -72,6 +72,7 @@ class CheckedProgram(AstNode):
 @dataclasses.dataclass
 class ExecutableProgram(AstNode):
     modules: dict[str, Module]
+    functions: list[Function]
     exp: Expression
     vtables: dict[str, dict[int, dict[int, int]]]
 
