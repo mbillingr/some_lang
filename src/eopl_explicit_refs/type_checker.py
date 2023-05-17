@@ -345,6 +345,21 @@ class InferenceError(Exception):
     pass
 
 
+def auto_resolve_typevar(func):
+    def decorate(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]:
+        match func(exp, ctx):
+            case exp, t.TypeVar() as ty:
+                if ty.is_fresh():
+                    return exp, ty
+                else:
+                    return exp, ty.type
+            case res:
+                return res
+
+    return decorate
+
+
+@auto_resolve_typevar
 def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]:
     match exp:
         case ast.Literal(val):
@@ -359,11 +374,6 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]
                 case t.TypeSchema() as ty:
                     ty_out, n = ty.instantiate()
                     return ast.ToplevelRef(f"{name}.{n}"), ty_out
-                case t.TypeVar() as ty:
-                    if ty.is_fresh():
-                        return exp, ty
-                    else:
-                        return exp, ty.type
                 case ty:
                     return exp, ty
 
