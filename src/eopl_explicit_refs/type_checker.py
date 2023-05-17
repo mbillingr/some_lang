@@ -97,8 +97,19 @@ def check_module(module: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedMo
                 ctx = ctx.extend_types(record.name, t.NamedType(record.name, None))
 
             for fn in funcs:
-                signature = eval_type(fn.func.type, ctx)
-                ctx = ctx.extend_env(fn.name, signature)
+                match fn:
+                    case ast.FunctionDefinition(name, func):
+                        signature = eval_type(func.type, ctx)
+                        ctx = ctx.extend_env(name, signature)
+                    case ast.Generic(tvars, ast.FunctionDefinition(name, func)):
+                        gen_ctx = ctx
+                        for tv in tvars:
+                            gen_ctx = gen_ctx.extend_types(tv, t.TypeVar(tv))
+
+                        signature = t.TypeSchema(eval_type(func.type, gen_ctx))
+                        ctx = ctx.extend_env(name, signature)
+                    case _:
+                        raise NotImplementedError(fn)
 
             for intf in interfaces:
                 interface_type = ctx.types.lookup(intf.name)
@@ -154,10 +165,19 @@ def check_module(module: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedMo
             funcs_out = {}
             fsigs_out = {}
             for fn in funcs:
-                signature = ctx.env.lookup(fn.name)
-                body = check_expr(fn.func.expr, signature, ctx)
-                funcs_out[fn.name] = body
-                fsigs_out[fn.name] = signature
+                match fn:
+                    case ast.FunctionDefinition(name, func):
+                        signature = ctx.env.lookup(name)
+                        body = check_expr(func.expr, signature, ctx)
+                        funcs_out[name] = body
+                        fsigs_out[name] = signature
+                    case ast.Generic(_, ast.FunctionDefinition(name, func)):
+                        signature = ctx.env.lookup(name)
+                        body = check_expr(func.expr, signature.ty, ctx)
+                        funcs_out[name] = body
+                        fsigs_out[name] = signature
+                    case _:
+                        raise NotImplementedError(fn)
 
             mod_out = ast.CheckedModule(
                 mod_name,
@@ -205,6 +225,14 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
         case t.AnyType(), _:
             exp, _ = infer_expr(exp, ctx)
             return exp
+
+        case t.TypeVar(), _ if typ.is_fresh():
+            exp, exp_t = infer_expr(exp, ctx)
+            typ.set_type(exp_t)
+            return exp
+
+        case t.TypeVar(), _:
+            return check_expr(exp, typ.type, ctx)
 
         case _, ast.Literal(val):
             mapping = {type(None): t.NullType, bool: t.BoolType, int: t.IntType}
@@ -306,7 +334,11 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]
 
         case ast.Identifier(name) | ast.ToplevelRef(name):
             # for now, locals and top-level are the same environment in the type checker
-            return exp, ctx.env.lookup(name)
+            match ctx.env.lookup(name):
+                case t.TypeSchema() as ty:
+                    return exp, ty.instantiate()
+                case ty:
+                    return exp, ty
 
         case ast.EmptyList():
             raise InferenceError("can't infer empty list type")
@@ -333,11 +365,9 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]
             fun, fun_t = infer_expr(fun, ctx)
             match fun_t:
                 case t.FuncType(arg_t, ret_t):
-                    pass
+                    return ast.Application(fun, check_expr(arg, arg_t, ctx)), ret_t
                 case _:
                     raise TypeError(f"Cannot call {fun_t}")
-
-            return ast.Application(fun, check_expr(arg, arg_t, ctx)), ret_t
 
         case ast.Let(var, val, bdy, None):
             # without type declaration, the let variable can't be used in the val expression

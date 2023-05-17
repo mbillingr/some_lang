@@ -3,7 +3,7 @@ from __future__ import annotations
 import abc
 import builtins
 import dataclasses
-from typing import Any, Optional, TypeAlias, List, Self
+from typing import Any, Optional, Self
 
 
 class AstNode(abc.ABC):
@@ -128,16 +128,16 @@ class CheckedModule(AstNode):
 @dataclasses.dataclass
 class NativeModule(AstNode):
     name: Symbol
-    #types: dict[Symbol, Any]
-    #impls: list[ImplBlock]
+    # types: dict[Symbol, Any]
+    # impls: list[ImplBlock]
     funcs: dict[Symbol, Any]
     fsigs: dict[Symbol, Any]
 
     def default_transform(self, visitor) -> Self:
         return NativeModule(
             self.name,
-            #transform_dict_values(self.types, visitor),
-            #transform_collection(self.impls, visitor),
+            # transform_dict_values(self.types, visitor),
+            # transform_collection(self.impls, visitor),
             transform_dict_values(self.funcs, visitor),
             transform_dict_values(self.fsigs, visitor),
         )
@@ -184,6 +184,15 @@ class NestedImport(Import):
 @dataclasses.dataclass
 class RelativeImport(NestedImport):
     offset: int
+
+
+@dataclasses.dataclass
+class Generic(AstNode):
+    tvars: list[Symbol]
+    item: AstNode
+
+    def default_transform(self, visitor) -> Self:
+        return Generic(self.tvars, self.item.transform(visitor))
 
 
 @dataclasses.dataclass

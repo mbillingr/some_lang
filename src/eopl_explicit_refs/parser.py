@@ -70,30 +70,46 @@ def parse_module(ts: TokenStream) -> ast.Module:
 
 
 def parse_module_body(ts: TokenStream, name: str) -> ast.Module:
-    submodules = {}
-    imports = []
-    records = []
-    impls = []
-    interfaces = []
-    functions = []
+    mod = ast.Module(name, submodules={}, imports=[], interfaces=[], records=[], impls=[], funcs=[])
     while True:
-        match ts.peek():
-            case "module", _, _:
-                mod = parse_module(ts)
-                submodules[mod.name] = mod
-            case "import", _, _:
-                ts.get_next()
-                imports.append(parse_import(ts))
-            case "struct", _, _:
-                records.append(parse_struct_decl(ts))
-            case "impl", _, _:
-                impls.append(parse_impl(ts))
-            case "interface", _, _:
-                interfaces.append(parse_interface(ts))
-            case "fn", _, _:
-                functions.append(parse_function_definition(ts))
-            case _:
-                return ast.Module(name, submodules, imports, interfaces, records, impls, functions)
+        match parse_module_item(ts, mod):
+            case item, updater:
+                updater(item)
+            case None:
+                return mod
+
+
+def parse_module_item(ts: TokenStream, mod: ast.Module):
+    match ts.peek():
+        case "module", _, _:
+
+            def updater(m: ast.Module):
+                mod.submodules[m.name] = m
+
+            return parse_module(ts), updater
+        case "import", _, _:
+            ts.get_next()
+            return parse_import(ts), mod.imports.append
+        case "struct", _, _:
+            return parse_struct_decl(ts), mod.records.append
+        case "impl", _, _:
+            return parse_impl(ts), mod.impls.append
+        case "interface", _, _:
+            return parse_interface(ts), mod.interfaces.append
+        case "fn", _, _:
+            return parse_function_definition(ts), mod.funcs.append
+        case "generic", _, _:
+            ts.get_next()
+            tvars = []
+            while True:
+                tvars.append(parse_symbol(ts))
+                if try_token(ts, ","):
+                    continue
+                break
+            item, updater = parse_module_item(ts, mod)
+            return ast.Generic(tvars, item), updater
+        case _:
+            return None
 
 
 def parse_import(ts) -> ast.Import:

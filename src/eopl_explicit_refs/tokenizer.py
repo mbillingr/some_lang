@@ -24,6 +24,7 @@ KEYWORDS = (
     "else",
     "false",
     "for",
+    "generic",
     "if",
     "impl",
     "import",

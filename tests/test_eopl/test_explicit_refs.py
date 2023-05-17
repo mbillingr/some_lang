@@ -364,6 +364,17 @@ def test_module_scoping():
         evaluate("module outer { module inner { struct Foo [] } } (the Foo [])")
 
 
+@pytest.mark.parametrize(
+    "expect, src",
+    [
+        ((0, True), "generic T fn foo: T -> T x => x; [a=foo 0, b=foo true]"),
+        (0, "generic T fn foo: T -> T -> T x y => x; foo 0 0"),
+    ],
+)
+def test_generic_functions(src, expect):
+    assert evaluate(src) == expect
+
+
 def evaluate(src):
     token_stream = tokenizer.default_tokenizer(src)
     program = parser.parse_program(token_stream)

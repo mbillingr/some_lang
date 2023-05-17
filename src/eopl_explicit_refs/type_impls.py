@@ -21,6 +21,56 @@ class Type(abc.ABC):
         return None
 
 
+class TypeVar(Type):
+    __match_args__ = ("name",)
+
+    def __init__(self, name: str):
+        self.name = name
+        self.type = None
+
+    def is_fresh(self) -> bool:
+        return self.type is None
+
+    def set_type(self, ty: Type):
+        assert self.type is None
+        self.type = ty
+
+    def __repr__(self):
+        return self.name
+
+    def __eq__(self, other):
+        if self is other:
+            return True
+        return NotImplemented
+
+    def __hash__(self):
+        return id(self)
+
+
+class TypeSchema(Type):
+    def __init__(self, ty: Type):
+        self.ty = ty
+
+    def instantiate(self):
+        tvars = {}
+
+        def recur(t: Type):
+            match t:
+                case TypeVar(name):
+                    try:
+                        return tvars[t]
+                    except KeyError:
+                        fresh_var = TypeVar(name)
+                        tvars[t] = fresh_var
+                        return fresh_var
+                case FuncType(arg, ret):
+                    return FuncType(recur(arg), recur(ret))
+                case _:
+                    raise NotImplementedError(t)
+
+        return recur(self.ty)
+
+
 class NamedType(Type):
     __match_args__ = ("name", "type")
 
