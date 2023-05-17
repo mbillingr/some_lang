@@ -80,10 +80,11 @@ def analyze_static_functions(funcs: Iterable[ast.Function], ctx: Context) -> Cal
 def analyze_procedure(proc: ast.Expression, ctx: Context) -> Procedure:
     match proc:
         case ast.Function(arms):
-            return Procedure(analyze_matcharms(arms, ctx))
+            return PatternProcedure(analyze_matcharms(arms, ctx))
         case ast.NativeFunction(n_args, proc):
             return NativeProcedure(proc, n_args)
-        case _: raise TypeError(f"Not a procedure: {proc}")
+        case _:
+            raise TypeError(f"Not a procedure: {proc}")
 
 
 def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
@@ -208,7 +209,9 @@ def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
             raise NotImplementedError(exp)
 
 
-def analyze_matcharms(arms: list[ast.MatchArm], ctx: Context) -> list[tuple[Matcher, Callable]]:
+def analyze_matcharms(
+    arms: list[ast.MatchArm], ctx: Context
+) -> list[tuple[Matcher, Callable]]:
     match_bodies = []
     for arm in arms:
         matcher = analyze_patterns(arm.pats)
@@ -233,7 +236,9 @@ def analyze_application(fun, *args_, ctx, tail):
 
                 return tail_call
             else:
-                return lambda store: fun_(store).apply([a(store) for a in args_], store)
+                return lambda store: trampoline(
+                    fun_(store), [a(store) for a in args_], store
+                )
 
 
 class Matcher(abc.ABC):
@@ -341,44 +346,49 @@ class MatcherError(Exception):
     pass
 
 
-class Procedure:
+class Procedure(abc.ABC):
+    @abc.abstractmethod
+    def n_args(self) -> int:
+        pass
+
+    @abc.abstractmethod
+    def apply(self, args, store):
+        pass
+
+
+class PatternProcedure(Procedure):
     def __init__(self, match_bodies):
         self.match_bodies = match_bodies
 
     def prepare_env(self, store):
         pass
 
+    def n_args(self) -> int:
+        match self.match_bodies:
+            case []:
+                return 0
+            case [(m, _), *_]:
+                return m.n_args()
+
     def apply(self, args, store):
-        preserved_stack = store.env
-        try:
-            self.prepare_env(store)
-            match_bodies = self.match_bodies
-            while True:
-                try:
-                    for matcher, body in match_bodies:
-                        if len(args) < matcher.n_args():
-                            return Partial(self, args)
-                        try:
-                            bindings = matcher.match(args)
-                        except MatcherError:
-                            continue
-                        store.push(*bindings)
-                        res = body(store)
-                        args = args[matcher.n_args() :]
-                        if not args:
-                            return res
-                        else:
-                            return res.apply(args, store)
-                    raise MatcherError("no pattern matched")
-                except TailCall as tc:
-                    tc.func.prepare_env(store)
-                    match_bodies = tc.func.match_bodies
-                    args = tc.args
-        finally:
-            store.env = preserved_stack
+        for matcher, body in self.match_bodies:
+            try:
+                bindings = matcher.match(args)
+            except MatcherError:
+                continue
+
+            preserved_stack = store.env
+            try:
+                self.prepare_env(store)
+                store.push(*bindings)
+                return body(store)
+            finally:
+                store.env = preserved_stack
+
+        raise MatcherError("no pattern matched")
 
 
-class Closure(Procedure):
+class Closure(PatternProcedure):
     def __init__(self, store, match_bodies):
         super().__init__(match_bodies)
         self.saved_env = store.env
@@ -390,39 +400,42 @@ class Closure(Procedure):
 class NativeProcedure(Procedure):
     def __init__(self, callable, n_args):
         self.callable = callable
-        self.n_args = n_args
+        self.n_args_ = n_args
 
-    def prepare_env(self, store):
-        pass
+    def n_args(self) -> int:
+        return self.n_args_
 
     def apply(self, args, store):
-        preserved_stack = store.env
+        return self.callable(*args)
+
+
+def trampoline(callee: Procedure, args, store):
+    while True:
         try:
-            self.prepare_env(store)
-            proc = self.callable
-            narg = self.n_args
-            while True:
-                try:
-                    if len(args) < narg:
-                        return Partial(self, args)
-                    res = proc(*args[:narg])
-                    args = args[narg:]
-                    if not args:
-                        return res
-                    else:
-                        return res.apply(args, store)
-                except TailCall as tc:
-                    raise NotImplementedError()
-        finally:
-            store.env = preserved_stack
+            n_args = callee.n_args()
+            if len(args) < n_args:
+                return Partial(callee, args)
+            res = callee.apply(args[:n_args], store)
+            args = args[n_args:]
+            if not args:
+                return res
+            else:
+                # transparently handle curried functions by applying the result to any extra arguments
+                callee = res
+        except TailCall as tc:
+            callee = tc.func
+            args = tc.args
 
 
-class Partial:
+class Partial(Procedure):
     """A partially applied function"""
 
     def __init__(self, func, args):
         self.func = func
         self.args = args
+
+    def n_args(self) -> int:
+        return self.func.n_args() - len(self.args)
 
     def apply(self, args, store):
         return self.func.apply(self.args + args, store)
