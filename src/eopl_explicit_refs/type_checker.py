@@ -72,6 +72,16 @@ def check_program(pgm: ast.Program, context_args=None) -> ast.Program:
     ctx = Context(**(context_args or {}))
     _, ctx = check_module(pgm.mod, ctx)
     exp, _ = infer_expr(pgm.exp, ctx)
+
+    for mod in ctx.modules.values():
+        for fname, fbody in mod.funcs.items():
+            match fbody:
+                case ("unchecked", body):
+                    sig = mod.fsigs[fname]
+                    for ty in sig.concrete_instantiations():
+                        checked_body = check_expr(body, ty, ctx)
+                    raise NotImplementedError("need to put the checked bodies into static functions and replace references to them with the correct names")
+
     return ast.CheckedProgram(ctx.modules, exp)
 
 
@@ -103,8 +113,9 @@ def check_module(module: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedMo
                         ctx = ctx.extend_env(name, signature)
                     case ast.Generic(tvars, ast.FunctionDefinition(name, func)):
                         gen_ctx = ctx
-                        for tv in tvars:
-                            gen_ctx = gen_ctx.extend_types(tv, t.TypeVar(tv))
+                        for tv, constraint in tvars:
+                            constraint = constraint and ctx.types.lookup(constraint)
+                            gen_ctx = gen_ctx.extend_types(tv, t.TypeVar(tv, constraint))
 
                         signature = t.TypeSchema(eval_type(func.type, gen_ctx))
                         ctx = ctx.extend_env(name, signature)
@@ -173,8 +184,10 @@ def check_module(module: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedMo
                         fsigs_out[name] = signature
                     case ast.Generic(_, ast.FunctionDefinition(name, func)):
                         signature = ctx.env.lookup(name)
-                        body = check_expr(func.expr, signature.ty, ctx)
-                        funcs_out[name] = body
+                        # todo: need to check the bodies later, for each combination of concrete types they were used with
+                        #       we only know this after checking the rest of the program.
+                        #body = check_expr(func.expr, signature.ty, ctx)
+                        funcs_out[name] = ("unchecked", func.expr)
                         fsigs_out[name] = signature
                     case _:
                         raise NotImplementedError(fn)
@@ -337,6 +350,11 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]
             match ctx.env.lookup(name):
                 case t.TypeSchema() as ty:
                     return exp, ty.instantiate()
+                case t.TypeVar() as ty:
+                    if ty.is_fresh():
+                        return exp, ty
+                    else:
+                        return exp, ty.type
                 case ty:
                     return exp, ty
 

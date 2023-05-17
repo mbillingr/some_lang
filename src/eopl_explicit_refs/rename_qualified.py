@@ -65,6 +65,11 @@ class Visitor:
                 node_out.name = qual_fname
                 return node_out
 
+            case ast.Generic(tvars, item):
+                tvars_out = [(tv, c and self.decl_env[c]) for tv, c in tvars]
+                item_out = item.transform(self.visit)
+                return ast.Generic(tvars_out, item_out)
+
             case ast.TypeRef(typename):
                 node_out = node.default_transform(self.visit)
                 try:
@@ -102,7 +107,6 @@ class Visitor:
                 return node_out
 
             case ast.Identifier(name):
-                node_out = node.default_transform(self.visit)
                 if name not in self.local_env and name in self.decl_env:
                     return ast.ToplevelRef(self.decl_env[name])
                 else:

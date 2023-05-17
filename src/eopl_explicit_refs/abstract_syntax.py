@@ -188,7 +188,7 @@ class RelativeImport(NestedImport):
 
 @dataclasses.dataclass
 class Generic(AstNode):
-    tvars: list[Symbol]
+    tvars: list[tuple[Symbol, Optional[AstNode]]]
     item: AstNode
 
     def default_transform(self, visitor) -> Self:

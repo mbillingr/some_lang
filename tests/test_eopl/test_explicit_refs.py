@@ -270,7 +270,7 @@ def test_two_similar_records_are_not_same_type():
             "struct S [] "
             "impl I for S { method x: Self -> Int self => 0 } "
             "fn foo: I -> Int obj => obj.x; "
-            "0",
+            "foo (the S [])",
         ),
     ],
 )
@@ -377,6 +377,14 @@ def test_module_scoping():
     [
         ((0, True), "generic T fn foo: T -> T x => x; [a=foo 0, b=foo true]"),
         (0, "generic T fn foo: T -> T -> T x y => x; foo 0 0"),
+        (
+            0,
+            "interface I { method x: Self -> Int } "
+            "struct S [] "
+            "impl I for S { method x: Self -> Int self => 0 } "
+            "generic T: I fn foo: T -> Int obj => obj.x; "
+            "foo (the S [])",
+        ),
     ],
 )
 def test_generic_functions(src, expect):

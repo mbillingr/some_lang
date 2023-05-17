@@ -102,7 +102,12 @@ def parse_module_item(ts: TokenStream, mod: ast.Module):
             ts.get_next()
             tvars = []
             while True:
-                tvars.append(parse_symbol(ts))
+                tv = parse_symbol(ts)
+                if try_token(ts, ":"):
+                    tc = parse_typevar_constraint(ts)
+                else:
+                    tc = None
+                tvars.append((tv, tc))
                 if try_token(ts, ","):
                     continue
                 break
@@ -110,6 +115,10 @@ def parse_module_item(ts: TokenStream, mod: ast.Module):
             return ast.Generic(tvars, item), updater
         case _:
             return None
+
+
+def parse_typevar_constraint(ts):
+    return parse_symbol(ts)
 
 
 def parse_import(ts) -> ast.Import:

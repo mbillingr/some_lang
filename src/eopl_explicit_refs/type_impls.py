@@ -22,10 +22,11 @@ class Type(abc.ABC):
 
 
 class TypeVar(Type):
-    __match_args__ = ("name",)
+    __match_args__ = ("name", "constraint")
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, constraint):
         self.name = name
+        self.constraint = constraint
         self.type = None
 
     def is_fresh(self) -> bool:
@@ -50,25 +51,52 @@ class TypeVar(Type):
 class TypeSchema(Type):
     def __init__(self, ty: Type):
         self.ty = ty
+        self.instantiations = []
 
     def instantiate(self):
         tvars = {}
 
-        def recur(t: Type):
-            match t:
-                case TypeVar(name):
-                    try:
-                        return tvars[t]
-                    except KeyError:
-                        fresh_var = TypeVar(name)
-                        tvars[t] = fresh_var
-                        return fresh_var
-                case FuncType(arg, ret):
-                    return FuncType(recur(arg), recur(ret))
-                case _:
-                    raise NotImplementedError(t)
+        def handle_tvar(t: TypeVar, tvars):
+            try:
+                return tvars[t]
+            except KeyError:
+                fresh_var = TypeVar(t.name, t.constraint)
+                tvars[t] = fresh_var
+                return fresh_var
 
-        return recur(self.ty)
+        ty = self._substitute(self.ty, tvars, handle_tvar=handle_tvar)
+
+        self.instantiations.append((ty, tvars))
+        return ty
+
+    def concrete_instantiations(self):
+        def substitution(t: TypeVar, subs):
+            if subs[t].type is None:
+                raise TypeError(f"{t} was never substituted")
+            return subs[t].type
+
+        for ty, tvars in self.instantiations:
+            yield self._substitute(self.ty, tvars, handle_tvar=substitution)
+
+    @staticmethod
+    def _substitute(t: Type, subs, handle_tvar):
+        match t:
+            case TypeVar():
+                return handle_tvar(t, subs)
+            case AnyType() | NullType() | BoolType() | IntType():
+                return t
+            case NamedType():
+                return t
+            case InterfaceType():
+                return t
+            # case RecordType(fields):
+            #    return RecordType({f: recur(t) for f, t in fields.items()})
+            case FuncType(arg, ret):
+                return FuncType(
+                    TypeSchema._substitute(arg, subs, handle_tvar), TypeSchema._substitute(ret, subs, handle_tvar)
+                )
+            case _:
+                raise NotImplementedError(f"{type(t).__name__}({t})")
 
 
 class NamedType(Type):
