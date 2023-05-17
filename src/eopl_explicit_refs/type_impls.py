@@ -66,8 +66,9 @@ class TypeSchema(Type):
 
         ty = self._substitute(self.ty, tvars, handle_tvar=handle_tvar)
 
+        n = len(self.instantiations)
         self.instantiations.append((ty, tvars))
-        return ty
+        return ty, n
 
     def concrete_instantiations(self):
         def substitution(t: TypeVar, subs):

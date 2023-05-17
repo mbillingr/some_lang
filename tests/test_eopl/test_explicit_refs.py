@@ -385,6 +385,13 @@ def test_module_scoping():
             "generic T: I fn foo: T -> Int obj => obj.x; "
             "foo (the S [])",
         ),
+        (
+            42,
+            "struct S [] "
+            "impl S { method y: Self -> Int self => 42 } "
+            "generic T fn foo: T -> T obj => obj; "
+            "(foo (the S [])).y",
+        ),
     ],
 )
 def test_generic_functions(src, expect):

@@ -74,13 +74,19 @@ def check_program(pgm: ast.Program, context_args=None) -> ast.Program:
     exp, _ = infer_expr(pgm.exp, ctx)
 
     for mod in ctx.modules.values():
+        generics = []
+        specifics = {}
         for fname, fbody in mod.funcs.items():
             match fbody:
                 case ("unchecked", body):
+                    generics.append(fname)
                     sig = mod.fsigs[fname]
-                    for ty in sig.concrete_instantiations():
+                    for n, ty in enumerate(sig.concrete_instantiations()):
                         checked_body = check_expr(body, ty, ctx)
-                    raise NotImplementedError("need to put the checked bodies into static functions and replace references to them with the correct names")
+                        specifics[f"{fname}.{n}"] = checked_body
+        for fname in generics:
+            del mod.funcs[fname]
+        mod.funcs |= specifics
 
     return ast.CheckedProgram(ctx.modules, exp)
 
@@ -186,7 +192,7 @@ def check_module(module: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedMo
                         signature = ctx.env.lookup(name)
                         # todo: need to check the bodies later, for each combination of concrete types they were used with
                         #       we only know this after checking the rest of the program.
-                        #body = check_expr(func.expr, signature.ty, ctx)
+                        # body = check_expr(func.expr, signature.ty, ctx)
                         funcs_out[name] = ("unchecked", func.expr)
                         fsigs_out[name] = signature
                     case _:
@@ -345,11 +351,14 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]
             mapping = {type(None): t.NullType, bool: t.BoolType, int: t.IntType}
             return exp, mapping[type(val)]()
 
-        case ast.Identifier(name) | ast.ToplevelRef(name):
-            # for now, locals and top-level are the same environment in the type checker
+        case ast.Identifier(name):
+            return exp, ctx.env.lookup(name)
+
+        case ast.ToplevelRef(name):
             match ctx.env.lookup(name):
                 case t.TypeSchema() as ty:
-                    return exp, ty.instantiate()
+                    ty_out, n = ty.instantiate()
+                    return ast.ToplevelRef(f"{name}.{n}"), ty_out
                 case t.TypeVar() as ty:
                     if ty.is_fresh():
                         return exp, ty
