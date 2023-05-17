@@ -104,9 +104,9 @@ def parse_module_item(ts: TokenStream, mod: ast.Module):
             while True:
                 tv = parse_symbol(ts)
                 if try_token(ts, ":"):
-                    tc = parse_typevar_constraint(ts)
+                    tc = (parse_typevar_constraint(ts),)
                 else:
-                    tc = None
+                    tc = ()
                 tvars.append((tv, tc))
                 if try_token(ts, ","):
                     continue

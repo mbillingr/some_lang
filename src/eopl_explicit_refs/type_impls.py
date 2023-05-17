@@ -24,17 +24,28 @@ class Type(abc.ABC):
 class TypeVar(Type):
     __match_args__ = ("name", "constraint")
 
-    def __init__(self, name: str, constraint):
+    def __init__(self, name: str, constraints):
         self.name = name
-        self.constraint = constraint
+        self.constraints = constraints
         self.type = None
 
     def is_fresh(self) -> bool:
         return self.type is None
 
     def set_type(self, ty: Type):
-        assert self.type is None
+        if isinstance(ty, TypeVar):
+            if ty is self:
+                return
+            raise TypeError(self, ty)
+        if self.type is not None and self.type != ty:
+            raise TypeError(self.type, ty)
         self.type = ty
+
+    def find_method(self, name: str) -> Optional[Any]:
+        for c in self.constraints:
+            m = c.find_method(name)
+            if m is not None:
+                return m
 
     def __repr__(self):
         return self.name
@@ -60,7 +71,7 @@ class TypeSchema(Type):
             try:
                 return tvars[t]
             except KeyError:
-                fresh_var = TypeVar(t.name, t.constraint)
+                fresh_var = TypeVar(t.name, t.constraints)
                 tvars[t] = fresh_var
                 return fresh_var
 

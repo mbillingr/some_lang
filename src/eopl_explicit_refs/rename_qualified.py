@@ -66,7 +66,7 @@ class Visitor:
                 return node_out
 
             case ast.Generic(tvars, item):
-                tvars_out = [(tv, c and self.decl_env[c]) for tv, c in tvars]
+                tvars_out = [(tv, tuple(self.decl_env[c] for c in cs)) for tv, cs in tvars]
                 item_out = item.transform(self.visit)
                 return ast.Generic(tvars_out, item_out)
 

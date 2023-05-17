@@ -78,7 +78,7 @@ def check_program(pgm: ast.Program, context_args=None) -> ast.Program:
         specifics = {}
         for fname, fbody in mod.funcs.items():
             match fbody:
-                case ("unchecked", body):
+                case ("generic", body):
                     generics.append(fname)
                     sig = mod.fsigs[fname]
                     for n, ty in enumerate(sig.concrete_instantiations()):
@@ -119,9 +119,9 @@ def check_module(module: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedMo
                         ctx = ctx.extend_env(name, signature)
                     case ast.Generic(tvars, ast.FunctionDefinition(name, func)):
                         gen_ctx = ctx
-                        for tv, constraint in tvars:
-                            constraint = constraint and ctx.types.lookup(constraint)
-                            gen_ctx = gen_ctx.extend_types(tv, t.TypeVar(tv, constraint))
+                        for tv, constraints in tvars:
+                            constraints = tuple(map(ctx.types.lookup, constraints))
+                            gen_ctx = gen_ctx.extend_types(tv, t.TypeVar(tv, constraints))
 
                         signature = t.TypeSchema(eval_type(func.type, gen_ctx))
                         ctx = ctx.extend_env(name, signature)
@@ -190,10 +190,9 @@ def check_module(module: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedMo
                         fsigs_out[name] = signature
                     case ast.Generic(_, ast.FunctionDefinition(name, func)):
                         signature = ctx.env.lookup(name)
-                        # todo: need to check the bodies later, for each combination of concrete types they were used with
-                        #       we only know this after checking the rest of the program.
-                        # body = check_expr(func.expr, signature.ty, ctx)
-                        funcs_out[name] = ("unchecked", func.expr)
+                        check_expr(func.expr, signature.ty, ctx)
+                        # we keep the original function body for later rechecking with concrete types
+                        funcs_out[name] = ("generic", func.expr)
                         fsigs_out[name] = signature
                     case _:
                         raise NotImplementedError(fn)
@@ -424,12 +423,22 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]
             snd, out_t = infer_expr(snd, ctx)
             return ast.BlockExpression(fst, snd), out_t
 
-        case ast.Conditional(_, a, b):
+        case ast.Conditional(c, a, b):
+            a_inferred = False
             try:
-                _, out_t = infer_expr(a, ctx)
+                a_out, out_t = infer_expr(a, ctx)
+                a_inferred = True
             except InferenceError:
-                _, out_t = infer_expr(b, ctx)
-            return check_expr(exp, out_t, ctx), out_t
+                b_out, out_t = infer_expr(b, ctx)
+
+            c_out = check_expr(c, t.BoolType(), ctx)
+
+            if a_inferred:
+                b_out = check_expr(b, out_t, ctx)
+            else:
+                a_out = check_expr(a, out_t, ctx)
+
+            return ast.Conditional(c_out, a_out, b_out), out_t
 
         case ast.NewRef(val):
             v_out, v_t = infer_expr(val, ctx)

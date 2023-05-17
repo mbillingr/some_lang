@@ -375,8 +375,20 @@ def test_module_scoping():
 @pytest.mark.parametrize(
     "expect, src",
     [
+        # use generic with different types
         ((0, True), "generic T fn foo: T -> T x => x; [a=foo 0, b=foo true]"),
+        # use type parameter multiple times
         (0, "generic T fn foo: T -> T -> T x y => x; foo 0 0"),
+        # multiple type parameters
+        (0, "generic A,B fn fst: A -> B -> A a b => a; fst 0 ()"),
+        # returned type variable is resolved
+        (
+            42,
+            "struct S [] impl S { method y: Self -> Int self => 42 } "
+            "generic T fn foo: T -> T obj => obj; "
+            "(foo (the S [])).y",
+        ),
+        # pass concrete object to generic function
         (
             0,
             "interface I { method x: Self -> Int } "
@@ -385,17 +397,32 @@ def test_module_scoping():
             "generic T: I fn foo: T -> Int obj => obj.x; "
             "foo (the S [])",
         ),
+        # pass abstract object to generic function
         (
-            42,
+            0,
+            "interface I { method x: Self -> Int } "
             "struct S [] "
-            "impl S { method y: Self -> Int self => 42 } "
-            "generic T fn foo: T -> T obj => obj; "
-            "(foo (the S [])).y",
+            "impl I for S { method x: Self -> Int self => 0 } "
+            "generic T: I fn foo: T -> Int obj => obj.x; "
+            "foo (the I (the S []))",
         ),
     ],
 )
 def test_generic_functions(src, expect):
     assert evaluate(src) == expect
+
+
+def test_type_error_even_if_function_is_not_used():
+    with pytest.raises(TypeError):
+        evaluate("fn either: Bool -> Int -> () -> Int x a b => if x then a else b; ()")
+
+
+def test_type_error_even_if_generic_is_not_used_or_usage_would_be_valid():
+    with pytest.raises(TypeError):
+        evaluate("generic A,B fn either: Bool -> A -> B -> A x a b => if x then a else b; ()")
+
+    with pytest.raises(TypeError):
+        evaluate("generic A,B fn either: Bool -> A -> B -> A x a b => if x then a else b; either true 0 0")
 
 
 def evaluate(src):
