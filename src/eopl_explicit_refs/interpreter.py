@@ -68,13 +68,22 @@ def analyze_module(mod: ast.CheckedModule, ctx: Context) -> tuple[Module, Contex
 
 
 def analyze_static_functions(funcs: Iterable[ast.Function], ctx: Context) -> Callable:
-    bodies = [analyze_matcharms(f.patterns, ctx) for f in funcs]
+    bodies = [analyze_procedure(f, ctx) for f in funcs]
 
     def initialization(store):
         for body in bodies:
-            store.add_method(Procedure(body))
+            store.add_method(body)
 
     return initialization
+
+
+def analyze_procedure(proc: ast.Expression, ctx: Context) -> Procedure:
+    match proc:
+        case ast.Function(arms):
+            return Procedure(analyze_matcharms(arms, ctx))
+        case ast.NativeFunction(n_args, proc):
+            return NativeProcedure(proc, n_args)
+        case _: raise TypeError(f"Not a procedure: {proc}")
 
 
 def analyze_expr(exp: ast.Expression, ctx: Context, tail) -> Callable:
@@ -362,7 +371,7 @@ class Procedure:
                             return res.apply(args, store)
                     raise MatcherError("no pattern matched")
                 except TailCall as tc:
-                    self.prepare_env(store)
+                    tc.func.prepare_env(store)
                     match_bodies = tc.func.match_bodies
                     args = tc.args
         finally:
@@ -376,6 +385,36 @@ class Closure(Procedure):
 
     def prepare_env(self, store):
         store.env = self.saved_env
+
+
+class NativeProcedure(Procedure):
+    def __init__(self, callable, n_args):
+        self.callable = callable
+        self.n_args = n_args
+
+    def prepare_env(self, store):
+        pass
+
+    def apply(self, args, store):
+        preserved_stack = store.env
+        try:
+            self.prepare_env(store)
+            proc = self.callable
+            narg = self.n_args
+            while True:
+                try:
+                    if len(args) < narg:
+                        return Partial(self, args)
+                    res = proc(*args[:narg])
+                    args = args[narg:]
+                    if not args:
+                        return res
+                    else:
+                        return res.apply(args, store)
+                except TailCall as tc:
+                    raise NotImplementedError()
+        finally:
+            store.env = preserved_stack
 
 
 class Partial:

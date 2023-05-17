@@ -118,6 +118,36 @@ class CheckedModule(AstNode):
             transform_dict_values(self.fsigs, visitor),
         )
 
+    def lookup_type(self, name: str) -> Any:
+        return self.types[name]
+
+    def lookup_fsig(self, name: str) -> Any:
+        return self.fsigs[name]
+
+
+@dataclasses.dataclass
+class NativeModule(AstNode):
+    name: Symbol
+    #types: dict[Symbol, Any]
+    #impls: list[ImplBlock]
+    funcs: dict[Symbol, Any]
+    fsigs: dict[Symbol, Any]
+
+    def default_transform(self, visitor) -> Self:
+        return NativeModule(
+            self.name,
+            #transform_dict_values(self.types, visitor),
+            #transform_collection(self.impls, visitor),
+            transform_dict_values(self.funcs, visitor),
+            transform_dict_values(self.fsigs, visitor),
+        )
+
+    def lookup_type(self, name: str) -> Any:
+        raise LookupError(name)
+
+    def lookup_fsig(self, name: str) -> Any:
+        return self.fsigs[name]
+
 
 class Import(AstNode):
     pass
@@ -406,6 +436,15 @@ class Function(Expression):
 
     def default_transform(self, visitor) -> Self:
         return Function(transform_collection(self.patterns, visitor))
+
+
+@dataclasses.dataclass
+class NativeFunction(Expression):
+    n_args: int
+    func: Any
+
+    def default_transform(self, visitor) -> Self:
+        return self
 
 
 @dataclasses.dataclass

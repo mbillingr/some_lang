@@ -1,9 +1,10 @@
 import nested.lib.Y  # sibling import
 import :a-lib.hello  # absolute import
 import .foo.Bar      # relative import
+import :builtin.print
 
 module foo {
   struct Bar []
 }
 
-hello ()
+print (hello ())

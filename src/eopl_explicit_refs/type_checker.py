@@ -181,13 +181,13 @@ def check_import(imp: ast.Import, ctx: Context):
             qualname = module + "." + name
 
             try:
-                ctx = ctx.extend_types(qualname, mod.types[qualname])
+                ctx = ctx.extend_types(qualname, mod.lookup_type(qualname))
                 return imp, ctx
             except LookupError:
                 pass
 
             try:
-                ctx = ctx.extend_env(qualname, mod.fsigs[qualname])
+                ctx = ctx.extend_env(qualname, mod.lookup_fsig(qualname))
                 return imp, ctx
             except LookupError:
                 pass

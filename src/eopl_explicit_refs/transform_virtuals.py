@@ -39,6 +39,11 @@ class Visitor:
 
                 return node.default_transform(self.visit)
 
+            case ast.NativeModule(name, funcs):
+                for name, fn in funcs.items():
+                    self._register_function(name, fn)
+                return node.default_transform(self.visit)
+
             case ast.Interface(name, methods):
                 raise NotImplementedError("Unexpected interface declaration")
 
