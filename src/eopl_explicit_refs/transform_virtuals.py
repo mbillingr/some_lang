@@ -34,10 +34,12 @@ class Visitor:
                         continue
                     self._register_interface(ty)
 
-                for name, fn in funcs.items():
+                node_out = node.default_transform(self.visit)
+
+                for name, fn in node_out.funcs.items():
                     self._register_function(name, fn)
 
-                return node.default_transform(self.visit)
+                return node_out
 
             case ast.NativeModule(name, funcs):
                 for name, fn in funcs.items():

@@ -264,6 +264,14 @@ def test_two_similar_records_are_not_same_type():
             "let y: Y = [] in"
             "  [x.a1, x.a2, x.b1, x.b2, y.a1, y.a2, y.b1, y.b2] ",
         ),
+        (
+            0,
+            "interface I { method x: Self -> Int } "
+            "struct S [] "
+            "impl I for S { method x: Self -> Int self => 0 } "
+            "fn foo: I -> Int obj => obj.x; "
+            "0",
+        ),
     ],
 )
 def test_interfaces(src, expect):
