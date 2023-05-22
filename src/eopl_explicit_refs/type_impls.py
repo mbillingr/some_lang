@@ -107,6 +107,8 @@ class TypeSchema(Type):
                 return FuncType(
                     TypeSchema._substitute(arg, subs, handle_tvar), TypeSchema._substitute(ret, subs, handle_tvar)
                 )
+            case ListType(item):
+                return ListType(TypeSchema._substitute(item, subs, handle_tvar))
             case _:
                 raise NotImplementedError(f"{type(t).__name__}({t})")
 

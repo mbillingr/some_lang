@@ -135,6 +135,8 @@ def test_bindings(src, expect):
         (None, "(the () -> () fn () => ()) ()"),
         # Function Definition
         (0, "fn foo: () -> Int () => 0; foo ()"),
+        # Recursive Function Definition
+        (10, "fn sum: Int -> Int 0 => 0 | n => n + (sum (n - 1)); sum 4"),
     ],
 )
 def test_functions(src, expect):
@@ -186,19 +188,23 @@ def test_type_annotations(src, expect):
         # methods
         (
             0,
-            "struct Foo [] impl Foo { method bar: Foo -> () -> Int self () => 0 }" "(the Foo []).bar ()",
+            "struct Foo [] impl Foo { method bar: Foo -> () -> Int self () => 0 }"
+            "(the Foo []).bar ()",
         ),
         (
             1,
-            "struct Foo [] impl Foo { method bar: Foo -> Int self => 1 }" "(the Foo []).bar",
+            "struct Foo [] impl Foo { method bar: Foo -> Int self => 1 }"
+            "(the Foo []).bar",
         ),
         (
             1,
-            "struct Foo [] impl Foo { method bar: Self -> Int self => 1 }" "(the Foo []).bar",
+            "struct Foo [] impl Foo { method bar: Self -> Int self => 1 }"
+            "(the Foo []).bar",
         ),
         (
             2,
-            "struct Foo [x:Int] impl Foo { method get-x: Foo -> Int self => self.x }" "(the Foo [x=2]).get-x",
+            "struct Foo [x:Int] impl Foo { method get-x: Foo -> Int self => self.x }"
+            "(the Foo [x=2]).get-x",
         ),
     ],
 )
@@ -208,7 +214,9 @@ def test_records(src, expect):
 
 def test_two_similar_records_are_not_same_type():
     with pytest.raises(TypeError):
-        evaluate("struct Foo [x: Int] struct Bar [x: Int] let bar: Bar = (the Foo [x = 3]) in bar")
+        evaluate(
+            "struct Foo [x: Int] struct Bar [x: Int] let bar: Bar = (the Foo [x = 3]) in bar"
+        )
 
 
 @pytest.mark.parametrize(
@@ -290,13 +298,21 @@ def test_impl_of_wrong_type():
 
 def test_missing_method():
     with pytest.raises(TypeError):
-        evaluate("interface Foo { method bla: Self -> Self } " "struct Bar [] " "impl Foo for Bar { } " "0")
+        evaluate(
+            "interface Foo { method bla: Self -> Self } "
+            "struct Bar [] "
+            "impl Foo for Bar { } "
+            "0"
+        )
 
 
 def test_extra_method():
     with pytest.raises(TypeError):
         evaluate(
-            "interface Foo { } " "struct Bar [] " "impl Foo for Bar { method bla: Self -> Self self => self } " "0"
+            "interface Foo { } "
+            "struct Bar [] "
+            "impl Foo for Bar { method bla: Self -> Self self => self } "
+            "0"
         )
 
 
@@ -406,6 +422,19 @@ def test_module_scoping():
             "generic T: I fn foo: T -> Int obj => obj.x; "
             "foo (the I (the S []))",
         ),
+        # generic with list
+        (
+            (0, (1, (2, ()))),
+            "generic T fn foo: T -> [T] -> [T] x xs => x::xs; foo 0 [1,2]",
+        ),
+        # generic recursion
+        (
+            (1, (2, (0, ()))),
+            "generic T fn append: [T] -> [T] -> [T] "
+            "    [] ys => ys "
+            "  | x::xs ys => x :: append xs ys;"
+            "append [1, 2] [0]",
+        ),
     ],
 )
 def test_generic_functions(src, expect):
@@ -419,10 +448,14 @@ def test_type_error_even_if_function_is_not_used():
 
 def test_type_error_even_if_generic_is_not_used_or_usage_would_be_valid():
     with pytest.raises(TypeError):
-        evaluate("generic A,B fn either: Bool -> A -> B -> A x a b => if x then a else b; ()")
+        evaluate(
+            "generic A,B fn either: Bool -> A -> B -> A x a b => if x then a else b; ()"
+        )
 
     with pytest.raises(TypeError):
-        evaluate("generic A,B fn either: Bool -> A -> B -> A x a b => if x then a else b; either true 0 0")
+        evaluate(
+            "generic A,B fn either: Bool -> A -> B -> A x a b => if x then a else b; either true 0 0"
+        )
 
 
 def evaluate(src):
