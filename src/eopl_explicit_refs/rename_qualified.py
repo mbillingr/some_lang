@@ -37,7 +37,9 @@ class Visitor:
                 return node
 
             case ast.Import():
-                raise NotImplementedError("All imports should be absolute at this point")
+                raise NotImplementedError(
+                    "All imports should be absolute at this point"
+                )
 
             case ast.Interface(name, methods):
                 qual_ifname = self.add_decl(name)
@@ -60,13 +62,15 @@ class Visitor:
                 return node_out
 
             case ast.FunctionDefinition(name):
-                qual_fname = self.add_decl(name)
+                qual_fname = self.decl_env[name]
                 node_out = node.default_transform(self.visit)
                 node_out.name = qual_fname
                 return node_out
 
             case ast.Generic(tvars, item):
-                tvars_out = [(tv, tuple(self.decl_env[c] for c in cs)) for tv, cs in tvars]
+                tvars_out = [
+                    (tv, tuple(self.decl_env[c] for c in cs)) for tv, cs in tvars
+                ]
                 item_out = item.transform(self.visit)
                 return ast.Generic(tvars_out, item_out)
 
@@ -100,7 +104,9 @@ class Visitor:
                 return node_out
 
             case ast.MatchArm(pats, body):
-                bound_vars = functools.reduce(lambda a, b: a | b, map(vars_in_pattern, pats))
+                bound_vars = functools.reduce(
+                    lambda a, b: a | b, map(vars_in_pattern, pats)
+                )
                 undefined_before = bound_vars - self.local_env
                 node_out = node.default_transform(self.visit)
                 self.local_env -= undefined_before
@@ -116,6 +122,8 @@ class Visitor:
                 return NotImplemented
 
     def transform_module(self, node: ast.Module) -> ast.Module:
+        ast.transform_collection(node.funcs, self.declare_function),
+
         node_out = ast.Module(
             self.make_qualname(),
             ast.transform_dict_values(node.submodules, self.visit),
@@ -127,6 +135,14 @@ class Visitor:
         )
         return node_out
 
+    def declare_function(self, node: ast.AstNode):
+        match node:
+            case ast.FunctionDefinition(name):
+                self.add_decl(name)
+                return node
+            case _:
+                return node.default_transform(self.declare_function)
+
     def flatten_imports(self, imports: list[ast.Import]) -> list[ast.Import]:
         imports_out = []
         for imp in imports:
@@ -136,7 +152,11 @@ class Visitor:
                 case ast.RelativeImport(_, _, offset):
                     offset = len(self.path) + offset
                     for [*path, thing] in imp.iter():
-                        imports_out.append(ast.AbsoluteImport(".".join(self.path[:offset] + path), thing))
+                        imports_out.append(
+                            ast.AbsoluteImport(
+                                ".".join(self.path[:offset] + path), thing
+                            )
+                        )
                 case ast.NestedImport():
                     for [*path, thing] in imp.iter():
                         imports_out.append(ast.AbsoluteImport(".".join(path), thing))

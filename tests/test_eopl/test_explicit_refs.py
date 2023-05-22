@@ -137,6 +137,8 @@ def test_bindings(src, expect):
         (0, "fn foo: () -> Int () => 0; foo ()"),
         # Recursive Function Definition
         (10, "fn sum: Int -> Int 0 => 0 | n => n + (sum (n - 1)); sum 4"),
+        # Mutual Recursion
+        (True, "fn even: Int -> Bool 0 => true | n => odd (n - 1); fn odd: Int -> Bool 0 => false | n => even (n - 1); even 2"),
     ],
 )
 def test_functions(src, expect):
@@ -434,6 +436,13 @@ def test_module_scoping():
             "    [] ys => ys "
             "  | x::xs ys => x :: append xs ys;"
             "append [1, 2] [0]",
+        ),
+        # generic mutual recursion
+        (
+            0,
+            "generic T fn bar: T -> T x => x; "
+            "generic T fn foo: T -> T x => bar x; "
+            "foo 0",
         ),
     ],
 )
