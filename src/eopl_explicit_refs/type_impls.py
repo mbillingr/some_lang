@@ -38,6 +38,11 @@ class Type(abc.ABC):
         if self != other:
             raise TypeError()
 
+    def copy_unify(self, other: Type) -> Type:
+        if self == other:
+            return self
+        raise TypeError(self, other)
+
 
 class TypeVar(Type):
     __match_args__ = ("name", "constraint")
@@ -76,6 +81,13 @@ class TypeVar(Type):
         else:
             self.type.unify(other)
 
+    def copy_unify(self, other: Type) -> Type:
+        assert self.is_fresh()
+        for c in self.constraints:
+            if not other.implements(c):
+                raise TypeError(f"{other} does not implement {c}")
+        return other
+
     def __repr__(self):
         return self.name
 
@@ -93,10 +105,17 @@ class TypeVar(Type):
 
 
 class TypeSchema(Type):
-    def __init__(self, ty: Type):
+    def __init__(self, tvars: list[TypeVar], ty: Type):
+        self.tvars = tvars
         self.ty = ty
         self.instantiations = []
         self.current_instantiation = None
+
+    def concrete_instantiation(self, ts: list[Type]) -> Type:
+        raise NotImplementedError()
+
+    def unify_instantiation(self, t: Type) -> tuple[Type, int]:
+        raise NotImplementedError()
 
     @contextlib.contextmanager
     def instantiation(self, track=True):
@@ -194,6 +213,11 @@ class NamedType(Type):
         if self is not other:
             raise TypeError(self, other)
 
+    def copy_unify(self, other: Type) -> Type:
+        if self is not other:
+            raise TypeError(self, other)
+        return self
+
     def __hash__(self):
         return id(self)
 
@@ -232,6 +256,12 @@ class BoxType(Type):
         else:
             self.item_t.unify(other.item_t)
 
+    def copy_unify(self, other: Type) -> Type:
+        if not isinstance(other, BoxType):
+            raise TypeError()
+        else:
+            return BoxType(self.copy_unify(other))
+
     def __str__(self):
         return f"@{self.item_t}"
 
@@ -242,9 +272,15 @@ class ListType(Type):
 
     def _unify(self, other: Type):
         if not isinstance(other, ListType):
-            raise TypeError()
+            raise TypeError(self, other)
         else:
             self.item_t.unify(other.item_t)
+
+    def copy_unify(self, other: Type) -> Type:
+        if not isinstance(other, ListType):
+            raise TypeError(self, other)
+        else:
+            return ListType(self.copy_unify(other))
 
     def __str__(self):
         return f"[{self.item_t}]"
@@ -261,6 +297,13 @@ class RecordType(Type):
             raise TypeError()
         for k in self.fields:
             self.fields[k].unify(other.fields[k])
+
+    def copy_unify(self, other: Type) -> Type:
+        if not isinstance(other, RecordType):
+            raise TypeError(self, other)
+        if self.fields.keys() != other.fields.keys():
+            raise TypeError(self, other)
+        return RecordType({k: self.fields[k].copy_unify(other.fields[k]) for k in self.fields})
 
     def __str__(self):
         return f"[{', '.join(f'{n}: {t}' for n, t in self.fields.items())}]"
@@ -279,6 +322,11 @@ class FuncType(Type):
             raise TypeError()
         self.arg.unify(other.arg)
         self.ret.unify(other.ret)
+
+    def copy_unify(self, other: Type) -> Type:
+        if not isinstance(other, FuncType):
+            raise TypeError(self, other)
+        return FuncType(self.arg.copy_unify(other.arg), self.ret.copy_unify(other.ret))
 
     def __str__(self):
         return f"{self.arg}->{self.ret}"
@@ -305,6 +353,11 @@ class InterfaceType(Type):
     def _unify(self, other: Type):
         if not other.implements(self):
             raise TypeError()
+
+    def copy_unify(self, other: Type) -> Type:
+        if not other.implements(self):
+            raise TypeError(self, other)
+        return other
 
     def __str__(self):
         return f"{self.fully_qualified_name}"
