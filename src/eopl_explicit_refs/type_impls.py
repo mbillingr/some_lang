@@ -56,6 +56,15 @@ class Type(abc.ABC):
             return self
         raise TypeError(self, other)
 
+    def substitute(self, substitution):
+        try:
+            return substitution[self]
+        except KeyError:
+            return self._substitute(substitution)
+
+    def _substitute(self, substitution):
+        return self
+
 
 class TypeVar(Type):
     __match_args__ = ("name", "constraint")
@@ -122,10 +131,15 @@ class TypeSchema(Type):
         self.tvars = tvars
         self.ty = ty
         self.instantiations = []
-        self.current_instantiation = None
 
-    def concrete_instantiation(self, ts: list[Type]) -> Type:
-        raise NotImplementedError()
+    def fixed_instantiation(self) -> Type:
+        substitution = {}
+        for tv in self.tvars:
+            tconst = NamedType(tv.name, AnyType())
+            tconst.implemented_interfaces = tv.constraints
+            substitution[tv] = tconst
+
+        return self.ty.substitute(substitution)
 
     def unify_instantiation(self, t: Type) -> tuple[Type, int]:
         u = self.ty.copy_unify(t)
@@ -140,64 +154,9 @@ class TypeSchema(Type):
         self.instantiations.append(u)
         return u, idx
 
-    @contextlib.contextmanager
-    def instantiation(self, track=True):
-        if self.current_instantiation:
-            yield self.current_instantiation
-        else:
-            try:
-                i = self._instantiate(track)
-                self.current_instantiation = i
-                yield i
-            finally:
-                self.current_instantiation = None
-
-    def _instantiate(self, track):
-        tvars = {}
-
-        def handle_tvar(t: TypeVar, tvars):
-            try:
-                return tvars[t]
-            except KeyError:
-                fresh_var = TypeVar(t.name, t.constraints)
-                tvars[t] = fresh_var
-                return fresh_var
-
-        ty = self._substitute(self.ty, tvars, handle_tvar=handle_tvar)
-
-        if track:
-            n = len(self.instantiations)
-            self.instantiations.append((ty, tvars))
-            return ty, n
-        else:
-            return ty, None
-
     def concrete_instantiations(self):
         for idx, u in enumerate(self.instantiations):
             yield u, idx
-
-    @staticmethod
-    def _substitute(t: Type, subs, handle_tvar):
-        match t:
-            case TypeVar():
-                return handle_tvar(t, subs)
-            case AnyType() | NullType() | BoolType() | IntType():
-                return t
-            case NamedType():
-                return t
-            case InterfaceType():
-                return t
-            # case RecordType(fields):
-            #    return RecordType({f: recur(t) for f, t in fields.items()})
-            case FuncType(arg, ret):
-                return FuncType(
-                    TypeSchema._substitute(arg, subs, handle_tvar),
-                    TypeSchema._substitute(ret, subs, handle_tvar),
-                )
-            case ListType(item):
-                return ListType(TypeSchema._substitute(item, subs, handle_tvar))
-            case _:
-                raise NotImplementedError(f"{type(t).__name__}({t})")
 
 
 class NamedType(Type):
@@ -273,7 +232,10 @@ class BoxType(Type):
         if not isinstance(other, BoxType):
             raise TypeError()
         else:
-            return BoxType(self.item_t.copy_unify(other))
+            return BoxType(self.item_t.copy_unify(other.item_t))
+
+    def _substitute(self, substitution):
+        return BoxType(self.item_t.substitute(substitution))
 
     def __str__(self):
         return f"@{self.item_t}"
@@ -293,7 +255,10 @@ class ListType(Type):
         if not isinstance(other, ListType):
             raise TypeError(self, other)
         else:
-            return ListType(self.item_t.copy_unify(other))
+            return ListType(self.item_t.copy_unify(other.item_t))
+
+    def _substitute(self, substitution):
+        return ListType(self.item_t.substitute(substitution))
 
     def __str__(self):
         return f"[{self.item_t}]"
@@ -320,6 +285,11 @@ class RecordType(Type):
             {k: self.fields[k].copy_unify(other.fields[k]) for k in self.fields}
         )
 
+    def _substitute(self, substitution):
+        return RecordType(
+            {k: t.substitute(substitution) for k, t in self.fields.items()}
+        )
+
     def __str__(self):
         return f"[{', '.join(f'{n}: {t}' for n, t in self.fields.items())}]"
 
@@ -342,6 +312,11 @@ class FuncType(Type):
         if not isinstance(other, FuncType):
             raise TypeError(self, other)
         return FuncType(self.arg.copy_unify(other.arg), self.ret.copy_unify(other.ret))
+
+    def _substitute(self, substitution):
+        return FuncType(
+            self.arg.substitute(substitution), self.ret.substitute(substitution)
+        )
 
     def __str__(self):
         return f"{self.arg}->{self.ret}"

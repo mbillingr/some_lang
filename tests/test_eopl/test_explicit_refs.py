@@ -398,6 +398,8 @@ def test_module_scoping():
     [
         # use generic with different types (explicit instantiation)
         ((0, True), "generic T fn foo: T -> T x => x; [a=(the Int -> Int foo) 0, b=(the Bool -> Bool foo) true]"),
+        # use generic with different types (infer types)
+        ((0, True), "generic T fn foo: T -> T x => x; [a=(the Int (foo 0)), b=(the Bool (foo true))]"),
         # use generic with different types
         ((0, True), "generic T fn foo: T -> T x => x; [a=foo 0, b=foo true]"),
         # use type parameter multiple times

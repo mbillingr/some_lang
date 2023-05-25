@@ -88,10 +88,14 @@ def check_program(pgm: ast.Program, context_args=None) -> ast.Program:
     return ast.CheckedProgram(ctx.modules, exp)
 
 
-def check_module(module: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedModule, Context]:
+def check_module(
+    module: ast.Module, parent_ctx: Context
+) -> tuple[ast.CheckedModule, Context]:
     ctx = parent_ctx
     match module:
-        case ast.Module(mod_name, submodules, imports, interfaces, records, impls, funcs):
+        case ast.Module(
+            mod_name, submodules, imports, interfaces, records, impls, funcs
+        ):
             checked_modules = {}
             for k, v in submodules.items():
                 mod, ctx = check_module(v, ctx)
@@ -123,7 +127,9 @@ def check_module(module: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedMo
                             gen_ctx = gen_ctx.extend_types(tvname, tv)
                             schema_vars.append(tv)
 
-                        signature = t.TypeSchema(tvars, eval_type(func.type, gen_ctx))
+                        signature = t.TypeSchema(
+                            schema_vars, eval_type(func.type, gen_ctx)
+                        )
                         ctx = ctx.extend_env(name, signature)
                     case _:
                         raise NotImplementedError(fn)
@@ -137,7 +143,9 @@ def check_module(module: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedMo
                 interface_type.set_methods(methods)
 
             for record in records:
-                ctx.types.lookup(record.name).set_type(eval_type(ast.RecordType(record.fields), ctx))
+                ctx.types.lookup(record.name).set_type(
+                    eval_type(ast.RecordType(record.fields), ctx)
+                )
 
             impls_out = []
             for impl in impls:
@@ -154,7 +162,9 @@ def check_module(module: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedMo
                             text.append(f"is missing {missing_methods}")
                         if extra_methods:
                             text.append(f"includes unexpected {extra_methods}")
-                        raise TypeError(f"Implementation of {impl.interface} on {impl.type_name} {'and'.join(text)}")
+                        raise TypeError(
+                            f"Implementation of {impl.interface} on {impl.type_name} {'and'.join(text)}"
+                        )
 
                     impl_on.declare_impl(interface_type)
 
@@ -168,7 +178,7 @@ def check_module(module: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedMo
                     signature = eval_type(func.type, impl_ctx)
                     if interface_type is not None:
                         expected_signature = interface_type.methods[method_name]
-                        signature.unify(expected_signature)
+                        signature = signature.copy_unify(expected_signature)
                     method_fqn = ".".join([*name_parts, method_name])
                     impl_on.add_method(method_name, method_fqn, signature)
 
@@ -179,7 +189,9 @@ def check_module(module: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedMo
                     body = check_expr(func.expr, signature, ctx)
                     methods_out[method_name] = body
 
-                impls_out.append(ast.ImplBlock(impl.interface, impl_on.name, methods_out))
+                impls_out.append(
+                    ast.ImplBlock(impl.interface, impl_on.name, methods_out)
+                )
 
             funcs_out = {}
             fsigs_out = {}
@@ -192,9 +204,9 @@ def check_module(module: ast.Module, parent_ctx: Context) -> tuple[ast.CheckedMo
                         fsigs_out[name] = signature
                     case ast.Generic(_, ast.FunctionDefinition(name, func)):
                         signature = ctx.env.lookup(name)
-                        with signature.instantiation(track=False) as (sigtype, _):
-                            tmp_ctx = ctx.extend_env(name, sigtype)
-                            check_expr(func.expr, sigtype, tmp_ctx)
+                        sigtype = signature.fixed_instantiation()
+                        tmp_ctx = ctx.extend_env(name, sigtype)
+                        check_expr(func.expr, sigtype, tmp_ctx)
                         # we keep the original function body for later rechecking with concrete types
                         funcs_out[name] = ("generic", func.expr)
                         fsigs_out[name] = signature
@@ -258,7 +270,8 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
 
         case _, ast.Literal(val):
             mapping = {type(None): t.NullType, bool: t.BoolType, int: t.IntType}
-            typ.unify(mapping[type(val)]())
+            actual_t = mapping[type(val)]()
+            _ = typ.copy_unify(actual_t)
             return exp
 
         case _, ast.ToplevelRef(name):
@@ -268,7 +281,7 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
                     return ast.ToplevelRef(f"{name}.{n}")
                 case actual_t:
                     try:
-                        typ.unify(actual_t)
+                        _ = typ.copy_unify(actual_t)
                     except TypeError:
                         raise TypeError(f"Expected a {typ} but {name} is a {actual_t}")
                     return exp
@@ -276,7 +289,7 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
         case _, ast.Identifier(name):
             actual_t = ctx.env.lookup(name)
             try:
-                typ.unify(actual_t)
+                _ = typ.copy_unify(actual_t)
             except TypeError:
                 raise TypeError(f"Expected a {typ} but {name} is a {actual_t}")
             return exp
@@ -295,20 +308,15 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
             return ast.BinOp(lhs, rhs, op)
 
         case t.FuncType(_, _), ast.Function(arms):
-            return ast.Function([ast.MatchArm(arm.pats, check_matcharm(arm.pats, arm.body, typ, ctx)) for arm in arms])
+            return ast.Function(
+                [
+                    ast.MatchArm(arm.pats, check_matcharm(arm.pats, arm.body, typ, ctx))
+                    for arm in arms
+                ]
+            )
 
         case _, ast.Application(fun, arg):
-            fun, fun_t = infer_expr(fun, ctx)
-            match fun_t:
-                case t.FuncType(arg_t, ret_t):
-                    pass
-                case _:
-                    raise TypeError(f"Cannot call {fun_t}")
-            try:
-                typ.unify(ret_t)
-            except TypeError:
-                raise TypeError(f"Function returns {ret_t} but expected {typ}")
-            return ast.Application(fun, check_expr(arg, arg_t, ctx))
+            return check_application_by_arg(fun, arg, typ, ctx)
 
         case _, ast.Conditional(c, a, b):
             c_out = check_expr(c, t.BoolType(), ctx)
@@ -321,7 +329,9 @@ def check_expr(exp: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
             extra_fields = v_fields.keys() - t_fields.keys()
             missing_fields = t_fields.keys() - v_fields.keys()
             if extra_fields or missing_fields:
-                raise TypeError(f"extra fields: {extra_fields}, missing fields: {missing_fields}")
+                raise TypeError(
+                    f"extra fields: {extra_fields}, missing fields: {missing_fields}"
+                )
 
             slots = [check_expr(v_fields[f], t_fields[f], ctx) for f in t_fields]
 
@@ -404,23 +414,20 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]
         case ast.BinOp(lhs, rhs, "+" | "-" | "*" | "/" as op):
             lhs = check_expr(lhs, t.IntType(), ctx)
             rhs = check_expr(rhs, t.IntType(), ctx)
-            return ast.BinOp(lhs, rhs, op), t.IntType
+            return ast.BinOp(lhs, rhs, op), t.IntType()
 
         case ast.BinOp(lhs, rhs, "::" as op):
             lhs, item_t = infer_expr(lhs, ctx)
             rhs = check_expr(rhs, t.ListType(item_t), ctx)
-            return ast.BinOp(lhs, rhs, op), t.IntType
+            return ast.BinOp(lhs, rhs, op), t.IntType()
 
         case ast.Function(patterns):
-            raise InferenceError(f"can't infer function signature for {exp}. Please provide a type hint.")
+            raise InferenceError(
+                f"can't infer function signature for {exp}. Please provide a type hint."
+            )
 
         case ast.Application(fun, arg):
-            fun, fun_t = infer_expr(fun, ctx)
-            match fun_t:
-                case t.FuncType(arg_t, ret_t):
-                    return ast.Application(fun, check_expr(arg, arg_t, ctx)), ret_t
-                case _:
-                    raise TypeError(f"Cannot call {fun_t}")
+            return infer_application_by_function(fun, arg, ctx)
 
         case ast.Let(var, val, bdy, None):
             # without type declaration, the let variable can't be used in the val expression
@@ -519,7 +526,25 @@ def infer_expr(exp: ast.Expression, ctx: Context) -> tuple[ast.Expression, Type]
             raise NotImplementedError(exp)
 
 
-def check_matcharm(patterns: list[ast.Pattern], body: ast.Expression, typ: Type, ctx: Context) -> ast.Expression:
+def infer_application_by_function(fun, arg, ctx):
+    fun, fun_t = infer_expr(fun, ctx)
+    match fun_t:
+        case t.FuncType(arg_t, ret_t):
+            return ast.Application(fun, check_expr(arg, arg_t, ctx)), ret_t
+        case _:
+            raise TypeError(f"Cannot call {fun_t}")
+
+
+def check_application_by_arg(fun, arg, res_t, ctx):
+    arg, arg_t = infer_expr(arg, ctx)
+    fun_t = t.FuncType(arg_t, res_t)
+    fun = check_expr(fun, fun_t, ctx)
+    return ast.Application(fun, arg)
+
+
+def check_matcharm(
+    patterns: list[ast.Pattern], body: ast.Expression, typ: Type, ctx: Context
+) -> ast.Expression:
     match typ, patterns:
         case t.FuncType(arg_t, res_t), [p0, *p_rest]:
             bindings = check_pattern(p0, arg_t, ctx)
